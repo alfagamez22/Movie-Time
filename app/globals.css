@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --color-netflix-red: #e50914;
+  --color-player-blue: #0dcaf0;
+  --color-player-green: #1db954;
+  --color-player-purple: #9146ff;
+}
+
+@layer utilities {
+  .glass {
+    background-color: rgba(255, 255, 255, 0.03);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .input-glass {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+  .input-glass:focus {
+    border-color: #e50914;
+    background-color: rgba(255, 255, 255, 0.1);
+    outline: none;
+  }
+  .player-canvas {
+    background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+  }
+}
+
+@layer base {
+  body {
+    background:
+      radial-gradient(circle at top, rgba(229, 9, 20, 0.12), transparent 30%),
+      #050505;
+    color: #ffffff;
+  }
+}
