@@ -100,7 +100,6 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
 
   if (isTvEntry(entry)) {
     url.searchParams.set('nextEpisode', 'true');
-    url.searchParams.set('episodeSelector', 'true');
   }
 
   return url.toString();
