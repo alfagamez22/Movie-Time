@@ -81,6 +81,28 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   };
 }
 
+export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
+  const base = 'https://player.videasy.net';
+  const path = isTvEntry(entry)
+    ? `${base}/tv/${encodeURIComponent(entry.tmdbId)}/${options.season}/${options.episode}`
+    : `${base}/movie/${encodeURIComponent(entry.tmdbId)}`;
+
+  const url = new URL(path);
+  url.searchParams.set('color', options.color);
+  url.searchParams.set('overlay', 'true');
+
+  if (options.progress !== null) {
+    url.searchParams.set('progress', String(options.progress));
+  }
+
+  if (isTvEntry(entry)) {
+    url.searchParams.set('nextEpisode', 'true');
+    url.searchParams.set('autoplayNextEpisode', 'true');
+  }
+
+  return url.toString();
+}
+
 export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const baseUrl = appConfig.vidkingEmbedBaseUrl;
   const path = isTvEntry(entry)

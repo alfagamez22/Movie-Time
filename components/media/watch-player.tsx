@@ -5,7 +5,8 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
-import { buildEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
+import { buildEmbedUrl, buildVideasyEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
+import { usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import { buildWatchHref } from '@/lib/media/routes';
 import { getEpisodeLimit, isTvEntry, type EpisodePreview, type MediaEntry, type SeasonDetails } from '@/lib/media/types';
 
@@ -55,11 +56,11 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       stillUrl: undefined,
     }));
 
-  const embedUrl = buildEmbedUrl(entry, {
-    ...initialPlayback,
-    season: safeSeason,
-    episode: safeEpisode,
-  });
+  const { player } = usePlayerPreference();
+  const playbackOptions = { ...initialPlayback, season: safeSeason, episode: safeEpisode };
+  const embedUrl = player === '2'
+    ? buildVideasyEmbedUrl(entry, playbackOptions)
+    : buildEmbedUrl(entry, playbackOptions);
 
   // Keep URL in sync with current season/episode
   useEffect(() => {

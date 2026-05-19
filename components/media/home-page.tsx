@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import { buildWatchHref } from '@/lib/media/routes';
 import type { LibraryMediaEntry, LibrarySection } from '@/lib/media/types';
+import { usePlayerPreference, PLAYER_LABELS, type PlayerChoice } from '@/lib/hooks/use-player-preference';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
 
@@ -58,6 +59,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LibraryMediaEntry[]>([]);
   const [navScrolled, setNavScrolled] = useState(false);
+  const { player, setPlayer } = usePlayerPreference();
   const inputRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query.trim());
   const isSearchPending = query.trim() !== deferredQuery;
@@ -99,10 +101,11 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
         const json = (await res.json().catch(() => null)) as { data?: LibraryMediaEntry[] } | null;
         if (!controller.signal.aborted) setSearchResults(json?.data ?? []);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!controller.signal.aborted) setSearchResults([]);
       });
-    return () => controller.abort();
+    return () => controller.abort(new DOMException('Query changed', 'AbortError'));
   }, [deferredQuery]);
 
   const featuredItems = getFeaturedItems(sections);
@@ -130,6 +133,22 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
               TV Shows
             </a>
           </nav>
+          {/* Player switcher */}
+          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+            {(['1', '2'] as PlayerChoice[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPlayer(p)}
+                title={`Switch to ${PLAYER_LABELS[p]}`}
+                className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                  player === p ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                P{p}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
