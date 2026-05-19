@@ -17,8 +17,16 @@ export const seriesCatalog: TvCatalogEntry[] = [
     title: 'The Boys',
     slug: 'the-boys',
     synopsis: 'Featured series entry managed through the content layer.',
-    maxSeasons: 4,
+    episodesBySeason: {
+      '1': 8,
+      '2': 8,
+      '3': 8,
+      '4': 8,
+      '5': 8,
+    },
+    maxSeasons: 5,
     maxEpisodes: 8,
+    totalEpisodes: 40,
   },
   {
     type: 'tv',
@@ -26,8 +34,12 @@ export const seriesCatalog: TvCatalogEntry[] = [
     title: 'Featured Series 3',
     slug: 'featured-series-3',
     synopsis: 'Editable series entry with a human-readable slug and TV playback defaults.',
+    episodesBySeason: {
+      '1': 10,
+    },
     maxSeasons: 1,
     maxEpisodes: 10,
+    totalEpisodes: 10,
   },
   {
     type: 'tv',
@@ -35,7 +47,12 @@ export const seriesCatalog: TvCatalogEntry[] = [
     title: 'Euphoria',
     slug: 'euphoria',
     synopsis: 'Drama series entry resolved through the slug index.',
+    episodesBySeason: {
+      '1': 8,
+      '2': 8,
+    },
     maxSeasons: 2,
     maxEpisodes: 8,
+    totalEpisodes: 16,
   },
 ];

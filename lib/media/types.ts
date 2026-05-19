@@ -1,5 +1,25 @@
 export type MediaType = 'movie' | 'tv';
 
+export interface EpisodePreview {
+  airDate?: string;
+  episodeNumber: number;
+  name: string;
+  overview: string;
+  runtime?: number;
+  seasonNumber: number;
+  stillUrl?: string;
+}
+
+export interface SeasonDetails {
+  airDate?: string;
+  episodeCount: number;
+  episodes: EpisodePreview[];
+  name: string;
+  overview: string;
+  posterUrl?: string;
+  seasonNumber: number;
+}
+
 interface CatalogEntryBase {
   tmdbId: string;
   title: string;

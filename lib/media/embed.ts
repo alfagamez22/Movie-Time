@@ -10,6 +10,7 @@ export interface PlaybackOptions {
   episode: string;
   color: string;
   autoPlay: boolean;
+  progress: number | null;
 }
 
 type SearchParamValue = string | string[] | undefined;
@@ -32,6 +33,19 @@ function clampPositiveInteger(value: string | undefined, max: number): string {
   return String(Math.min(parsed, max));
 }
 
+function sanitizeProgress(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
 export function sanitizePlayerColor(value: string | undefined): string {
   if (!value) {
     return DEFAULT_PLAYER_COLOR;
@@ -45,6 +59,7 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   const color = sanitizePlayerColor(getFirstParam(searchParams.color));
   const autoPlayRaw = getFirstParam(searchParams.autoPlay);
   const autoPlay = autoPlayRaw === undefined ? true : autoPlayRaw !== 'false';
+  const progress = sanitizeProgress(getFirstParam(searchParams.progress));
 
   if (isTvEntry(entry)) {
     const season = clampPositiveInteger(getFirstParam(searchParams.s), entry.maxSeasons);
@@ -53,6 +68,7 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
       episode: clampPositiveInteger(getFirstParam(searchParams.e), getEpisodeLimit(entry, season)),
       color,
       autoPlay,
+      progress,
     };
   }
 
@@ -61,6 +77,7 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
     episode: '1',
     color,
     autoPlay,
+    progress,
   };
 }
 
@@ -75,6 +92,10 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
 
   if (options.autoPlay) {
     url.searchParams.set('autoPlay', 'true');
+  }
+
+  if (options.progress !== null) {
+    url.searchParams.set('progress', String(options.progress));
   }
 
   if (isTvEntry(entry)) {

@@ -5,8 +5,8 @@ import { WatchPlayer } from '@/components/media/watch-player';
 import { resolveMediaIdentifier } from '@/lib/media/catalog';
 import { resolvePlaybackOptions } from '@/lib/media/embed';
 import { normalizeSlug } from '@/lib/slugs/media';
-import { lookupTmdbMediaEntry, mergeCatalogEntryWithTmdb } from '@/lib/tmdb/client';
-import { isTvEntry, type MediaEntry, type MediaType } from '@/lib/media/types';
+import { lookupTmdbMediaEntry, lookupTmdbSeasonDetails, mergeCatalogEntryWithTmdb } from '@/lib/tmdb/client';
+import { isTvEntry, type MediaEntry, type MediaType, type SeasonDetails } from '@/lib/media/types';
 
 interface WatchPageProps {
   params: Promise<{ slug: string }>;
@@ -19,8 +19,24 @@ function buildWatchQuery(
 ): string {
   const nextSearchParams = new URLSearchParams();
 
+  const color = Array.isArray(searchParams.color) ? searchParams.color[0] : searchParams.color;
+  const autoPlay = Array.isArray(searchParams.autoPlay) ? searchParams.autoPlay[0] : searchParams.autoPlay;
+  const progress = Array.isArray(searchParams.progress) ? searchParams.progress[0] : searchParams.progress;
+
   const season = Array.isArray(searchParams.s) ? searchParams.s[0] : searchParams.s;
   const episode = Array.isArray(searchParams.e) ? searchParams.e[0] : searchParams.e;
+
+  if (color) {
+    nextSearchParams.set('color', color);
+  }
+
+  if (autoPlay) {
+    nextSearchParams.set('autoPlay', autoPlay);
+  }
+
+  if (progress) {
+    nextSearchParams.set('progress', progress);
+  }
 
   if (entryType === 'tv') {
     if (season) {
@@ -76,10 +92,21 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
       }
     }
 
+    const initialPlayback = resolvePlaybackOptions(entry, resolvedSearchParams);
+    let initialSeasonDetails: SeasonDetails | null = null;
+
+    if (isTvEntry(entry)) {
+      const seasonDetailsLookup = await lookupTmdbSeasonDetails(entry.tmdbId, Number.parseInt(initialPlayback.season, 10));
+      if (seasonDetailsLookup.ok) {
+        initialSeasonDetails = seasonDetailsLookup.data;
+      }
+    }
+
     return (
       <WatchPlayer
         entry={entry}
-        initialPlayback={resolvePlaybackOptions(entry, resolvedSearchParams)}
+        initialPlayback={initialPlayback}
+        initialSeasonDetails={initialSeasonDetails}
         isCatalogEntry
       />
     );
@@ -96,10 +123,24 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
       return <ManualLookupError message={tmdbLookup.message} />;
     }
 
+    const initialPlayback = resolvePlaybackOptions(tmdbLookup.entry, resolvedSearchParams);
+    let initialSeasonDetails: SeasonDetails | null = null;
+
+    if (isTvEntry(tmdbLookup.entry)) {
+      const seasonDetailsLookup = await lookupTmdbSeasonDetails(
+        tmdbLookup.entry.tmdbId,
+        Number.parseInt(initialPlayback.season, 10),
+      );
+      if (seasonDetailsLookup.ok) {
+        initialSeasonDetails = seasonDetailsLookup.data;
+      }
+    }
+
     return (
       <WatchPlayer
         entry={tmdbLookup.entry}
-        initialPlayback={resolvePlaybackOptions(tmdbLookup.entry, resolvedSearchParams)}
+        initialPlayback={initialPlayback}
+        initialSeasonDetails={initialSeasonDetails}
         isCatalogEntry={false}
       />
     );
