@@ -139,7 +139,7 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
             onClick={handleBackToLibrary}
             aria-label="Back to library"
             title="Back to library"
-            className="absolute left-4 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-zinc-100 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
+            className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-zinc-100 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>

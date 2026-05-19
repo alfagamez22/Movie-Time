@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
@@ -30,6 +29,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
   if (count === 0) return null;
 
   const active = items[activeIndex];
+  const heroImageUrl = active.backdropUrl ?? active.posterUrl;
 
   const go = (index: number) => {
     setActiveIndex(((index % count) + count) % count);
@@ -47,14 +47,11 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
           transition={{ duration: 0.9 }}
           className="absolute inset-0"
         >
-          {active.backdropUrl ?? active.posterUrl ? (
-            <Image
-              src={(active.backdropUrl ?? active.posterUrl) as string}
-              alt={active.title}
-              fill
-              priority
-              sizes="100vw"
-              className="object-cover object-center"
+          {heroImageUrl ? (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url("${heroImageUrl}")` }}
             />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />

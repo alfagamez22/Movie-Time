@@ -184,8 +184,17 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
         }`}
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:px-12">
-          <Link href="/" className="select-none text-2xl font-black tracking-tight text-netflix-red">
-            PapiFlix
+          <Link
+            href="/"
+            className="h-12 w-36 shrink-0 select-none bg-no-repeat sm:h-14 sm:w-44"
+            aria-label="PapiFlix home"
+            style={{
+              backgroundImage: "url('/icons/papiflixbanner.png')",
+              backgroundPosition: '47% center',
+              backgroundSize: '200% auto',
+            }}
+          >
+            <span className="sr-only">PapiFlix</span>
           </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium text-zinc-300 md:flex">
             <Link href="/" className="transition-colors hover:text-white">
