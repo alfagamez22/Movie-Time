@@ -27,6 +27,13 @@
   .player-canvas {
     background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
   }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
   .thin-scrollbar {
   }
   .thin-scrollbar::-webkit-scrollbar {
