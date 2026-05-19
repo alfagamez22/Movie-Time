@@ -1,6 +1,6 @@
-# Movie DB
+# PapiFlix
 
-Movie DB is a Next.js catalog and player launcher for Vidking that now uses readable, editable slugs instead of a hardcoded page-local library.
+PapiFlix is a Next.js catalog and player launcher for Vidking that now uses readable, editable slugs instead of a hardcoded page-local library.
 
 ## Architecture
 

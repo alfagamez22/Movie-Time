@@ -9,8 +9,10 @@ function readUrlEnv(name: string, fallback: string): string {
   }
 }
 
+const APP_NAME = 'PapiFlix';
+
 export const appConfig = {
-  name: process.env.NEXT_PUBLIC_APP_NAME?.trim() || 'PapiFlix',
+  name: APP_NAME,
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
     'Search-driven movie and series library with native playback controls.',
