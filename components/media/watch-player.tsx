@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Minimize2, PanelRight, Tv } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 import { buildEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
 import { buildWatchHref } from '@/lib/media/routes';
@@ -21,8 +21,6 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
 
   const [season, setSeason] = useState(initialPlayback.season);
   const [episode, setEpisode] = useState(initialPlayback.episode);
-  const [isTheaterMode, setIsTheaterMode] = useState(false);
-  const [showNavigator, setShowNavigator] = useState(true);
   const [activeSeasonDetails, setActiveSeasonDetails] = useState<SeasonDetails | null>(initialSeasonDetails);
   const [seasonDetailsError, setSeasonDetailsError] = useState<string | null>(null);
   const [isChromeVisible, setIsChromeVisible] = useState(true);
@@ -115,9 +113,7 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
     setEpisode(newEpisode);
   }, []);
 
-  // Theater mode
-  if (isTheaterMode) {
-    return (
+  return (
       <div
         onMouseMove={revealChrome}
         className="fixed inset-0 z-[70] flex bg-black text-white"
@@ -142,15 +138,6 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
               {entry.title}
               {isSeries && ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`}
             </span>
-            <button
-              type="button"
-              onClick={() => { setIsTheaterMode(false); if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current); }}
-              title="Exit theater mode"
-              aria-label="Exit theater mode"
-              className="text-zinc-300 transition-colors hover:text-white"
-            >
-              <Minimize2 className="h-4 w-4" />
-            </button>
           </div>
 
           <iframe
@@ -177,97 +164,6 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
           />
         )}
       </div>
-    );
-  }
-
-  // Normal mode
-  return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#050505] text-white">
-      <header className="glass z-50 flex h-16 w-full shrink-0 items-center justify-between px-8">
-        <button
-          type="button"
-          onClick={() => router.push('/')}
-          aria-label="Back to library"
-          className="flex items-center gap-2 text-zinc-400 transition-colors hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="text-sm font-medium">Library</span>
-        </button>
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-white">{entry.title}</span>
-          {isSeries && (
-            <span className="rounded-full border border-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-400">
-              S{safeSeason.padStart(2, '0')}E{safeEpisode.padStart(2, '0')}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => { setIsTheaterMode(true); revealChrome(); }}
-            title="Enter theater mode"
-            aria-label="Enter theater mode"
-            className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-          >
-            <Tv className="h-4 w-4" />
-            Theater
-          </button>
-          {isSeries && (
-            <button
-              type="button"
-              onClick={() => setShowNavigator((v) => !v)}
-              title={showNavigator ? 'Hide episodes' : 'Show episodes'}
-              aria-label={showNavigator ? 'Hide episode navigator' : 'Show episode navigator'}
-              className="flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-zinc-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-            >
-              <PanelRight className="h-4 w-4" />
-              {showNavigator ? 'Hide' : 'Episodes'}
-            </button>
-          )}
-        </div>
-      </header>
-
-      <main className="flex flex-1 gap-4 overflow-hidden p-4 md:p-6">
-        <section className="min-w-0 flex-1">
-          <div className="overflow-hidden rounded-[1.75rem] border border-white/10 shadow-2xl">
-            <div className="aspect-video w-full">
-              <iframe
-                key={`${safeSeason}-${safeEpisode}`}
-                src={embedUrl}
-                className="h-full w-full border-0"
-                allowFullScreen
-                allow="autoplay; fullscreen; picture-in-picture"
-                title={`Watch ${entry.title}`}
-              />
-            </div>
-          </div>
-
-          <div className="mt-5 px-1">
-            <h1 className="text-2xl font-black text-white">{entry.title}</h1>
-            {entry.synopsis && (
-              <p className="mt-2 text-sm leading-relaxed text-zinc-400">{entry.synopsis}</p>
-            )}
-          </div>
-        </section>
-
-        {isSeries && showNavigator && (
-          <aside className="glass flex w-80 shrink-0 flex-col overflow-hidden rounded-[1.75rem]">
-            <EpisodeSidebar
-              safeSeason={safeSeason}
-              safeEpisode={safeEpisode}
-              safeEpisodeLimit={safeEpisodeLimit}
-              seasonOptions={seasonOptions}
-              seasonEpisodeCards={seasonEpisodeCards}
-              seasonDetailsError={seasonDetailsError}
-              onSeasonChange={(s) => void handleSeasonChange(s)}
-              onEpisodeChange={handleEpisodeChange}
-            />
-          </aside>
-        )}
-      </main>
-    </div>
   );
 }
 
