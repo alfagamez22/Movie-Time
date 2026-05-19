@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { buildEmbedUrl, buildVideasyEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
 import { usePlayerPreference } from '@/lib/hooks/use-player-preference';
+import { requestHomeScrollRestore, trackRecentlyWatched } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import { getEpisodeLimit, isTvEntry, type EpisodePreview, type MediaEntry, type SeasonDetails } from '@/lib/media/types';
 
@@ -62,6 +63,13 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
     ? buildVideasyEmbedUrl(entry, playbackOptions)
     : buildEmbedUrl(entry, playbackOptions);
 
+  useEffect(() => {
+    trackRecentlyWatched(entry, {
+      episode: isSeries ? safeEpisode : undefined,
+      season: isSeries ? safeSeason : undefined,
+    });
+  }, [entry, isSeries, safeEpisode, safeSeason]);
+
   // Keep URL in sync with current season/episode
   useEffect(() => {
     if (!isSeries) return;
@@ -114,6 +122,11 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
     setEpisode(newEpisode);
   }, []);
 
+  const handleBackToLibrary = useCallback(() => {
+    requestHomeScrollRestore();
+    router.push('/', { scroll: false });
+  }, [router]);
+
   return (
       <div
         onMouseMove={revealChrome}
@@ -121,21 +134,22 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       >
         {/* Left: player */}
         <div className="relative min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={handleBackToLibrary}
+            aria-label="Back to library"
+            title="Back to library"
+            className="absolute left-4 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-zinc-100 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+
           <div
-            className={`absolute inset-x-0 top-0 z-30 flex h-12 items-center gap-4 bg-gradient-to-b from-black/80 to-transparent px-4 transition-opacity duration-300 ${
+            className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-12 items-center justify-center bg-gradient-to-b from-black/80 to-transparent px-16 transition-opacity duration-300 ${
               isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >
-            <button
-              type="button"
-              onClick={() => router.push('/')}
-              aria-label="Back to library"
-              title="Back to library"
-              className="flex items-center gap-1.5 text-zinc-300 transition-colors hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-            <span className="flex-1 text-center text-[13px] font-semibold uppercase tracking-widest text-white">
+            <span className="text-center text-[13px] font-semibold uppercase tracking-widest text-white">
               {entry.title}
               {isSeries && ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`}
             </span>

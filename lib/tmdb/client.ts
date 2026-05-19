@@ -18,6 +18,7 @@ const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL?.trim() || 'https://api.
 const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL?.trim() || 'https://image.tmdb.org/t/p';
 const TMDB_PUBLIC_DB_BASE_URL = process.env.TMDB_PUBLIC_DB_BASE_URL?.trim() || 'https://db.videasy.net/3';
 const DEFAULT_TMDB_LANGUAGE = process.env.TMDB_LANGUAGE?.trim() || 'en-US';
+const VIVAMAX_COMPANY_ID = '149142';
 
 type TmdbLookupFailureReason = 'missing-config' | 'not-found' | 'upstream-error';
 
@@ -189,10 +190,18 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
-    description: 'Popular Filipino movies from the TMDB library.',
+    description: 'Popular Filipino movies excluding TMDB titles produced by Vivamax.',
     id: 'filipino-movies',
-    pathname: '/discover/movie?with_original_language=tl&region=PH&sort_by=popularity.desc',
+    pathname: `/discover/movie?with_original_language=tl&region=PH&without_companies=${VIVAMAX_COMPANY_ID}&sort_by=popularity.desc`,
     title: 'Filipino Movies',
+    type: 'movie',
+  },
+  {
+    description: 'TMDB movies produced by Vivamax, separated from the general Filipino row.',
+    id: 'vivamax-movies',
+    includeAdult: true,
+    pathname: `/discover/movie?with_companies=${VIVAMAX_COMPANY_ID}&sort_by=popularity.desc`,
+    title: 'Vivamax Movies',
     type: 'movie',
   },
   {

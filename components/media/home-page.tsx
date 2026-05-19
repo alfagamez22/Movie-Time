@@ -8,6 +8,12 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { LibraryMediaEntry, LibrarySection } from '@/lib/media/types';
 import { usePlayerPreference, PLAYER_LABELS, type PlayerChoice } from '@/lib/hooks/use-player-preference';
+import {
+  removeRecentlyWatched,
+  restoreHomeScrollIfRequested,
+  saveHomeScrollPosition,
+  useRecentlyWatched,
+} from '@/lib/hooks/use-recently-watched';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
 import { MediaDetailsModal } from './media-details-modal';
@@ -69,6 +75,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
   const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const [navScrolled, setNavScrolled] = useState(false);
   const { player, setPlayer } = usePlayerPreference();
+  const recentlyWatched = useRecentlyWatched();
   const inputRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query.trim());
   const isSearchPending = query.trim() !== deferredQuery;
@@ -94,11 +101,44 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
     setSelectedEntry(entry);
   }, []);
 
+  const removeRecentEntry = useCallback(
+    (entry: LibraryMediaEntry) => {
+      removeRecentlyWatched(entry);
+      if (selectedEntry?.type === entry.type && selectedEntry.tmdbId === entry.tmdbId) {
+        setSelectedEntry(null);
+      }
+    },
+    [selectedEntry],
+  );
+
   // Sticky nav background on scroll
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    restoreHomeScrollIfRequested();
+
+    let frame: number | null = null;
+    const saveScroll = () => {
+      if (frame != null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        saveHomeScrollPosition();
+      });
+    };
+
+    saveScroll();
+    window.addEventListener('scroll', saveScroll, { passive: true });
+    window.addEventListener('pagehide', saveHomeScrollPosition);
+
+    return () => {
+      if (frame != null) cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', saveScroll);
+      window.removeEventListener('pagehide', saveHomeScrollPosition);
+    };
   }, []);
 
   // Focus search input when overlay opens
@@ -255,6 +295,16 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
 
       {/* Browse rows */}
       <div className="space-y-10 py-8">
+        {recentlyWatched.length > 0 ? (
+          <BrowseRow
+            key="recently-watched"
+            title="Recently Watched"
+            entries={recentlyWatched}
+            loop={false}
+            onEntryRemove={removeRecentEntry}
+            onEntrySelect={openDetails}
+          />
+        ) : null}
         {sections.map((section) => (
           <BrowseRow key={section.id} title={section.title} entries={section.entries} onEntrySelect={openDetails} />
         ))}

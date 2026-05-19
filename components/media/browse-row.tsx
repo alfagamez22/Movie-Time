@@ -2,26 +2,39 @@
 
 import Image from 'next/image';
 import { useCallback, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Info, Play, X } from 'lucide-react';
 
 import type { LibraryMediaEntry } from '@/lib/media/types';
 
 interface BrowseRowProps {
   entries: LibraryMediaEntry[];
+  loop?: boolean;
+  onEntryRemove?: (entry: LibraryMediaEntry) => void;
   onEntrySelect: (entry: LibraryMediaEntry) => void;
   title: string;
 }
 
-function PosterCard({ entry, onSelect }: { entry: LibraryMediaEntry; onSelect: (entry: LibraryMediaEntry) => void }) {
+function PosterCard({
+  entry,
+  onRemove,
+  onSelect,
+}: {
+  entry: LibraryMediaEntry;
+  onRemove?: (entry: LibraryMediaEntry) => void;
+  onSelect: (entry: LibraryMediaEntry) => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(entry)}
-      aria-label={`Show details for ${entry.title}`}
+    <div
       // clamp: min 9rem (small screens), preferred 14vw (scales with monitor), max 18rem (huge screens)
-      className="group relative shrink-0 w-[clamp(9rem,14vw,18rem)] overflow-hidden rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
+      className="group relative shrink-0 w-[clamp(9rem,14vw,18rem)]"
     >
-      <div className="relative aspect-[2/3] w-full bg-zinc-900">
+      <button
+        type="button"
+        onClick={() => onSelect(entry)}
+        aria-label={`Show details for ${entry.title}`}
+        className="relative w-full overflow-hidden rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
+      >
+        <div className="relative aspect-[2/3] w-full bg-zinc-900">
         {entry.posterUrl ? (
           <Image
             src={entry.posterUrl}
@@ -47,19 +60,33 @@ function PosterCard({ entry, onSelect }: { entry: LibraryMediaEntry; onSelect: (
           </div>
         </div>
       </div>
-    </button>
+      </button>
+
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={() => onRemove(entry)}
+          aria-label={`Remove ${entry.title} from recently watched`}
+          title="Remove from recently watched"
+          className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-zinc-200 opacity-100 backdrop-blur-sm transition-opacity hover:bg-netflix-red hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
+    </div>
   );
 }
 
-export function BrowseRow({ entries, onEntrySelect, title }: BrowseRowProps) {
+export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, title }: BrowseRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
   const hasEntries = entries.length > 0;
+  const shouldLoop = loop && entries.length > 2;
 
   // Scroll to the middle copy after mount
   useEffect(() => {
-    if (!hasEntries) return;
+    if (!shouldLoop) return;
     const el = rowRef.current;
     if (!el) return;
     const snapToMiddle = () => {
@@ -69,10 +96,11 @@ export function BrowseRow({ entries, onEntrySelect, title }: BrowseRowProps) {
     // Fallback for first paint
     const t = setTimeout(snapToMiddle, 50);
     return () => clearTimeout(t);
-  }, [hasEntries]);
+  }, [shouldLoop]);
 
   // Silently teleport back to the middle copy when the user exits it
   const onScroll = useCallback(() => {
+    if (!shouldLoop) return;
     const el = rowRef.current;
     if (!el || isJumping.current) return;
     const third = el.scrollWidth / 3;
@@ -87,15 +115,15 @@ export function BrowseRow({ entries, onEntrySelect, title }: BrowseRowProps) {
       el.scrollLeft += third;
       setTimeout(() => { isJumping.current = false; }, 80);
     }
-  }, []);
+  }, [shouldLoop]);
 
   useEffect(() => {
-    if (!hasEntries) return;
+    if (!shouldLoop) return;
     const el = rowRef.current;
     if (!el) return;
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, [hasEntries, onScroll]);
+  }, [shouldLoop, onScroll]);
 
   const scroll = (dir: 'left' | 'right') => {
     if (!rowRef.current) return;
@@ -106,9 +134,8 @@ export function BrowseRow({ entries, onEntrySelect, title }: BrowseRowProps) {
 
   if (!hasEntries) return null;
 
-  // Triple the list: [copy1 | copy2(middle) | copy3]
-  // We start scrolled to copy2 so arrows work in both directions immediately.
-  const loopItems = [...entries, ...entries, ...entries];
+  // Triple long browse rows for the seamless loop, but keep short personal rows exact.
+  const rowItems = shouldLoop ? [...entries, ...entries, ...entries] : entries;
 
   return (
     <div className="group/row">
@@ -129,10 +156,11 @@ export function BrowseRow({ entries, onEntrySelect, title }: BrowseRowProps) {
           ref={rowRef}
           className="flex gap-2 overflow-x-auto px-6 pb-2 scrollbar-hide md:px-12"
         >
-          {loopItems.map((entry, i) => (
+          {rowItems.map((entry, i) => (
             <PosterCard
-              key={`loop-${i}-${entry.type}:${entry.tmdbId}`}
+              key={`${shouldLoop ? 'loop' : 'single'}-${i}-${entry.type}:${entry.tmdbId}`}
               entry={entry}
+              onRemove={onEntryRemove}
               onSelect={onEntrySelect}
             />
           ))}
