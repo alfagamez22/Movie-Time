@@ -70,6 +70,19 @@ export interface LibrarySection {
   title: string;
 }
 
+export interface MediaCastMember {
+  character?: string;
+  id?: number;
+  name: string;
+  profileUrl?: string;
+}
+
+export interface MediaDetailsPayload {
+  cast: MediaCastMember[];
+  entry: MediaEntry;
+  recommendations: LibraryMediaEntry[];
+}
+
 export interface MovieMediaEntry extends MediaEntryBase {
   type: 'movie';
 }

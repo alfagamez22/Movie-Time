@@ -11,9 +11,10 @@ import type { LibraryMediaEntry } from '@/lib/media/types';
 
 interface HeroBannerProps {
   items: LibraryMediaEntry[];
+  onInfoSelect?: (entry: LibraryMediaEntry) => void;
 }
 
-export function HeroBanner({ items }: HeroBannerProps) {
+export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const count = items.length;
 
@@ -105,13 +106,24 @@ export function HeroBanner({ items }: HeroBannerProps) {
                   <Play className="h-4 w-4 fill-current" />
                   Play
                 </Link>
-                <Link
-                  href={buildWatchHref(active)}
-                  className="inline-flex items-center gap-2 rounded-md bg-zinc-700/60 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-zinc-600/70 active:scale-95"
-                >
-                  <Info className="h-4 w-4" />
-                  More Info
-                </Link>
+                {onInfoSelect ? (
+                  <button
+                    type="button"
+                    onClick={() => onInfoSelect(active)}
+                    className="inline-flex items-center gap-2 rounded-md bg-zinc-700/60 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-zinc-600/70 active:scale-95"
+                  >
+                    <Info className="h-4 w-4" />
+                    More Info
+                  </button>
+                ) : (
+                  <Link
+                    href={buildWatchHref(active)}
+                    className="inline-flex items-center gap-2 rounded-md bg-zinc-700/60 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-zinc-600/70 active:scale-95"
+                  >
+                    <Info className="h-4 w-4" />
+                    More Info
+                  </Link>
+                )}
               </div>
             </motion.div>
           </AnimatePresence>

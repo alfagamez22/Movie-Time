@@ -1,24 +1,25 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
 import { useCallback, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
 
-import { buildWatchHref } from '@/lib/media/routes';
 import type { LibraryMediaEntry } from '@/lib/media/types';
 
 interface BrowseRowProps {
   entries: LibraryMediaEntry[];
+  onEntrySelect: (entry: LibraryMediaEntry) => void;
   title: string;
 }
 
-function PosterCard({ entry }: { entry: LibraryMediaEntry }) {
+function PosterCard({ entry, onSelect }: { entry: LibraryMediaEntry; onSelect: (entry: LibraryMediaEntry) => void }) {
   return (
-    <Link
-      href={buildWatchHref(entry)}
+    <button
+      type="button"
+      onClick={() => onSelect(entry)}
+      aria-label={`Show details for ${entry.title}`}
       // clamp: min 9rem (small screens), preferred 14vw (scales with monitor), max 18rem (huge screens)
-      className="group relative shrink-0 w-[clamp(9rem,14vw,18rem)] overflow-hidden rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
+      className="group relative shrink-0 w-[clamp(9rem,14vw,18rem)] overflow-hidden rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
     >
       <div className="relative aspect-[2/3] w-full bg-zinc-900">
         {entry.posterUrl ? (
@@ -42,27 +43,23 @@ function PosterCard({ entry }: { entry: LibraryMediaEntry }) {
             <p className="mt-0.5 text-[11px] font-medium text-amber-400">★ {entry.rating}</p>
           ) : null}
           <div className="mt-2 flex items-center justify-center gap-1 rounded bg-white/15 py-1.5 text-[11px] font-bold uppercase tracking-wider text-white">
-            <Play className="h-3 w-3 fill-current" /> Play
+            <Info className="h-3 w-3" /> Details
           </div>
         </div>
       </div>
-    </Link>
+    </button>
   );
 }
 
-export function BrowseRow({ entries, title }: BrowseRowProps) {
+export function BrowseRow({ entries, onEntrySelect, title }: BrowseRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
-
-  if (entries.length === 0) return null;
-
-  // Triple the list: [copy1 | copy2(middle) | copy3]
-  // We start scrolled to copy2 so arrows work in both directions immediately.
-  const loopItems = [...entries, ...entries, ...entries];
+  const hasEntries = entries.length > 0;
 
   // Scroll to the middle copy after mount
   useEffect(() => {
+    if (!hasEntries) return;
     const el = rowRef.current;
     if (!el) return;
     const snapToMiddle = () => {
@@ -72,7 +69,7 @@ export function BrowseRow({ entries, title }: BrowseRowProps) {
     // Fallback for first paint
     const t = setTimeout(snapToMiddle, 50);
     return () => clearTimeout(t);
-  }, []);
+  }, [hasEntries]);
 
   // Silently teleport back to the middle copy when the user exits it
   const onScroll = useCallback(() => {
@@ -93,11 +90,12 @@ export function BrowseRow({ entries, title }: BrowseRowProps) {
   }, []);
 
   useEffect(() => {
+    if (!hasEntries) return;
     const el = rowRef.current;
     if (!el) return;
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, [onScroll]);
+  }, [hasEntries, onScroll]);
 
   const scroll = (dir: 'left' | 'right') => {
     if (!rowRef.current) return;
@@ -105,6 +103,12 @@ export function BrowseRow({ entries, title }: BrowseRowProps) {
     const amount = rowRef.current.clientWidth * 0.8;
     rowRef.current.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
   };
+
+  if (!hasEntries) return null;
+
+  // Triple the list: [copy1 | copy2(middle) | copy3]
+  // We start scrolled to copy2 so arrows work in both directions immediately.
+  const loopItems = [...entries, ...entries, ...entries];
 
   return (
     <div className="group/row">
@@ -129,6 +133,7 @@ export function BrowseRow({ entries, title }: BrowseRowProps) {
             <PosterCard
               key={`loop-${i}-${entry.type}:${entry.tmdbId}`}
               entry={entry}
+              onSelect={onEntrySelect}
             />
           ))}
         </div>

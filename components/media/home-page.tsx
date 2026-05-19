@@ -6,11 +6,11 @@ import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'reac
 import { Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
-import { buildWatchHref } from '@/lib/media/routes';
 import type { LibraryMediaEntry, LibrarySection } from '@/lib/media/types';
 import { usePlayerPreference, PLAYER_LABELS, type PlayerChoice } from '@/lib/hooks/use-player-preference';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
+import { MediaDetailsModal } from './media-details-modal';
 
 interface HomePageProps {
   sections: LibrarySection[];
@@ -24,11 +24,19 @@ function getFeaturedItems(sections: LibrarySection[]): LibraryMediaEntry[] {
     .slice(0, 6);
 }
 
-function SearchResultCard({ entry }: { entry: LibraryMediaEntry }) {
+function SearchResultCard({
+  entry,
+  onSelect,
+}: {
+  entry: LibraryMediaEntry;
+  onSelect: (entry: LibraryMediaEntry) => void;
+}) {
   return (
-    <Link
-      href={buildWatchHref(entry)}
-      className="group flex gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.07]"
+    <button
+      type="button"
+      onClick={() => onSelect(entry)}
+      aria-label={`Show details for ${entry.title}`}
+      className="group flex w-full gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
     >
       <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md bg-zinc-800">
         {entry.posterUrl ? (
@@ -50,7 +58,7 @@ function SearchResultCard({ entry }: { entry: LibraryMediaEntry }) {
           <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{entry.synopsis}</p>
         ) : null}
       </div>
-    </Link>
+    </button>
   );
 }
 
@@ -58,6 +66,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LibraryMediaEntry[]>([]);
+  const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const [navScrolled, setNavScrolled] = useState(false);
   const { player, setPlayer } = usePlayerPreference();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,6 +76,22 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
     setQuery('');
+  }, []);
+
+  const openDetails = useCallback(
+    (entry: LibraryMediaEntry) => {
+      closeSearch();
+      setSelectedEntry(entry);
+    },
+    [closeSearch],
+  );
+
+  const closeDetails = useCallback(() => {
+    setSelectedEntry(null);
+  }, []);
+
+  const selectDetailsEntry = useCallback((entry: LibraryMediaEntry) => {
+    setSelectedEntry(entry);
   }, []);
 
   // Sticky nav background on scroll
@@ -119,19 +144,19 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
         }`}
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:px-12">
-          <a href="/" className="select-none text-2xl font-black tracking-tight text-netflix-red">
+          <Link href="/" className="select-none text-2xl font-black tracking-tight text-netflix-red">
             PapiFlix
-          </a>
+          </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium text-zinc-300 md:flex">
-            <a href="/" className="transition-colors hover:text-white">
+            <Link href="/" className="transition-colors hover:text-white">
               Home
-            </a>
-            <a href="/" className="transition-colors hover:text-white">
+            </Link>
+            <Link href="/" className="transition-colors hover:text-white">
               Movies
-            </a>
-            <a href="/" className="transition-colors hover:text-white">
+            </Link>
+            <Link href="/" className="transition-colors hover:text-white">
               TV Shows
-            </a>
+            </Link>
           </nav>
           {/* Player switcher */}
           <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
@@ -206,7 +231,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
                 ) : (
                   <div className="flex flex-col gap-2">
                     {searchResults.map((entry) => (
-                      <SearchResultCard key={`${entry.type}:${entry.tmdbId}`} entry={entry} />
+                      <SearchResultCard key={`${entry.type}:${entry.tmdbId}`} entry={entry} onSelect={openDetails} />
                     ))}
                   </div>
                 )}
@@ -217,7 +242,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
       </AnimatePresence>
 
       {/* Hero banner */}
-      {featuredItems.length > 0 ? <HeroBanner items={featuredItems} /> : null}
+      {featuredItems.length > 0 ? <HeroBanner items={featuredItems} onInfoSelect={openDetails} /> : null}
 
       {/* Discovery error notice */}
       {discoveryError && sections.length === 0 ? (
@@ -231,9 +256,11 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
       {/* Browse rows */}
       <div className="space-y-10 py-8">
         {sections.map((section) => (
-          <BrowseRow key={section.id} title={section.title} entries={section.entries} />
+          <BrowseRow key={section.id} title={section.title} entries={section.entries} onEntrySelect={openDetails} />
         ))}
       </div>
+
+      <MediaDetailsModal entry={selectedEntry} onClose={closeDetails} onSelectEntry={selectDetailsEntry} />
 
       <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-600 md:px-12">
         Metadata and artwork provided by The Movie Database.

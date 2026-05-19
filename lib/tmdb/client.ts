@@ -5,6 +5,8 @@ import {
   toLibraryMediaEntry,
   type LibraryMediaEntry,
   type LibrarySection,
+  type MediaCastMember,
+  type MediaDetailsPayload,
   type MediaEntry,
   type MediaType,
   type MovieMediaEntry,
@@ -69,6 +71,7 @@ interface TmdbSeasonDetailsResponse {
 }
 
 interface TmdbBrowseResult {
+  adult?: boolean;
   backdrop_path?: string;
   first_air_date?: string;
   id: number;
@@ -80,6 +83,18 @@ interface TmdbBrowseResult {
   title?: string;
   vote_average?: number;
   vote_count?: number;
+}
+
+interface TmdbCastResult {
+  character?: string;
+  id?: number;
+  name?: string;
+  order?: number;
+  profile_path?: string;
+}
+
+interface TmdbCreditsResponse {
+  cast?: TmdbCastResult[];
 }
 
 interface TmdbPagedResponse<T> {
@@ -124,6 +139,12 @@ export type TmdbSeasonDetailsResult =
   | TmdbLookupFailure;
 export type TmdbSearchResult = TmdbSearchSuccess | TmdbLookupFailure;
 export type TmdbLibrarySectionsResult = TmdbLibrarySectionsSuccess | TmdbLookupFailure;
+export type TmdbMediaDetailsResult =
+  | {
+      data: MediaDetailsPayload;
+      ok: true;
+    }
+  | TmdbLookupFailure;
 
 interface TmdbCredentials {
   apiKey?: string;
@@ -137,8 +158,10 @@ interface MetadataRequestTarget {
 }
 
 interface TmdbBrowseSectionDefinition {
+  adultOnly?: boolean;
   description: string;
   id: string;
+  includeAdult?: boolean;
   pathname: string;
   type?: MediaType;
   title: string;
@@ -150,6 +173,50 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     id: 'trending',
     pathname: '/trending/all/day',
     title: 'Trending Now',
+  },
+  {
+    description: 'Popular movies from across the TMDB library.',
+    id: 'movies',
+    pathname: '/discover/movie?sort_by=popularity.desc',
+    title: 'Movies',
+    type: 'movie',
+  },
+  {
+    description: 'Popular TV shows and series from across the TMDB library.',
+    id: 'tv-shows',
+    pathname: '/discover/tv?sort_by=popularity.desc',
+    title: 'TV Shows',
+    type: 'tv',
+  },
+  {
+    description: 'Popular Filipino movies from the TMDB library.',
+    id: 'filipino-movies',
+    pathname: '/discover/movie?with_original_language=tl&region=PH&sort_by=popularity.desc',
+    title: 'Filipino Movies',
+    type: 'movie',
+  },
+  {
+    description: 'Popular Japanese movies from the TMDB library.',
+    id: 'japanese-movies',
+    pathname: '/discover/movie?with_original_language=ja&region=JP&sort_by=popularity.desc',
+    title: 'Japanese Movies',
+    type: 'movie',
+  },
+  {
+    description: 'Mature-rated movies using PH R-18 certification data while excluding adult-only TMDB titles.',
+    id: 'r18-movies',
+    pathname: '/discover/movie?certification_country=PH&certification=R-18&sort_by=popularity.desc',
+    title: 'R18 Movies',
+    type: 'movie',
+  },
+  {
+    adultOnly: true,
+    description: 'Adult-tagged TMDB movie results surfaced separately from the standard mature row.',
+    id: 'adult-r18-movies',
+    includeAdult: true,
+    pathname: '/discover/movie?sort_by=popularity.desc',
+    title: 'Adult R18 Movies',
+    type: 'movie',
   },
   {
     description: 'Broad-audience movies with the strongest current pull.',
@@ -574,6 +641,31 @@ function mapPageResultsToEntries(
   );
 }
 
+function filterBrowseResultsForSection(
+  results: TmdbBrowseResult[] | undefined,
+  section: TmdbBrowseSectionDefinition,
+): TmdbBrowseResult[] | undefined {
+  if (!section.adultOnly || !results) {
+    return results;
+  }
+
+  const hasAdultFlag = results.some((result) => typeof result.adult === 'boolean');
+  return hasAdultFlag ? results.filter((result) => result.adult === true) : results;
+}
+
+function mapCastMembers(cast: TmdbCastResult[] | undefined, limit = 10): MediaCastMember[] {
+  return (cast ?? [])
+    .filter((member) => Boolean(member.name?.trim()))
+    .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))
+    .slice(0, limit)
+    .map((member) => ({
+      character: member.character?.trim() || undefined,
+      id: member.id,
+      name: member.name?.trim() as string,
+      profileUrl: buildTmdbImageUrl(member.profile_path, 'w300'),
+    }));
+}
+
 async function lookupExactTmdbSearchEntries(query: string, type?: MediaType): Promise<LibraryMediaEntry[]> {
   if (!/^\d+$/.test(query)) {
     return [];
@@ -599,7 +691,7 @@ async function fetchBrowseSection(
   section: TmdbBrowseSectionDefinition,
 ): Promise<LibrarySection | null> {
   const payload = await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>(section.pathname, {
-    include_adult: false,
+    include_adult: section.includeAdult ?? false,
     language: DEFAULT_TMDB_LANGUAGE,
     page: 1,
   });
@@ -608,7 +700,7 @@ async function fetchBrowseSection(
     return null;
   }
 
-  const entries = mapPageResultsToEntries(payload.results, section.type, 18);
+  const entries = mapPageResultsToEntries(filterBrowseResultsForSection(payload.results, section), section.type, 18);
   if (entries.length === 0) {
     return null;
   }
@@ -715,6 +807,62 @@ export async function lookupTmdbSeasonDetails(
   const payload = (await response.json()) as TmdbSeasonDetailsResponse;
   return {
     data: createSeasonDetails(payload),
+    ok: true,
+  };
+}
+
+async function fetchTmdbCastMembers(tmdbId: string, type: MediaType): Promise<MediaCastMember[]> {
+  const payload = await requestOfficialTmdb<TmdbCreditsResponse>(`/${type}/${encodeURIComponent(tmdbId)}/credits`, {
+    language: DEFAULT_TMDB_LANGUAGE,
+  });
+
+  return isTmdbFailure(payload) ? [] : mapCastMembers(payload.cast);
+}
+
+async function fetchTmdbRelatedEntries(tmdbId: string, type: MediaType): Promise<LibraryMediaEntry[]> {
+  const requestOptions = {
+    include_adult: false,
+    language: DEFAULT_TMDB_LANGUAGE,
+    page: 1,
+  };
+
+  const recommendations = await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>(
+    `/${type}/${encodeURIComponent(tmdbId)}/recommendations`,
+    requestOptions,
+  );
+
+  if (!isTmdbFailure(recommendations)) {
+    const entries = mapPageResultsToEntries(recommendations.results, type, 18);
+    if (entries.length > 0) {
+      return entries;
+    }
+  }
+
+  const similar = await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>(
+    `/${type}/${encodeURIComponent(tmdbId)}/similar`,
+    requestOptions,
+  );
+
+  return isTmdbFailure(similar) ? [] : mapPageResultsToEntries(similar.results, type, 18);
+}
+
+export async function lookupTmdbMediaDetails(tmdbId: string, type: MediaType): Promise<TmdbMediaDetailsResult> {
+  const entryLookup = await lookupTmdbMediaEntry(tmdbId, type);
+  if (!entryLookup.ok) {
+    return entryLookup;
+  }
+
+  const [cast, recommendations] = await Promise.all([
+    fetchTmdbCastMembers(tmdbId, type),
+    fetchTmdbRelatedEntries(tmdbId, type),
+  ]);
+
+  return {
+    data: {
+      cast,
+      entry: entryLookup.entry,
+      recommendations,
+    },
     ok: true,
   };
 }
