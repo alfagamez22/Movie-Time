@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server';
 
-import { resolveMediaIdentifier } from '@/lib/media/catalog';
+import { resolveLiveMediaEntry } from '@/lib/media/resolve';
+import { parseMediaType } from '@/lib/media/routes';
 import { lookupTmdbSeasonDetails } from '@/lib/tmdb/client';
-import { isTvEntry, type MediaType } from '@/lib/media/types';
+import { isTvEntry } from '@/lib/media/types';
 
 interface SeasonRouteContext {
   params: Promise<{ season: string; slug: string }>;
-}
-
-function parseMediaType(value: string | null): MediaType | null {
-  if (value === 'movie' || value === 'tv') {
-    return value;
-  }
-
-  return null;
 }
 
 export async function GET(request: Request, context: SeasonRouteContext) {
@@ -26,26 +19,20 @@ export async function GET(request: Request, context: SeasonRouteContext) {
   }
 
   const identifier = decodeURIComponent(slug);
-  const resolution = resolveMediaIdentifier(identifier);
-  let tmdbId: string | null = null;
+  const preferredTmdbId = requestUrl.searchParams.get('id')?.trim();
+  const resolvedEntry = await resolveLiveMediaEntry(identifier, parseMediaType(requestUrl.searchParams.get('type')), preferredTmdbId);
 
-  if (resolution && isTvEntry(resolution.entry)) {
-    tmdbId = resolution.entry.tmdbId;
-  } else if (/^\d+$/.test(identifier) && parseMediaType(requestUrl.searchParams.get('type')) === 'tv') {
-    tmdbId = identifier;
-  }
-
-  if (!tmdbId) {
+  if (!resolvedEntry || !isTvEntry(resolvedEntry.entry)) {
     return NextResponse.json({ error: 'TV series entry not found.' }, { status: 404 });
   }
 
-  const tmdbSeasonLookup = await lookupTmdbSeasonDetails(tmdbId, seasonNumber);
+  const tmdbSeasonLookup = await lookupTmdbSeasonDetails(resolvedEntry.entry.tmdbId, seasonNumber);
   if (!tmdbSeasonLookup.ok) {
     return NextResponse.json({ error: tmdbSeasonLookup.message }, { status: tmdbSeasonLookup.status });
   }
 
   return NextResponse.json({
     data: tmdbSeasonLookup.data,
-    tmdbId,
+    tmdbId: resolvedEntry.entry.tmdbId,
   });
 }

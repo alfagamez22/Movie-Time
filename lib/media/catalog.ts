@@ -2,7 +2,14 @@ import { movieCatalog } from '@/content/media/movies';
 import { seriesCatalog } from '@/content/media/series';
 import { normalizeSlug, normalizeSlugList } from '@/lib/slugs/media';
 
-import { isTvEntry, type CatalogEntry, type MediaEntry, type MediaType } from './types';
+import {
+  isTvEntry,
+  toLibraryMediaEntry,
+  type CatalogEntry,
+  type LibraryMediaEntry,
+  type MediaEntry,
+  type MediaType,
+} from './types';
 
 export interface MediaResolution {
   entry: MediaEntry;
@@ -83,6 +90,10 @@ export function getCatalogSections(): Record<MediaType, MediaEntry[]> {
   };
 }
 
+export function getCatalogLibraryEntries(type?: MediaType): LibraryMediaEntry[] {
+  return getMediaCatalog(type).map((entry) => toLibraryMediaEntry(entry));
+}
+
 export function searchMediaCatalog(query: string, type?: MediaType): MediaEntry[] {
   const normalizedQuery = normalizeSlug(query);
   if (!normalizedQuery) {
@@ -96,6 +107,10 @@ export function searchMediaCatalog(query: string, type?: MediaType): MediaEntry[
 
     return entry.aliases.some((alias) => alias.includes(normalizedQuery));
   });
+}
+
+export function searchCatalogLibraryEntries(query: string, type?: MediaType): LibraryMediaEntry[] {
+  return searchMediaCatalog(query, type).map((entry) => toLibraryMediaEntry(entry));
 }
 
 export function resolveMediaIdentifier(identifier: string): MediaResolution | null {

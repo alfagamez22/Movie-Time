@@ -1,122 +1,135 @@
 'use client';
 
+import Image from 'next/image';
+import Link from 'next/link';
 import { useDeferredValue, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Film, Link2, Play, Tv } from 'lucide-react';
+import { ArrowRight, Play, Search, Sparkles, Star } from 'lucide-react';
 import { motion } from 'motion/react';
 
-import { normalizeSlug } from '@/lib/slugs/media';
-import { getEpisodeLimit, isTvEntry, type MediaEntry, type MediaType } from '@/lib/media/types';
+import { buildWatchHref } from '@/lib/media/routes';
+import type { BrowseMediaType, LibraryMediaEntry } from '@/lib/media/types';
 
 interface HomePageProps {
-  catalog: Record<MediaType, MediaEntry[]>;
+  discoverEntries: LibraryMediaEntry[];
+  discoveryError: string | null;
+  featured: LibraryMediaEntry | null;
 }
 
-interface MetadataLookupState {
-  entry: MediaEntry | null;
+interface SearchState {
+  entries: LibraryMediaEntry[];
   error: string | null;
   key: string;
+  totalResults: number;
 }
 
-function clampPositiveInteger(value: string, max: number): string {
-  const parsedValue = Number.parseInt(value, 10);
-  if (Number.isNaN(parsedValue) || parsedValue < 1) {
-    return '1';
-  }
+const FILTERS: Array<{ label: string; value: BrowseMediaType }> = [
+  { label: 'All', value: 'all' },
+  { label: 'Movies', value: 'movie' },
+  { label: 'Series', value: 'tv' },
+];
 
-  return String(Math.min(parsedValue, max));
-}
-
-function findCatalogEntry(
-  identifier: string,
-  mediaType: MediaType,
-  catalog: Record<MediaType, MediaEntry[]>,
-): MediaEntry | null {
-  const trimmedIdentifier = identifier.trim();
-  if (!trimmedIdentifier) {
+function formatVoteCount(value: number | undefined): string | null {
+  if (typeof value !== 'number' || value < 1) {
     return null;
   }
 
-  const normalizedIdentifier = normalizeSlug(trimmedIdentifier);
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k votes`;
+  }
+
+  return `${value} votes`;
+}
+
+function MediaCard({ entry, priority = false }: { entry: LibraryMediaEntry; priority?: boolean }) {
+  const voteCountLabel = formatVoteCount(entry.voteCount);
+
   return (
-    catalog[mediaType].find((entry) => {
-      return (
-        entry.tmdbId === trimmedIdentifier ||
-        entry.slug === normalizedIdentifier ||
-        entry.aliases.includes(normalizedIdentifier)
-      );
-    }) ?? null
+    <Link
+      href={buildWatchHref(entry)}
+      className="group relative block overflow-hidden rounded-[1.65rem] border border-white/10 bg-white/[0.03] transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.05]"
+    >
+      <div className="relative aspect-[16/10] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(229,9,20,0.36),rgba(255,255,255,0.03)_50%,transparent_78%)]">
+        {entry.backdropUrl || entry.posterUrl ? (
+          <Image
+            src={entry.backdropUrl ?? entry.posterUrl ?? ''}
+            alt={entry.title}
+            fill
+            priority={priority}
+            sizes="(max-width: 768px) 92vw, (max-width: 1280px) 45vw, 24vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#070707] via-[#070707]/35 to-transparent" />
+        <div className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-zinc-200 backdrop-blur-xl">
+          {entry.type === 'movie' ? 'Movie' : 'Series'}
+        </div>
+      </div>
+
+      <div className="space-y-3 p-4">
+        <div className="space-y-2">
+          <h3 className="line-clamp-1 text-lg font-semibold text-white">{entry.title}</h3>
+          <p className="line-clamp-3 text-sm leading-relaxed text-zinc-400">
+            {entry.synopsis || 'Open this title in the native player and keep full control of playback.'}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-zinc-400">
+          {entry.year ? <span>{entry.year}</span> : null}
+          {typeof entry.rating === 'number' ? (
+            <span className="flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-zinc-200">
+              <Star className="h-3.5 w-3.5 fill-current text-amber-300" />
+              {entry.rating}
+            </span>
+          ) : null}
+          {voteCountLabel ? <span>{voteCountLabel}</span> : null}
+        </div>
+      </div>
+    </Link>
   );
 }
 
-export function HomePage({ catalog }: HomePageProps) {
-  const [identifier, setIdentifier] = useState('');
-  const [mediaType, setMediaType] = useState<MediaType>('movie');
-  const [season, setSeason] = useState('1');
-  const [episode, setEpisode] = useState('1');
-  const [metadataLookup, setMetadataLookup] = useState<MetadataLookupState | null>(null);
-  const router = useRouter();
-
-  const trimmedIdentifier = identifier.trim();
-  const deferredIdentifier = useDeferredValue(trimmedIdentifier);
-  const resolvedEntry = findCatalogEntry(trimmedIdentifier, mediaType, catalog);
-  const currentLookupKey = `${mediaType}:${trimmedIdentifier}`;
-  const isManualTmdbId = /^\d+$/.test(trimmedIdentifier) && !resolvedEntry;
-  const shouldHydrateCatalogSeries = Boolean(resolvedEntry && isTvEntry(resolvedEntry));
-  const hydratedEntry = metadataLookup?.key === currentLookupKey ? metadataLookup.entry : null;
-  const metadataLookupError = metadataLookup?.key === currentLookupKey ? metadataLookup.error : null;
-  const isMetadataLookupLoading = (isManualTmdbId || shouldHydrateCatalogSeries) && metadataLookup?.key !== currentLookupKey;
-  const activeEntry = hydratedEntry ?? resolvedEntry;
-  const selectedSeries = activeEntry && isTvEntry(activeEntry) ? activeEntry : null;
-  const safeSeason = selectedSeries ? clampPositiveInteger(season, selectedSeries.maxSeasons) : season;
-  const selectedEpisodeLimit = selectedSeries ? getEpisodeLimit(selectedSeries, safeSeason) : undefined;
-  const safeEpisode = selectedSeries && selectedEpisodeLimit ? clampPositiveInteger(episode, selectedEpisodeLimit) : episode;
-  const canSubmit = Boolean(trimmedIdentifier) && Boolean(activeEntry);
-  const seasonOptions = selectedSeries
-    ? Array.from({ length: selectedSeries.maxSeasons }, (_, index) => String(index + 1))
-    : ['1'];
-  const episodeOptions = selectedEpisodeLimit
-    ? Array.from({ length: selectedEpisodeLimit }, (_, index) => String(index + 1))
-    : ['1'];
+export function HomePage({ discoverEntries, discoveryError, featured }: HomePageProps) {
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<BrowseMediaType>('all');
+  const [searchState, setSearchState] = useState<SearchState | null>(null);
+  const deferredQuery = useDeferredValue(query.trim());
+  const activeSearchKey = `${filter}:${deferredQuery}`;
 
   useEffect(() => {
-    if (!deferredIdentifier) {
+    if (!deferredQuery) {
       return;
     }
 
     const abortController = new AbortController();
-    const lookupKey = `${mediaType}:${deferredIdentifier}`;
-    let requestPath: string | null = null;
+    const searchParams = new URLSearchParams({
+      q: deferredQuery,
+    });
 
-    if (resolvedEntry && isTvEntry(resolvedEntry)) {
-      requestPath = `/api/media/${encodeURIComponent(resolvedEntry.slug)}?hydrate=tmdb`;
-    } else if (/^\d+$/.test(deferredIdentifier)) {
-      requestPath = `/api/media/${encodeURIComponent(deferredIdentifier)}?type=${mediaType}`;
+    if (filter !== 'all') {
+      searchParams.set('type', filter);
     }
 
-    if (!requestPath) {
-      return;
-    }
-
-    void fetch(requestPath, {
+    void fetch(`/api/media?${searchParams.toString()}`, {
       signal: abortController.signal,
     })
       .then(async (response) => {
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-          setMetadataLookup({
-            entry: null,
-            error: payload?.error || 'Unable to resolve this TMDB ID right now.',
-            key: lookupKey,
-          });
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              data?: LibraryMediaEntry[];
+              error?: string;
+              totalResults?: number;
+            }
+          | null;
+
+        if (abortController.signal.aborted) {
           return;
         }
 
-        const payload = (await response.json()) as { data: MediaEntry; metadataError?: string };
-        setMetadataLookup({
-          entry: payload.data,
-          error: payload.metadataError || null,
-          key: lookupKey,
+        setSearchState({
+          entries: payload?.data ?? [],
+          error: payload?.error ?? (response.ok ? null : 'Unable to search the live library right now.'),
+          key: activeSearchKey,
+          totalResults: payload?.totalResults ?? payload?.data?.length ?? 0,
         });
       })
       .catch(() => {
@@ -124,287 +137,290 @@ export function HomePage({ catalog }: HomePageProps) {
           return;
         }
 
-        setMetadataLookup({
-          entry: null,
-          error: 'Unable to reach the TMDB lookup route right now.',
-          key: lookupKey,
+        setSearchState({
+          entries: [],
+          error: 'Unable to reach the search route right now.',
+          key: activeSearchKey,
+          totalResults: 0,
         });
       });
 
     return () => {
       abortController.abort();
     };
-  }, [deferredIdentifier, mediaType, resolvedEntry]);
+  }, [activeSearchKey, deferredQuery, filter]);
 
-  const handleWatch = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!canSubmit) {
-      return;
-    }
-
-    const watchTarget = resolvedEntry?.slug ?? trimmedIdentifier;
-    const watchType = activeEntry?.type ?? mediaType;
-    const queryParams = new URLSearchParams();
-
-    if (!resolvedEntry) {
-      queryParams.set('type', watchType);
-    }
-
-    if (watchType === 'tv') {
-      queryParams.set('s', safeSeason);
-      queryParams.set('e', safeEpisode);
-    }
-
-    const queryString = queryParams.toString();
-    router.push(`/watch/${encodeURIComponent(watchTarget)}${queryString ? `?${queryString}` : ''}`);
-  };
-
-  const handleCatalogClick = (entry: MediaEntry) => {
-    setMediaType(entry.type);
-    setIdentifier(entry.slug);
-    if (isTvEntry(entry)) {
-      setSeason('1');
-      setEpisode('1');
-    }
-  };
-
-  const handleSeasonChange = (nextSeason: string) => {
-    setSeason(nextSeason);
-
-    if (!selectedSeries) {
-      return;
-    }
-
-    setEpisode((currentEpisode) => clampPositiveInteger(currentEpisode, getEpisodeLimit(selectedSeries, nextSeason)));
-  };
-
-  const handleEpisodeChange = (nextEpisode: string) => {
-    setEpisode(nextEpisode);
-  };
+  const searchResults = searchState?.key === activeSearchKey ? searchState.entries : [];
+  const searchError = searchState?.key === activeSearchKey ? searchState.error : null;
+  const totalResults = searchState?.key === activeSearchKey ? searchState.totalResults : 0;
+  const isSearchLoading = Boolean(deferredQuery) && searchState?.key !== activeSearchKey;
+  const activeFeatured = searchResults[0] ?? featured ?? discoverEntries[0] ?? null;
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050505] p-6 text-white">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-        className="z-10 grid w-full max-w-5xl grid-cols-1 gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]"
-      >
-        <div className="glass flex h-fit flex-col gap-6 rounded-2xl p-8">
-          <div className="text-center md:text-left">
-            <h1 className="mb-2 text-4xl font-black tracking-tight text-netflix-red md:text-5xl">
-              MOVIE DB
-            </h1>
-            <p className="text-sm leading-relaxed text-gray-400">
-              Launch Vidking from readable slugs first, with TMDB ID fallback when you need it.
-            </p>
-          </div>
+    <main className="min-h-screen bg-[#050505] text-white">
+      <section className="relative isolate overflow-hidden border-b border-white/6">
+        <div className="absolute inset-0">
+          {activeFeatured?.backdropUrl || activeFeatured?.posterUrl ? (
+            <Image
+              src={activeFeatured.backdropUrl ?? activeFeatured.posterUrl ?? ''}
+              alt={activeFeatured.title}
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover opacity-40"
+            />
+          ) : null}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(229,9,20,0.28),transparent_32%)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-[#050505]/76 to-[#050505]" />
+          <div className="absolute inset-0 bg-[linear-gradient(125deg,rgba(4,4,4,0.92)_20%,rgba(4,4,4,0.62)_52%,rgba(4,4,4,0.92)_100%)]" />
+        </div>
 
-          <form onSubmit={handleWatch} className="flex flex-col gap-4">
-            <div className="glass mb-2 flex gap-2 rounded-lg p-1">
-              <button
-                type="button"
-                onClick={() => setMediaType('movie')}
-                className={`flex-1 rounded-md py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  mediaType === 'movie' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'
-                }`}
-              >
-                Movie
-              </button>
-              <button
-                type="button"
-                onClick={() => setMediaType('tv')}
-                className={`flex-1 rounded-md py-2 text-xs font-bold uppercase tracking-wider transition-colors ${
-                  mediaType === 'tv' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-white'
-                }`}
-              >
-                TV Series
-              </button>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55 }}
+          className="relative z-10 mx-auto flex min-h-[42rem] w-full max-w-7xl flex-col px-5 pb-10 pt-6 md:px-8 md:pt-8"
+        >
+          <header className="flex flex-col gap-5 border-b border-white/8 pb-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-zinc-400">
+                Search, Open, Watch
+              </p>
+              <h1 className="mt-3 text-4xl font-black tracking-[-0.04em] text-white md:text-6xl">
+                Movie DB
+              </h1>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label htmlFor="media-identifier" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Media Slug or TMDB ID
-              </label>
-              <input
-                id="media-identifier"
-                type="text"
-                value={identifier}
-                onChange={(event) => setIdentifier(event.target.value)}
-                placeholder={mediaType === 'movie' ? 'the-great-dictator or 914' : 'law-and-order-svu or 2734'}
-                className="input-glass w-full rounded-lg px-4 py-3 text-sm text-white transition-all focus:outline-none"
-                title="Enter a readable slug from the catalog or a TMDB ID"
-                required
-              />
+            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-zinc-300">
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2">
+                Search by title or numeric ID
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2">
+                Movies and TV series
+              </span>
+            </div>
+          </header>
+
+          <div className="grid flex-1 items-end gap-10 py-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:py-14">
+            <div className="max-w-3xl space-y-6">
+              <div className="space-y-4">
+                <p className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-zinc-200 backdrop-blur-xl">
+                  <Sparkles className="h-3.5 w-3.5 text-netflix-red" />
+                  {deferredQuery ? 'Search Focus' : 'Live Discovery'}
+                </p>
+                <h2 className="max-w-3xl text-4xl font-black tracking-[-0.05em] text-white md:text-6xl">
+                  {activeFeatured?.title ?? 'Search a movie or series and launch it instantly.'}
+                </h2>
+                <p className="max-w-2xl text-sm leading-7 text-zinc-300 md:text-base">
+                  {activeFeatured?.synopsis ||
+                    'Jump straight into a title, switch sources, pick subtitles, and keep the player entirely under local control.'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-sm text-zinc-300">
+                {activeFeatured?.year ? (
+                  <span className="rounded-full border border-white/10 bg-black/25 px-3 py-2">
+                    {activeFeatured.year}
+                  </span>
+                ) : null}
+                {typeof activeFeatured?.rating === 'number' ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2">
+                    <Star className="h-4 w-4 fill-current text-amber-300" />
+                    {activeFeatured.rating} / 10
+                  </span>
+                ) : null}
+                {activeFeatured ? (
+                  <span className="rounded-full border border-white/10 bg-black/25 px-3 py-2 uppercase tracking-[0.24em]">
+                    {activeFeatured.type === 'movie' ? 'Movie' : 'TV series'}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {activeFeatured ? (
+                  <Link
+                    href={buildWatchHref(activeFeatured)}
+                    className="inline-flex items-center gap-3 rounded-full bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.22em] text-black transition-transform hover:-translate-y-0.5"
+                  >
+                    <Play className="h-4 w-4 fill-current" />
+                    Play Now
+                  </Link>
+                ) : null}
+                <a
+                  href="#library"
+                  className="inline-flex items-center gap-3 rounded-full border border-white/15 bg-black/20 px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-white backdrop-blur-xl transition-colors hover:bg-white/10"
+                >
+                  Explore Titles
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </div>
             </div>
 
-            {trimmedIdentifier && (
-              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
-                {activeEntry ? (
-                  <div className="flex flex-col gap-2 text-white">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-gray-400">
-                        {resolvedEntry ? 'Catalog entry' : 'TMDB lookup'}
-                      </span>
-                      <span className="font-bold">{activeEntry.title}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-wider text-gray-400">
-                      <span className="flex items-center gap-1">
-                        <Link2 className="h-3.5 w-3.5" />
-                        {activeEntry.slug}
-                      </span>
-                      <span>TMDB {activeEntry.tmdbId}</span>
-                    </div>
-                    {isTvEntry(activeEntry) && (
-                      <div className="flex items-center justify-between gap-3 text-xs text-gray-400">
-                        <span>{activeEntry.maxSeasons} seasons</span>
-                        <span>
-                          Season {safeSeason} has {selectedEpisodeLimit ?? activeEntry.maxEpisodes} episodes
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ) : isMetadataLookupLoading ? (
-                  <div className="flex items-center justify-between gap-3 text-white">
-                    <span className="text-gray-400">TMDB lookup</span>
-                    <span className="font-bold">Resolving metadata...</span>
-                  </div>
-                ) : metadataLookupError ? (
-                  <div className="flex flex-col gap-2 text-white">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-gray-400">TMDB lookup</span>
-                      <span className="font-bold text-amber-300">Unavailable</span>
-                    </div>
-                    <p className="text-xs leading-relaxed text-amber-200">{metadataLookupError}</p>
-                  </div>
-                ) : isManualTmdbId ? (
-                  <div className="flex items-center justify-between gap-3 text-white">
-                    <span className="text-gray-400">TMDB lookup</span>
-                    <span className="font-bold">{trimmedIdentifier}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-3 text-white">
-                    <span className="text-gray-400">Catalog status</span>
-                    <span className="font-bold text-amber-300">Slug not found</span>
+            <div className="glass rounded-[2rem] p-5 md:p-6">
+              <div className="space-y-5">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-zinc-400">
+                    Search the catalog
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+                    Use a title like <span className="font-semibold text-white">The Boys</span> or paste a numeric ID.
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search titles or enter a numeric ID"
+                    className="input-glass w-full rounded-2xl py-4 pl-12 pr-4 text-sm text-white"
+                    title="Search titles or enter a numeric ID"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {FILTERS.map((filterOption) => (
+                    <button
+                      key={filterOption.value}
+                      type="button"
+                      onClick={() => setFilter(filterOption.value)}
+                      className={`rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] transition-all ${
+                        filter === filterOption.value
+                          ? 'bg-netflix-red text-white shadow-lg shadow-red-950/25'
+                          : 'border border-white/10 bg-white/[0.03] text-zinc-300 hover:border-white/20 hover:bg-white/[0.06] hover:text-white'
+                      }`}
+                    >
+                      {filterOption.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rounded-[1.35rem] border border-white/8 bg-white/[0.03] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-500">Current Mode</p>
+                  <p className="mt-2 text-2xl font-black text-white">
+                    {filter === 'all' ? 'Mixed search' : filter === 'movie' ? 'Movies only' : 'Series only'}
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                    Search results open on a clean title route while the numeric identifier stays in the query for exact lookup.
+                  </p>
+                </div>
+
+                {discoveryError && !discoverEntries.length && (
+                  <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-400/6 p-4 text-sm leading-relaxed text-amber-100">
+                    Featured rows are unavailable right now, but direct search still works.
                   </div>
                 )}
               </div>
-            )}
+            </div>
+          </div>
+        </motion.div>
+      </section>
 
-            {mediaType === 'tv' && (
-              <div className="flex gap-4">
-                <div className="flex flex-1 flex-col gap-2">
-                  <label htmlFor="season-select" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                    Season
-                  </label>
-                  <select
-                    id="season-select"
-                    value={safeSeason}
-                    onChange={(event) => handleSeasonChange(event.target.value)}
-                    className="input-glass w-full rounded-lg px-4 py-3 text-sm text-white transition-all focus:outline-none"
-                    title="Choose the season"
-                    required
-                  >
-                    {seasonOptions.map((seasonNumber) => (
-                      <option key={seasonNumber} value={seasonNumber} className="bg-[#111111] text-white">
-                        Season {seasonNumber}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-1 flex-col gap-2">
-                  <label htmlFor="episode-select" className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                    Episode {selectedSeries ? `for Season ${safeSeason}` : ''}
-                  </label>
-                  <select
-                    id="episode-select"
-                    value={safeEpisode}
-                    onChange={(event) => handleEpisodeChange(event.target.value)}
-                    className="input-glass w-full rounded-lg px-4 py-3 text-sm text-white transition-all focus:outline-none"
-                    title="Choose the episode"
-                    required
-                  >
-                    {episodeOptions.map((episodeNumber) => (
-                      <option key={episodeNumber} value={episodeNumber} className="bg-[#111111] text-white">
-                        Episode {episodeNumber}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+      <section id="library" className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-5 py-10 md:px-8 md:py-12">
+        {deferredQuery ? (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-zinc-500">Search Results</p>
+                <h3 className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">
+                  {isSearchLoading ? 'Searching...' : `${searchResults.length} visible results`}
+                </h3>
+                <p className="mt-2 text-sm text-zinc-400">
+                  {totalResults > searchResults.length
+                    ? `Showing the top ${searchResults.length} matches for "${deferredQuery}".`
+                    : `Results for "${deferredQuery}".`}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="w-fit rounded-full border border-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-300 transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+              >
+                Clear Search
+              </button>
+            </div>
+
+            {searchError && (
+              <div className="rounded-[1.5rem] border border-amber-400/20 bg-amber-400/6 p-4 text-sm leading-relaxed text-amber-100">
+                {searchError}
               </div>
             )}
 
-            <button
-              type="submit"
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-netflix-red py-3 text-sm font-bold uppercase tracking-wider shadow-lg shadow-red-900/20 transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmit}
-            >
-              <Play className="h-4 w-4 fill-current" />
-              Load Player
-            </button>
-          </form>
-
-          <div className="text-center text-xs text-gray-500 md:text-left">
-            Catalog entries resolve by slug. Numeric TMDB IDs now resolve real metadata before playback.
-          </div>
-        </div>
-
-        <div className="glass flex flex-col gap-6 rounded-2xl p-8">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-gray-500">Curated Catalog</h2>
-
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 text-gray-400">
-                <Tv className="h-4 w-4" />
-                <h3 className="text-xs font-bold uppercase tracking-wider">TV Series</h3>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {catalog.tv.map((entry) => (
-                  <button
-                    key={entry.tmdbId}
-                    type="button"
-                    onClick={() => handleCatalogClick(entry)}
-                    className="flex flex-col items-start gap-2 rounded-lg border border-white/5 p-3 text-left transition-all hover:border-white/20 hover:bg-white/5"
+            {isSearchLoading ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <div
+                    key={`search-skeleton-${index + 1}`}
+                    className="overflow-hidden rounded-[1.65rem] border border-white/8 bg-white/[0.03]"
                   >
-                    <span className="w-full truncate text-sm font-semibold" title={entry.title}>
-                      {entry.title}
-                    </span>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-gray-500">
-                      slug: {entry.slug}
-                    </span>
-                    <span className="text-[10px] font-mono text-gray-500">TMDB ID: {entry.tmdbId}</span>
-                  </button>
+                    <div className="aspect-[16/10] animate-pulse bg-white/[0.06]" />
+                    <div className="space-y-3 p-4">
+                      <div className="h-4 w-2/3 animate-pulse rounded-full bg-white/[0.06]" />
+                      <div className="h-3 w-full animate-pulse rounded-full bg-white/[0.05]" />
+                      <div className="h-3 w-5/6 animate-pulse rounded-full bg-white/[0.05]" />
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 text-gray-400">
-                <Film className="h-4 w-4" />
-                <h3 className="text-xs font-bold uppercase tracking-wider">Movies</h3>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {catalog.movie.map((entry) => (
-                  <button
-                    key={entry.tmdbId}
-                    type="button"
-                    onClick={() => handleCatalogClick(entry)}
-                    className="flex flex-col items-start gap-2 rounded-lg border border-white/5 p-3 text-left transition-all hover:border-white/20 hover:bg-white/5"
-                  >
-                    <span className="w-full truncate text-sm font-semibold" title={entry.title}>
-                      {entry.title}
-                    </span>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-gray-500">
-                      slug: {entry.slug}
-                    </span>
-                    <span className="text-[10px] font-mono text-gray-500">TMDB ID: {entry.tmdbId}</span>
-                  </button>
+            ) : searchResults.length > 0 ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {searchResults.map((entry, index) => (
+                  <MediaCard key={`${entry.type}:${entry.tmdbId}`} entry={entry} priority={index < 2} />
                 ))}
               </div>
+            ) : (
+              <div className="rounded-[2rem] border border-white/8 bg-white/[0.02] p-8 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-zinc-500">No Matches</p>
+                <h3 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+                  Nothing matched this search yet.
+                </h3>
+                <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
+                  Try a broader title, switch between movies and series, or paste the exact numeric identifier for a direct hit.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : discoverEntries.length > 0 ? (
+          <div className="space-y-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-zinc-500">Start Watching</p>
+                <h3 className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">
+                  Fresh titles ready to open
+                </h3>
+                <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-400">
+                  Pick any live title below or use the search box above to jump directly into a specific movie or series.
+                </p>
+              </div>
+              <p className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] uppercase tracking-[0.24em] text-zinc-400">
+                {discoverEntries.length} titles loaded
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {discoverEntries.map((entry, index) => (
+                <MediaCard key={`${entry.type}:${entry.tmdbId}`} entry={entry} priority={index < 2} />
+              ))}
             </div>
           </div>
-        </div>
-      </motion.div>
+        ) : (
+          <div className="rounded-[2rem] border border-white/8 bg-white/[0.02] p-8 text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-zinc-500">Library Unavailable</p>
+            <h3 className="mt-3 text-2xl font-black tracking-[-0.04em] text-white">
+              Featured titles could not be loaded right now.
+            </h3>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
+              Search is still available above. Try a specific title or numeric identifier to open a watch page directly.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <footer className="border-t border-white/6 px-5 py-8 text-center text-sm text-zinc-500 md:px-8">
+        Metadata and artwork provided by The Movie Database.
+      </footer>
     </main>
   );
 }

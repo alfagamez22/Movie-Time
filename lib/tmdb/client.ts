@@ -2,6 +2,9 @@ import 'server-only';
 
 import {
   isTvEntry,
+  toLibraryMediaEntry,
+  type LibraryMediaEntry,
+  type LibrarySection,
   type MediaEntry,
   type MediaType,
   type MovieMediaEntry,
@@ -11,14 +14,20 @@ import {
 
 const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL?.trim() || 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL?.trim() || 'https://image.tmdb.org/t/p';
+const TMDB_PUBLIC_DB_BASE_URL = process.env.TMDB_PUBLIC_DB_BASE_URL?.trim() || 'https://db.videasy.net/3';
+const DEFAULT_TMDB_LANGUAGE = process.env.TMDB_LANGUAGE?.trim() || 'en-US';
 
 type TmdbLookupFailureReason = 'missing-config' | 'not-found' | 'upstream-error';
 
 interface TmdbMovieResponse {
+  backdrop_path?: string;
   id: number;
   overview?: string;
+  poster_path?: string;
   release_date?: string;
   title: string;
+  vote_average?: number;
+  vote_count?: number;
 }
 
 interface TmdbSeasonSummary {
@@ -27,13 +36,17 @@ interface TmdbSeasonSummary {
 }
 
 interface TmdbTvResponse {
+  backdrop_path?: string;
   first_air_date?: string;
   id: number;
   name: string;
   number_of_episodes?: number;
   number_of_seasons?: number;
   overview?: string;
+  poster_path?: string;
   seasons?: TmdbSeasonSummary[];
+  vote_average?: number;
+  vote_count?: number;
 }
 
 interface TmdbEpisodeResponse {
@@ -55,6 +68,41 @@ interface TmdbSeasonDetailsResponse {
   season_number: number;
 }
 
+interface TmdbBrowseResult {
+  backdrop_path?: string;
+  first_air_date?: string;
+  id: number;
+  media_type?: string;
+  name?: string;
+  overview?: string;
+  poster_path?: string;
+  release_date?: string;
+  title?: string;
+  vote_average?: number;
+  vote_count?: number;
+}
+
+interface TmdbPagedResponse<T> {
+  page?: number;
+  results?: T[];
+  total_pages?: number;
+  total_results?: number;
+}
+
+interface TmdbSearchSuccess {
+  entries: LibraryMediaEntry[];
+  ok: true;
+  page: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+interface TmdbLibrarySectionsSuccess {
+  featured: LibraryMediaEntry | null;
+  ok: true;
+  sections: LibrarySection[];
+}
+
 export interface TmdbLookupSuccess {
   entry: MediaEntry;
   ok: true;
@@ -74,11 +122,64 @@ export type TmdbSeasonDetailsResult =
       ok: true;
     }
   | TmdbLookupFailure;
+export type TmdbSearchResult = TmdbSearchSuccess | TmdbLookupFailure;
+export type TmdbLibrarySectionsResult = TmdbLibrarySectionsSuccess | TmdbLookupFailure;
 
 interface TmdbCredentials {
   apiKey?: string;
   bearerToken?: string;
 }
+
+interface MetadataRequestTarget {
+  baseUrl: string;
+  credentials?: TmdbCredentials | null;
+  name: 'tmdb' | 'public-db';
+}
+
+interface TmdbBrowseSectionDefinition {
+  description: string;
+  id: string;
+  pathname: string;
+  type?: MediaType;
+  title: string;
+}
+
+const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
+  {
+    description: 'The biggest titles picking up momentum across TMDB right now.',
+    id: 'trending',
+    pathname: '/trending/all/day',
+    title: 'Trending Now',
+  },
+  {
+    description: 'Broad-audience movies with the strongest current pull.',
+    id: 'popular-movies',
+    pathname: '/movie/popular',
+    title: 'Popular Movies',
+    type: 'movie',
+  },
+  {
+    description: 'Series with the strongest ratings and long-tail binge value.',
+    id: 'top-rated-series',
+    pathname: '/tv/top_rated',
+    title: 'Top Rated Series',
+    type: 'tv',
+  },
+  {
+    description: 'Newer theatrical releases and fresh movie arrivals.',
+    id: 'now-playing',
+    pathname: '/movie/now_playing',
+    title: 'Now Playing',
+    type: 'movie',
+  },
+  {
+    description: 'Shows with active weekly release cycles and current audience attention.',
+    id: 'on-the-air',
+    pathname: '/tv/on_the_air',
+    title: 'Currently Airing',
+    type: 'tv',
+  },
+];
 
 function readTmdbCredentials(): TmdbCredentials | null {
   const bearerToken = process.env.TMDB_API_TOKEN?.trim();
@@ -92,6 +193,10 @@ function readTmdbCredentials(): TmdbCredentials | null {
     apiKey,
     bearerToken,
   };
+}
+
+export function isTmdbReadAccessConfigured(): boolean {
+  return Boolean(readTmdbCredentials());
 }
 
 function getReleaseYear(dateValue?: string): number | undefined {
@@ -120,6 +225,14 @@ function createUpstreamFailure(message: string, reason: TmdbLookupFailureReason,
   };
 }
 
+function isTmdbFailure(value: unknown): value is TmdbLookupFailure {
+  if (!value || typeof value !== 'object' || !('ok' in value)) {
+    return false;
+  }
+
+  return (value as { ok?: boolean }).ok === false;
+}
+
 function buildTmdbRequestUrl(pathname: string, credentials: TmdbCredentials): URL {
   const requestUrl = new URL(`${TMDB_API_BASE_URL}${pathname}`);
   if (!credentials.bearerToken && credentials.apiKey) {
@@ -140,11 +253,92 @@ function buildTmdbRequestHeaders(credentials: TmdbCredentials): HeadersInit {
   };
 }
 
+function buildMetadataTargets(): MetadataRequestTarget[] {
+  const credentials = readTmdbCredentials();
+  const targets: MetadataRequestTarget[] = [];
+
+  if (credentials) {
+    targets.push({
+      baseUrl: TMDB_API_BASE_URL,
+      credentials,
+      name: 'tmdb',
+    });
+  }
+
+  targets.push({
+    baseUrl: TMDB_PUBLIC_DB_BASE_URL,
+    credentials: null,
+    name: 'public-db',
+  });
+
+  return targets;
+}
+
+function buildMetadataRequestUrl(pathname: string, target: MetadataRequestTarget): URL {
+  if (target.name === 'tmdb' && target.credentials) {
+    return buildTmdbRequestUrl(pathname, target.credentials);
+  }
+
+  return new URL(`${target.baseUrl}${pathname}`);
+}
+
+function buildMetadataRequestHeaders(target: MetadataRequestTarget): HeadersInit {
+  if (target.name === 'tmdb' && target.credentials) {
+    return buildTmdbRequestHeaders(target.credentials);
+  }
+
+  return {
+    Accept: 'application/json',
+  };
+}
+
 async function requestTmdb(pathname: string): Promise<Response | TmdbLookupFailure> {
+  let failure: TmdbLookupFailure | null = null;
+
+  for (const target of buildMetadataTargets()) {
+    const requestUrl = buildMetadataRequestUrl(pathname, target);
+
+    try {
+      const response = await fetch(requestUrl, {
+        headers: buildMetadataRequestHeaders(target),
+        next: {
+          revalidate: 86400,
+        },
+      });
+
+      if (response.ok || response.status === 404) {
+        return response;
+      }
+
+      failure = createUpstreamFailure(
+        `Metadata lookup failed with status ${response.status}.`,
+        'upstream-error',
+        502,
+      );
+    } catch {
+      failure = createUpstreamFailure('Unable to reach the metadata service right now. Try again later.', 'upstream-error', 502);
+    }
+  }
+
+  if (failure) {
+    return failure;
+  }
+
+  return createUpstreamFailure(
+    'Metadata is not configured. Set TMDB_API_TOKEN or TMDB_API_KEY, or allow access to the public metadata mirror.',
+    'missing-config',
+    503,
+  );
+}
+
+async function requestOfficialTmdb<T>(
+  pathname: string,
+  query: Record<string, string | number | boolean | undefined> = {},
+): Promise<T | TmdbLookupFailure> {
   const credentials = readTmdbCredentials();
   if (!credentials) {
     return createUpstreamFailure(
-      'TMDB metadata is not configured. Set TMDB_API_TOKEN or TMDB_API_KEY in your environment.',
+      'TMDB browse APIs are not configured. Add TMDB_API_TOKEN or TMDB_API_KEY to .env.local.',
       'missing-config',
       503,
     );
@@ -152,13 +346,31 @@ async function requestTmdb(pathname: string): Promise<Response | TmdbLookupFailu
 
   const requestUrl = buildTmdbRequestUrl(pathname, credentials);
 
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined) {
+      return;
+    }
+
+    requestUrl.searchParams.set(key, String(value));
+  });
+
   try {
-    return await fetch(requestUrl, {
+    const response = await fetch(requestUrl, {
       headers: buildTmdbRequestHeaders(credentials),
       next: {
-        revalidate: 86400,
+        revalidate: 3600,
       },
     });
+
+    if (!response.ok) {
+      return createUpstreamFailure(
+        `TMDB request failed with status ${response.status}.`,
+        response.status === 404 ? 'not-found' : 'upstream-error',
+        response.status === 404 ? 404 : 502,
+      );
+    }
+
+    return (await response.json()) as T;
   } catch {
     return createUpstreamFailure('Unable to reach TMDB right now. Try again later.', 'upstream-error', 502);
   }
@@ -172,9 +384,46 @@ function buildEpisodesBySeason(seasons: TmdbSeasonSummary[] | undefined): Record
   return Object.fromEntries(entries);
 }
 
+function normalizeRating(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return Number(value.toFixed(1));
+}
+
+function createLibraryEntryFromBrowseResult(
+  result: TmdbBrowseResult,
+  explicitType?: MediaType,
+): LibraryMediaEntry | null {
+  const type = explicitType ?? (result.media_type === 'movie' || result.media_type === 'tv' ? result.media_type : null);
+  if (!type) {
+    return null;
+  }
+
+  const title = type === 'movie' ? result.title : result.name;
+  if (!title?.trim()) {
+    return null;
+  }
+
+  return {
+    backdropUrl: buildTmdbImageUrl(result.backdrop_path),
+    posterUrl: buildTmdbImageUrl(result.poster_path, 'w300'),
+    rating: normalizeRating(result.vote_average),
+    synopsis: result.overview?.trim() || '',
+    title: title.trim(),
+    tmdbId: String(result.id),
+    type,
+    voteCount: typeof result.vote_count === 'number' ? result.vote_count : undefined,
+    year: getReleaseYear(type === 'movie' ? result.release_date : result.first_air_date),
+  };
+}
+
 function createMovieEntry(response: TmdbMovieResponse, tmdbId: string): MovieMediaEntry {
   return {
     aliases: [],
+    backdropUrl: buildTmdbImageUrl(response.backdrop_path),
+    posterUrl: buildTmdbImageUrl(response.poster_path, 'w300'),
     slug: tmdbId,
     synopsis: response.overview?.trim() || '',
     title: response.title,
@@ -193,9 +442,11 @@ function createTvEntry(response: TmdbTvResponse, tmdbId: string): TvMediaEntry {
 
   return {
     aliases: [],
+    backdropUrl: buildTmdbImageUrl(response.backdrop_path),
     episodesBySeason,
     maxEpisodes: seasonEpisodeCounts.length > 0 ? Math.max(...seasonEpisodeCounts) : fallbackEpisodeCount,
     maxSeasons: seasonNumbers.length > 0 ? Math.max(...seasonNumbers) : fallbackSeasonCount,
+    posterUrl: buildTmdbImageUrl(response.poster_path, 'w300'),
     slug: tmdbId,
     synopsis: response.overview?.trim() || '',
     title: response.name,
@@ -225,6 +476,78 @@ function createSeasonDetails(response: TmdbSeasonDetailsResponse): SeasonDetails
     overview: response.overview?.trim() || '',
     posterUrl: buildTmdbImageUrl(response.poster_path, 'w300'),
     seasonNumber: response.season_number,
+  };
+}
+
+function takeDistinctEntries(entries: Array<LibraryMediaEntry | null>, limit = 18): LibraryMediaEntry[] {
+  const uniqueEntries = new Map<string, LibraryMediaEntry>();
+
+  entries.forEach((entry) => {
+    if (!entry) {
+      return;
+    }
+
+    uniqueEntries.set(`${entry.type}:${entry.tmdbId}`, entry);
+  });
+
+  return Array.from(uniqueEntries.values()).slice(0, limit);
+}
+
+function mapPageResultsToEntries(
+  results: TmdbBrowseResult[] | undefined,
+  explicitType?: MediaType,
+  limit = 18,
+): LibraryMediaEntry[] {
+  return takeDistinctEntries(
+    (results ?? []).map((result) => createLibraryEntryFromBrowseResult(result, explicitType)),
+    limit,
+  );
+}
+
+async function lookupExactTmdbSearchEntries(query: string, type?: MediaType): Promise<LibraryMediaEntry[]> {
+  if (!/^\d+$/.test(query)) {
+    return [];
+  }
+
+  if (type) {
+    const lookup = await lookupTmdbMediaEntry(query, type);
+    return lookup.ok ? [toLibraryMediaEntry(lookup.entry)] : [];
+  }
+
+  const [movieLookup, tvLookup] = await Promise.all([
+    lookupTmdbMediaEntry(query, 'movie'),
+    lookupTmdbMediaEntry(query, 'tv'),
+  ]);
+
+  return takeDistinctEntries([
+    movieLookup.ok ? toLibraryMediaEntry(movieLookup.entry) : null,
+    tvLookup.ok ? toLibraryMediaEntry(tvLookup.entry) : null,
+  ]);
+}
+
+async function fetchBrowseSection(
+  section: TmdbBrowseSectionDefinition,
+): Promise<LibrarySection | null> {
+  const payload = await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>(section.pathname, {
+    include_adult: false,
+    language: DEFAULT_TMDB_LANGUAGE,
+    page: 1,
+  });
+
+  if (isTmdbFailure(payload)) {
+    return null;
+  }
+
+  const entries = mapPageResultsToEntries(payload.results, section.type, 18);
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return {
+    description: section.description,
+    entries,
+    id: section.id,
+    title: section.title,
   };
 }
 
@@ -323,5 +646,85 @@ export async function lookupTmdbSeasonDetails(
   return {
     data: createSeasonDetails(payload),
     ok: true,
+  };
+}
+
+export async function searchTmdbLibrary(query: string, type?: MediaType): Promise<TmdbSearchResult> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return {
+      entries: [],
+      ok: true,
+      page: 1,
+      totalPages: 0,
+      totalResults: 0,
+    };
+  }
+
+  const exactEntries = await lookupExactTmdbSearchEntries(trimmedQuery, type);
+  if (exactEntries.length > 0) {
+    return {
+      entries: exactEntries,
+      ok: true,
+      page: 1,
+      totalPages: 1,
+      totalResults: exactEntries.length,
+    };
+  }
+
+  const payload =
+    type === 'movie'
+      ? await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>('/search/movie', {
+          include_adult: false,
+          language: DEFAULT_TMDB_LANGUAGE,
+          page: 1,
+          query: trimmedQuery,
+        })
+      : type === 'tv'
+        ? await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>('/search/tv', {
+            include_adult: false,
+            language: DEFAULT_TMDB_LANGUAGE,
+            page: 1,
+            query: trimmedQuery,
+          })
+        : await requestOfficialTmdb<TmdbPagedResponse<TmdbBrowseResult>>('/search/multi', {
+            include_adult: false,
+            language: DEFAULT_TMDB_LANGUAGE,
+            page: 1,
+            query: trimmedQuery,
+          });
+
+  if (isTmdbFailure(payload)) {
+    return payload;
+  }
+
+  const entries = mapPageResultsToEntries(payload.results, type, 24);
+  return {
+    entries,
+    ok: true,
+    page: payload.page ?? 1,
+    totalPages: payload.total_pages ?? 1,
+    totalResults: payload.total_results ?? entries.length,
+  };
+}
+
+export async function getTmdbLibrarySections(): Promise<TmdbLibrarySectionsResult> {
+  const credentials = readTmdbCredentials();
+  if (!credentials) {
+    return createUpstreamFailure(
+      'TMDB browse APIs are not configured. Add TMDB_API_TOKEN or TMDB_API_KEY to .env.local.',
+      'missing-config',
+      503,
+    );
+  }
+
+  const sections = (await Promise.all(TMDB_BROWSE_SECTIONS.map((section) => fetchBrowseSection(section)))).filter(
+    (section): section is LibrarySection => Boolean(section),
+  );
+
+  return {
+    featured: sections[0]?.entries[0] ?? null,
+    ok: true,
+    sections,
   };
 }

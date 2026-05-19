@@ -1,4 +1,5 @@
 export type MediaType = 'movie' | 'tv';
+export type BrowseMediaType = MediaType | 'all';
 
 export interface EpisodePreview {
   airDate?: string;
@@ -21,6 +22,8 @@ export interface SeasonDetails {
 }
 
 interface CatalogEntryBase {
+  backdropUrl?: string;
+  posterUrl?: string;
   tmdbId: string;
   title: string;
   slug?: string;
@@ -48,6 +51,25 @@ interface MediaEntryBase extends Omit<CatalogEntryBase, 'slug' | 'aliases'> {
   aliases: string[];
 }
 
+export interface LibraryMediaEntry {
+  backdropUrl?: string;
+  posterUrl?: string;
+  rating?: number;
+  synopsis: string;
+  title: string;
+  tmdbId: string;
+  type: MediaType;
+  voteCount?: number;
+  year?: number;
+}
+
+export interface LibrarySection {
+  description: string;
+  entries: LibraryMediaEntry[];
+  id: string;
+  title: string;
+}
+
 export interface MovieMediaEntry extends MediaEntryBase {
   type: 'movie';
 }
@@ -64,6 +86,18 @@ export type MediaEntry = MovieMediaEntry | TvMediaEntry;
 
 export function isTvEntry(entry: CatalogEntry | MediaEntry): entry is TvCatalogEntry | TvMediaEntry {
   return entry.type === 'tv';
+}
+
+export function toLibraryMediaEntry(entry: CatalogEntry | MediaEntry): LibraryMediaEntry {
+  return {
+    backdropUrl: entry.backdropUrl,
+    posterUrl: entry.posterUrl,
+    synopsis: entry.synopsis,
+    title: entry.title,
+    tmdbId: entry.tmdbId,
+    type: entry.type,
+    year: entry.year,
+  };
 }
 
 export function getEpisodeLimit(entry: TvCatalogEntry | TvMediaEntry, season: string | number): number {

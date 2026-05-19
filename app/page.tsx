@@ -1,34 +1,28 @@
 import { HomePage } from '@/components/media/home-page';
-import { getCatalogSections } from '@/lib/media/catalog';
-import type { MediaEntry, MediaType } from '@/lib/media/types';
-import { lookupTmdbMediaEntry, mergeCatalogEntryWithTmdb } from '@/lib/tmdb/client';
+import type { LibraryMediaEntry } from '@/lib/media/types';
+import { getTmdbLibrarySections } from '@/lib/tmdb/client';
 
-async function hydrateCatalogEntry(entry: MediaEntry): Promise<MediaEntry> {
-  const tmdbLookup = await lookupTmdbMediaEntry(entry.tmdbId, entry.type);
+function dedupeEntries(entries: LibraryMediaEntry[]): LibraryMediaEntry[] {
+  const uniqueEntries = new Map<string, LibraryMediaEntry>();
 
-  if (!tmdbLookup.ok) {
-    return entry;
-  }
+  entries.forEach((entry) => {
+    uniqueEntries.set(`${entry.type}:${entry.tmdbId}`, entry);
+  });
 
-  return mergeCatalogEntryWithTmdb(entry, tmdbLookup.entry);
-}
-
-async function hydrateCatalogSections(
-  catalog: Record<MediaType, MediaEntry[]>,
-): Promise<Record<MediaType, MediaEntry[]>> {
-  const [movies, series] = await Promise.all([
-    Promise.all(catalog.movie.map(hydrateCatalogEntry)),
-    Promise.all(catalog.tv.map(hydrateCatalogEntry)),
-  ]);
-
-  return {
-    movie: movies,
-    tv: series,
-  };
+  return Array.from(uniqueEntries.values());
 }
 
 export default async function Page() {
-  const catalog = await hydrateCatalogSections(getCatalogSections());
+  const liveLibrary = await getTmdbLibrarySections();
+  const discoverEntries = liveLibrary.ok
+    ? dedupeEntries(liveLibrary.sections.flatMap((section) => section.entries)).slice(0, 18)
+    : [];
 
-  return <HomePage catalog={catalog} />;
+  return (
+    <HomePage
+      discoverEntries={discoverEntries}
+      discoveryError={liveLibrary.ok ? null : liveLibrary.message}
+      featured={liveLibrary.ok ? liveLibrary.featured : discoverEntries[0] ?? null}
+    />
+  );
 }

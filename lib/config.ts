@@ -13,7 +13,7 @@ export const appConfig = {
   name: process.env.NEXT_PUBLIC_APP_NAME?.trim() || 'Movie DB',
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
-    'Readable slug-based movie and series routes for a Vidking-powered catalog.',
+    'Search-driven movie and series library with native playback controls.',
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000',
 };
