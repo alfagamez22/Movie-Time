@@ -12,12 +12,24 @@ export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '2': 'Videasy',
 };
 
+let memoryPlayerChoice: PlayerChoice | null = null;
+
 function normalizePlayerChoice(value: string | null): PlayerChoice {
   return value === '2' ? '2' : '1';
 }
 
 function getPlayerSnapshot(): PlayerChoice {
-  return normalizePlayerChoice(localStorage.getItem(STORAGE_KEY));
+  if (memoryPlayerChoice) {
+    return memoryPlayerChoice;
+  }
+
+  try {
+    memoryPlayerChoice = normalizePlayerChoice(localStorage.getItem(STORAGE_KEY));
+  } catch {
+    // Storage can be full or unavailable; keep the current tab usable.
+  }
+
+  return memoryPlayerChoice ?? '1';
 }
 
 function getServerPlayerSnapshot(): PlayerChoice {
@@ -26,7 +38,10 @@ function getServerPlayerSnapshot(): PlayerChoice {
 
 function subscribePlayerPreference(onStoreChange: () => void) {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY) onStoreChange();
+    if (event.key === STORAGE_KEY) {
+      memoryPlayerChoice = normalizePlayerChoice(event.newValue);
+      onStoreChange();
+    }
   };
   const onLocalChange = () => onStoreChange();
 
@@ -47,7 +62,12 @@ export function usePlayerPreference() {
   );
 
   const setPlayer = useCallback((choice: PlayerChoice) => {
-    localStorage.setItem(STORAGE_KEY, choice);
+    memoryPlayerChoice = choice;
+    try {
+      localStorage.setItem(STORAGE_KEY, choice);
+    } catch {
+      // If storage is full, the selection still applies for this session.
+    }
     window.dispatchEvent(new Event(PLAYER_CHANGE_EVENT));
   }, []);
 

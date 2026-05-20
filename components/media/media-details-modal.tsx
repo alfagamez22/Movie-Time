@@ -20,6 +20,12 @@ interface DetailsResponse {
   error?: string;
 }
 
+interface ResumeMediaEntry extends LibraryMediaEntry {
+  episode?: string;
+  progressSeconds?: number;
+  season?: string;
+}
+
 interface DetailsErrorState {
   key: string;
   message: string;
@@ -215,6 +221,14 @@ export function MediaDetailsModal({ entry, onClose, onSelectEntry }: MediaDetail
   const recommendations = activeDetails?.recommendations ?? [];
   const backdropUrl = displayEntry?.backdropUrl ?? entry?.backdropUrl;
   const posterUrl = displayEntry?.posterUrl ?? entry?.posterUrl;
+  const resumeEntry = entry as ResumeMediaEntry | null;
+  const playHref = displayEntry
+    ? buildWatchHref(displayEntry, {
+        episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
+        progress: resumeEntry?.progressSeconds,
+        season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
+      })
+    : '#';
 
   return (
     <AnimatePresence>
@@ -277,7 +291,7 @@ export function MediaDetailsModal({ entry, onClose, onSelectEntry }: MediaDetail
                   ) : null}
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Link
-                      href={buildWatchHref(displayEntry)}
+                      href={playHref}
                       className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-zinc-200"
                     >
                       <Play className="h-4 w-4 fill-current" />

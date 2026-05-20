@@ -92,7 +92,11 @@ export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions
   url.searchParams.set('overlay', 'true');
 
   if (options.progress !== null) {
-    url.searchParams.set('progress', String(options.progress));
+    const progress = String(Math.floor(options.progress));
+    url.searchParams.set('progress', progress);
+    url.searchParams.set('start', progress);
+    url.searchParams.set('startAt', progress);
+    url.searchParams.set('time', progress);
   }
 
   if (isTvEntry(entry)) {

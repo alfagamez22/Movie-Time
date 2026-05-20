@@ -7,7 +7,11 @@ import { ArrowLeft } from 'lucide-react';
 
 import { buildEmbedUrl, buildVideasyEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
 import { usePlayerPreference } from '@/lib/hooks/use-player-preference';
-import { requestHomeScrollRestore, trackRecentlyWatched } from '@/lib/hooks/use-recently-watched';
+import {
+  getRecentlyWatchedProgress,
+  requestHomeScrollRestore,
+  trackRecentlyWatched,
+} from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import { getEpisodeLimit, isTvEntry, type EpisodePreview, type MediaEntry, type SeasonDetails } from '@/lib/media/types';
 
@@ -15,6 +19,106 @@ interface WatchPlayerProps {
   entry: MediaEntry;
   initialPlayback: PlaybackOptions;
   initialSeasonDetails?: SeasonDetails | null;
+}
+
+interface NormalizedPlayerProgress {
+  durationSeconds?: number;
+  progressPercent?: number;
+  progressSeconds: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseMessageData(data: unknown): unknown {
+  if (typeof data !== 'string') return data;
+
+  try {
+    return JSON.parse(data) as unknown;
+  } catch {
+    return data;
+  }
+}
+
+function readNumber(records: Record<string, unknown>[], keys: string[]): number | undefined {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number.parseFloat(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function readEventName(records: Record<string, unknown>[]): string {
+  for (const record of records) {
+    for (const key of ['type', 'event', 'name', 'action']) {
+      const value = record[key];
+      if (typeof value === 'string') return value.toLowerCase();
+    }
+  }
+
+  return '';
+}
+
+function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
+  const parsed = parseMessageData(data);
+  if (!isRecord(parsed)) return null;
+
+  const nestedRecords = [parsed.data, parsed.payload, parsed.detail, parsed.player, parsed.video].filter(isRecord);
+  const records = [parsed, ...nestedRecords];
+  const eventName = readEventName(records);
+  const looksLikeProgressEvent = /progress|time|seek|pause|play|ended|update/.test(eventName);
+
+  let progressSeconds = readNumber(records, [
+    'currentTime',
+    'current_time',
+    'seconds',
+    'time',
+    'position',
+    'playedSeconds',
+  ]);
+  const durationSeconds = readNumber(records, ['duration', 'totalDuration', 'total_duration', 'length']);
+  let progressPercent = readNumber(records, ['progressPercent', 'progress_percent', 'percent', 'percentage']);
+  const rawProgress = readNumber(records, ['progress']);
+
+  if (rawProgress !== undefined && progressSeconds === undefined) {
+    if (durationSeconds && rawProgress <= 100) {
+      progressPercent = progressPercent ?? (rawProgress <= 1 ? rawProgress * 100 : rawProgress);
+      progressSeconds = durationSeconds * (progressPercent / 100);
+    } else {
+      progressSeconds = rawProgress;
+    }
+  } else if (progressSeconds === undefined && durationSeconds && progressPercent !== undefined) {
+    progressSeconds = durationSeconds * (progressPercent / 100);
+  }
+
+  if (progressSeconds === undefined || !Number.isFinite(progressSeconds) || progressSeconds < 0) {
+    return null;
+  }
+
+  if (!looksLikeProgressEvent && durationSeconds === undefined && progressPercent === undefined) {
+    return null;
+  }
+
+  const clampedPercent =
+    progressPercent !== undefined && Number.isFinite(progressPercent)
+      ? Math.min(100, Math.max(0, progressPercent))
+      : durationSeconds && durationSeconds > 0
+        ? Math.min(100, Math.max(0, (progressSeconds / durationSeconds) * 100))
+        : undefined;
+
+  return {
+    durationSeconds,
+    progressPercent: clampedPercent,
+    progressSeconds,
+  };
 }
 
 export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = null }: WatchPlayerProps) {
@@ -26,7 +130,13 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
   const [activeSeasonDetails, setActiveSeasonDetails] = useState<SeasonDetails | null>(initialSeasonDetails);
   const [seasonDetailsError, setSeasonDetailsError] = useState<string | null>(null);
   const [isChromeVisible, setIsChromeVisible] = useState(true);
+  const { player } = usePlayerPreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const lastProgressWriteRef = useRef(0);
+  const latestProgressRef = useRef<number | null>(initialPlayback.progress);
+  const previousPlayerRef = useRef(player);
+  const [resumeProgress, setResumeProgress] = useState<number | null>(initialPlayback.progress);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -57,11 +167,43 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       stillUrl: undefined,
     }));
 
-  const { player } = usePlayerPreference();
-  const playbackOptions = { ...initialPlayback, season: safeSeason, episode: safeEpisode };
+  const isSwitchingPlayers = previousPlayerRef.current !== player;
+  const progressForEmbed = isSwitchingPlayers ? latestProgressRef.current : resumeProgress;
+  const playbackOptions = { ...initialPlayback, progress: progressForEmbed, season: safeSeason, episode: safeEpisode };
   const embedUrl = player === '2'
     ? buildVideasyEmbedUrl(entry, playbackOptions)
     : buildEmbedUrl(entry, playbackOptions);
+
+  useEffect(() => {
+    if (initialPlayback.progress !== null) {
+      latestProgressRef.current = initialPlayback.progress;
+      setResumeProgress(initialPlayback.progress);
+      return;
+    }
+
+    const savedProgress = getRecentlyWatchedProgress(entry, {
+      episode: isSeries ? safeEpisode : undefined,
+      season: isSeries ? safeSeason : undefined,
+    });
+
+    const savedSeconds = savedProgress?.progressSeconds ?? null;
+    latestProgressRef.current = savedSeconds;
+    setResumeProgress(savedSeconds);
+  }, [entry, initialPlayback.progress, isSeries, safeEpisode, safeSeason]);
+
+  useEffect(() => {
+    if (previousPlayerRef.current === player) return;
+
+    const savedProgress = getRecentlyWatchedProgress(entry, {
+      episode: isSeries ? safeEpisode : undefined,
+      season: isSeries ? safeSeason : undefined,
+    });
+    const savedSeconds = latestProgressRef.current ?? savedProgress?.progressSeconds ?? null;
+
+    latestProgressRef.current = savedSeconds;
+    setResumeProgress(savedSeconds);
+    previousPlayerRef.current = player;
+  }, [entry, isSeries, player, safeEpisode, safeSeason]);
 
   useEffect(() => {
     trackRecentlyWatched(entry, {
@@ -69,6 +211,60 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       season: isSeries ? safeSeason : undefined,
     });
   }, [entry, isSeries, safeEpisode, safeSeason]);
+
+  useEffect(() => {
+    const expectedOrigin = new URL(embedUrl).origin;
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (event.origin !== expectedOrigin) return;
+
+      const progress = extractPlayerProgress(event.data);
+      if (!progress) return;
+      latestProgressRef.current = progress.progressSeconds;
+
+      const now = Date.now();
+      if (now - lastProgressWriteRef.current < 5_000 && progress.progressPercent !== 100) return;
+      lastProgressWriteRef.current = now;
+
+      trackRecentlyWatched(entry, {
+        durationSeconds: progress.durationSeconds,
+        episode: isSeries ? safeEpisode : undefined,
+        progressPercent: progress.progressPercent,
+        progressSeconds: progress.progressSeconds,
+        season: isSeries ? safeSeason : undefined,
+      });
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [embedUrl, entry, isSeries, safeEpisode, safeSeason]);
+
+  const sendResumeSeekMessages = useCallback(() => {
+    const seconds = progressForEmbed;
+    const targetWindow = iframeRef.current?.contentWindow;
+    if (!targetWindow || typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 5) return;
+
+    const expectedOrigin = new URL(embedUrl).origin;
+    const seekMessages = [
+      { type: 'seek', time: seconds, seconds },
+      { type: 'seekTo', time: seconds, seconds },
+      { event: 'seek', currentTime: seconds, seconds },
+      { action: 'seek', value: seconds },
+      { type: 'player:seek', payload: { currentTime: seconds, seconds } },
+      { type: 'videasy:seek', data: { time: seconds, seconds } },
+    ];
+
+    const sendAll = () => {
+      for (const message of seekMessages) {
+        targetWindow.postMessage(message, expectedOrigin);
+      }
+    };
+
+    sendAll();
+    window.setTimeout(sendAll, 800);
+    window.setTimeout(sendAll, 2200);
+  }, [embedUrl, progressForEmbed]);
 
   // Keep URL in sync with current season/episode
   useEffect(() => {
@@ -139,9 +335,9 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
             onClick={handleBackToLibrary}
             aria-label="Back to library"
             title="Back to library"
-            className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-9 w-9 items-center justify-center rounded-full bg-black/35 text-zinc-100 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white"
+            className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
 
           <div
@@ -156,11 +352,13 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
           </div>
 
           <iframe
-            key={`${safeSeason}-${safeEpisode}`}
+            key={`${player}-${safeSeason}-${safeEpisode}`}
+            ref={iframeRef}
             src={embedUrl}
             className="h-full w-full border-0"
             allowFullScreen
             allow="autoplay; fullscreen; picture-in-picture"
+            onLoad={sendResumeSeekMessages}
             title={`Watch ${entry.title}`}
           />
         </div>

@@ -14,6 +14,51 @@ interface BrowseRowProps {
   title: string;
 }
 
+interface ProgressDisplayEntry extends LibraryMediaEntry {
+  durationSeconds?: number;
+  episode?: string;
+  progressPercent?: number;
+  progressSeconds?: number;
+  season?: string;
+}
+
+function formatWatchTime(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function getProgressDisplay(entry: LibraryMediaEntry) {
+  const progressEntry = entry as ProgressDisplayEntry;
+  if (typeof progressEntry.progressSeconds !== 'number') return null;
+
+  const progressPercent =
+    typeof progressEntry.progressPercent === 'number'
+      ? progressEntry.progressPercent
+      : typeof progressEntry.durationSeconds === 'number' && progressEntry.durationSeconds > 0
+        ? (progressEntry.progressSeconds / progressEntry.durationSeconds) * 100
+        : undefined;
+  const labelPrefix =
+    entry.type === 'tv' && progressEntry.season && progressEntry.episode
+      ? `S${progressEntry.season} E${progressEntry.episode}`
+      : 'Left at';
+
+  return {
+    label: `${labelPrefix} ${formatWatchTime(progressEntry.progressSeconds)}`,
+    percent:
+      typeof progressPercent === 'number' && Number.isFinite(progressPercent)
+        ? Math.min(100, Math.max(0, progressPercent))
+        : null,
+  };
+}
+
 function PosterCard({
   entry,
   onRemove,
@@ -23,6 +68,8 @@ function PosterCard({
   onRemove?: (entry: LibraryMediaEntry) => void;
   onSelect: (entry: LibraryMediaEntry) => void;
 }) {
+  const progress = getProgressDisplay(entry);
+
   return (
     <div
       // clamp: min 9rem (small screens), preferred 14vw (scales with monitor), max 18rem (huge screens)
@@ -59,6 +106,19 @@ function PosterCard({
             <Info className="h-3 w-3" /> Details
           </div>
         </div>
+
+        {progress ? (
+          <>
+            <div className="absolute bottom-2 left-2 z-10 rounded-full bg-black/75 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+              {progress.label}
+            </div>
+            {progress.percent !== null ? (
+              <div className="absolute inset-x-0 bottom-0 z-10 h-1 bg-white/20">
+                <div className="h-full bg-netflix-red" style={{ width: `${progress.percent}%` }} />
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
       </button>
 

@@ -13,18 +13,25 @@ const MAX_RECENTLY_WATCHED = 12;
 const MAX_COOKIE_LENGTH = 3800;
 
 export interface RecentlyWatchedEntry extends LibraryMediaEntry {
+  durationSeconds?: number;
   episode?: string;
+  progressPercent?: number;
+  progressSeconds?: number;
   season?: string;
   watchedAt: number;
 }
 
 interface TrackPlaybackOptions {
+  durationSeconds?: number;
   episode?: string;
+  progressPercent?: number;
+  progressSeconds?: number;
   season?: string;
 }
 
 let cachedRawValue = '';
 let cachedEntries: RecentlyWatchedEntry[] = [];
+const EMPTY_RECENTLY_WATCHED: RecentlyWatchedEntry[] = [];
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -44,8 +51,11 @@ function normalizeEntry(value: unknown): RecentlyWatchedEntry | null {
 
   return {
     backdropUrl: typeof entry.backdropUrl === 'string' ? entry.backdropUrl : undefined,
+    durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
     episode: typeof entry.episode === 'string' ? entry.episode : undefined,
     posterUrl: typeof entry.posterUrl === 'string' ? entry.posterUrl : undefined,
+    progressPercent: typeof entry.progressPercent === 'number' ? entry.progressPercent : undefined,
+    progressSeconds: typeof entry.progressSeconds === 'number' ? entry.progressSeconds : undefined,
     rating: typeof entry.rating === 'number' ? entry.rating : undefined,
     season: typeof entry.season === 'string' ? entry.season : undefined,
     synopsis: typeof entry.synopsis === 'string' ? entry.synopsis : '',
@@ -121,7 +131,7 @@ function getRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
 }
 
 function getServerRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
-  return [];
+  return EMPTY_RECENTLY_WATCHED;
 }
 
 function subscribeRecentlyWatched(onStoreChange: () => void) {
@@ -138,11 +148,36 @@ function subscribeRecentlyWatched(onStoreChange: () => void) {
   };
 }
 
-function compactEntry(entry: LibraryMediaEntry | MediaEntry, options: TrackPlaybackOptions): RecentlyWatchedEntry {
+function sanitizeNonNegativeNumber(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.floor(value);
+}
+
+function sanitizePercent(value: number | undefined): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function compactEntry(
+  entry: LibraryMediaEntry | MediaEntry,
+  options: TrackPlaybackOptions,
+  previous?: RecentlyWatchedEntry,
+): RecentlyWatchedEntry {
+  const canCarryProgress =
+    entry.type === 'movie' || (previous?.season === options.season && previous?.episode === options.episode);
+
   return {
     backdropUrl: entry.backdropUrl,
+    durationSeconds:
+      sanitizeNonNegativeNumber(options.durationSeconds) ??
+      (canCarryProgress ? previous?.durationSeconds : undefined),
     episode: options.episode,
     posterUrl: entry.posterUrl,
+    progressPercent:
+      sanitizePercent(options.progressPercent) ?? (canCarryProgress ? previous?.progressPercent : undefined),
+    progressSeconds:
+      sanitizeNonNegativeNumber(options.progressSeconds) ??
+      (canCarryProgress ? previous?.progressSeconds : undefined),
     season: options.season,
     synopsis: entry.synopsis.slice(0, 180),
     title: entry.title,
@@ -156,10 +191,14 @@ function compactEntry(entry: LibraryMediaEntry | MediaEntry, options: TrackPlayb
 export function trackRecentlyWatched(entry: LibraryMediaEntry | MediaEntry, options: TrackPlaybackOptions = {}) {
   if (!isBrowser()) return;
 
-  const nextEntry = compactEntry(entry, options);
+  const previousEntries = getRecentlyWatchedSnapshot();
+  const previousEntry = previousEntries.find((candidate) => {
+    return candidate.type === entry.type && candidate.tmdbId === entry.tmdbId;
+  });
+  const nextEntry = compactEntry(entry, options, previousEntry);
   const nextEntries = [
     nextEntry,
-    ...getRecentlyWatchedSnapshot().filter((candidate) => {
+    ...previousEntries.filter((candidate) => {
       return candidate.type !== nextEntry.type || candidate.tmdbId !== nextEntry.tmdbId;
     }),
   ].slice(0, MAX_RECENTLY_WATCHED);
@@ -170,6 +209,28 @@ export function trackRecentlyWatched(entry: LibraryMediaEntry | MediaEntry, opti
   cachedRawValue = rawValue;
   cachedEntries = nextEntries;
   window.dispatchEvent(new Event(RECENTLY_WATCHED_EVENT));
+}
+
+export function getRecentlyWatchedProgress(
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'tmdbId' | 'type'>,
+  options: Pick<TrackPlaybackOptions, 'episode' | 'season'> = {},
+) {
+  if (!isBrowser()) return null;
+
+  const match = getRecentlyWatchedSnapshot().find((candidate) => {
+    if (candidate.type !== entry.type || candidate.tmdbId !== entry.tmdbId) return false;
+    if (entry.type === 'tv' && options.season && candidate.season !== options.season) return false;
+    if (entry.type === 'tv' && options.episode && candidate.episode !== options.episode) return false;
+    return typeof candidate.progressSeconds === 'number';
+  });
+
+  if (!match || typeof match.progressSeconds !== 'number') return null;
+
+  return {
+    durationSeconds: match.durationSeconds,
+    progressPercent: match.progressPercent,
+    progressSeconds: match.progressSeconds,
+  };
 }
 
 export function removeRecentlyWatched(entry: Pick<LibraryMediaEntry, 'tmdbId' | 'type'>) {
