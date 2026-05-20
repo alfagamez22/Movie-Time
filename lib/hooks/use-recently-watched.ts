@@ -101,7 +101,11 @@ function writeSessionCookie(entries: RecentlyWatchedEntry[]) {
 
 function readRawRecentlyWatched(): string {
   if (!isBrowser()) return '';
-  return sessionStorage.getItem(RECENTLY_WATCHED_KEY) || readCookie(RECENTLY_WATCHED_COOKIE);
+  try {
+    return sessionStorage.getItem(RECENTLY_WATCHED_KEY) || readCookie(RECENTLY_WATCHED_COOKIE);
+  } catch {
+    return readCookie(RECENTLY_WATCHED_COOKIE);
+  }
 }
 
 function parseRecentlyWatched(rawValue: string): RecentlyWatchedEntry[] {
@@ -204,7 +208,11 @@ export function trackRecentlyWatched(entry: LibraryMediaEntry | MediaEntry, opti
   ].slice(0, MAX_RECENTLY_WATCHED);
 
   const rawValue = JSON.stringify(nextEntries);
-  sessionStorage.setItem(RECENTLY_WATCHED_KEY, rawValue);
+  try {
+    sessionStorage.setItem(RECENTLY_WATCHED_KEY, rawValue);
+  } catch {
+    // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
+  }
   writeSessionCookie(nextEntries);
   cachedRawValue = rawValue;
   cachedEntries = nextEntries;
@@ -241,7 +249,11 @@ export function removeRecentlyWatched(entry: Pick<LibraryMediaEntry, 'tmdbId' | 
   });
 
   const rawValue = JSON.stringify(nextEntries);
-  sessionStorage.setItem(RECENTLY_WATCHED_KEY, rawValue);
+  try {
+    sessionStorage.setItem(RECENTLY_WATCHED_KEY, rawValue);
+  } catch {
+    // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
+  }
   writeSessionCookie(nextEntries);
   cachedRawValue = rawValue;
   cachedEntries = nextEntries;
@@ -258,19 +270,41 @@ export function useRecentlyWatched() {
 
 export function saveHomeScrollPosition() {
   if (!isBrowser()) return;
-  sessionStorage.setItem(HOME_SCROLL_KEY, String(Math.max(0, Math.round(window.scrollY))));
+  try {
+    sessionStorage.setItem(HOME_SCROLL_KEY, String(Math.max(0, Math.round(window.scrollY))));
+  } catch {
+    // Non-critical convenience state.
+  }
 }
 
 export function requestHomeScrollRestore() {
   if (!isBrowser()) return;
-  sessionStorage.setItem(RESTORE_HOME_SCROLL_KEY, '1');
+  try {
+    sessionStorage.setItem(RESTORE_HOME_SCROLL_KEY, '1');
+  } catch {
+    // Non-critical convenience state.
+  }
 }
 
 export function restoreHomeScrollIfRequested() {
-  if (!isBrowser() || sessionStorage.getItem(RESTORE_HOME_SCROLL_KEY) !== '1') return;
+  if (!isBrowser()) return;
 
-  sessionStorage.removeItem(RESTORE_HOME_SCROLL_KEY);
-  const scrollY = Number.parseInt(sessionStorage.getItem(HOME_SCROLL_KEY) || '0', 10);
+  let shouldRestore = false;
+  try {
+    shouldRestore = sessionStorage.getItem(RESTORE_HOME_SCROLL_KEY) === '1';
+  } catch {
+    return;
+  }
+
+  if (!shouldRestore) return;
+
+  let scrollY = 0;
+  try {
+    sessionStorage.removeItem(RESTORE_HOME_SCROLL_KEY);
+    scrollY = Number.parseInt(sessionStorage.getItem(HOME_SCROLL_KEY) || '0', 10);
+  } catch {
+    return;
+  }
   if (!Number.isFinite(scrollY) || scrollY <= 0) return;
 
   const restore = () => window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' });

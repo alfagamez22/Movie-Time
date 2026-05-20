@@ -8,7 +8,6 @@ import { ArrowLeft } from 'lucide-react';
 import { buildEmbedUrl, buildVideasyEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
 import { usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import {
-  getRecentlyWatchedProgress,
   requestHomeScrollRestore,
   trackRecentlyWatched,
 } from '@/lib/hooks/use-recently-watched';
@@ -135,8 +134,6 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastProgressWriteRef = useRef(0);
   const latestProgressRef = useRef<number | null>(initialPlayback.progress);
-  const previousPlayerRef = useRef(player);
-  const [resumeProgress, setResumeProgress] = useState<number | null>(initialPlayback.progress);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -167,43 +164,10 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       stillUrl: undefined,
     }));
 
-  const isSwitchingPlayers = previousPlayerRef.current !== player;
-  const progressForEmbed = isSwitchingPlayers ? latestProgressRef.current : resumeProgress;
-  const playbackOptions = { ...initialPlayback, progress: progressForEmbed, season: safeSeason, episode: safeEpisode };
+  const playbackOptions = { ...initialPlayback, season: safeSeason, episode: safeEpisode };
   const embedUrl = player === '2'
     ? buildVideasyEmbedUrl(entry, playbackOptions)
     : buildEmbedUrl(entry, playbackOptions);
-
-  useEffect(() => {
-    if (initialPlayback.progress !== null) {
-      latestProgressRef.current = initialPlayback.progress;
-      setResumeProgress(initialPlayback.progress);
-      return;
-    }
-
-    const savedProgress = getRecentlyWatchedProgress(entry, {
-      episode: isSeries ? safeEpisode : undefined,
-      season: isSeries ? safeSeason : undefined,
-    });
-
-    const savedSeconds = savedProgress?.progressSeconds ?? null;
-    latestProgressRef.current = savedSeconds;
-    setResumeProgress(savedSeconds);
-  }, [entry, initialPlayback.progress, isSeries, safeEpisode, safeSeason]);
-
-  useEffect(() => {
-    if (previousPlayerRef.current === player) return;
-
-    const savedProgress = getRecentlyWatchedProgress(entry, {
-      episode: isSeries ? safeEpisode : undefined,
-      season: isSeries ? safeSeason : undefined,
-    });
-    const savedSeconds = latestProgressRef.current ?? savedProgress?.progressSeconds ?? null;
-
-    latestProgressRef.current = savedSeconds;
-    setResumeProgress(savedSeconds);
-    previousPlayerRef.current = player;
-  }, [entry, isSeries, player, safeEpisode, safeSeason]);
 
   useEffect(() => {
     trackRecentlyWatched(entry, {
@@ -240,32 +204,6 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
     return () => window.removeEventListener('message', onMessage);
   }, [embedUrl, entry, isSeries, safeEpisode, safeSeason]);
 
-  const sendResumeSeekMessages = useCallback(() => {
-    const seconds = progressForEmbed;
-    const targetWindow = iframeRef.current?.contentWindow;
-    if (!targetWindow || typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 5) return;
-
-    const expectedOrigin = new URL(embedUrl).origin;
-    const seekMessages = [
-      { type: 'seek', time: seconds, seconds },
-      { type: 'seekTo', time: seconds, seconds },
-      { event: 'seek', currentTime: seconds, seconds },
-      { action: 'seek', value: seconds },
-      { type: 'player:seek', payload: { currentTime: seconds, seconds } },
-      { type: 'videasy:seek', data: { time: seconds, seconds } },
-    ];
-
-    const sendAll = () => {
-      for (const message of seekMessages) {
-        targetWindow.postMessage(message, expectedOrigin);
-      }
-    };
-
-    sendAll();
-    window.setTimeout(sendAll, 800);
-    window.setTimeout(sendAll, 2200);
-  }, [embedUrl, progressForEmbed]);
-
   // Keep URL in sync with current season/episode
   useEffect(() => {
     if (!isSeries) return;
@@ -276,8 +214,22 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       progress: null,
       season: safeSeason,
     });
+
+    if (`${window.location.pathname}${window.location.search}` === href) return;
+
     startTransition(() => router.replace(href, { scroll: false }));
-  }, [safeSeason, safeEpisode, entry, initialPlayback.autoPlay, initialPlayback.color, router, isSeries]);
+  }, [
+    safeSeason,
+    safeEpisode,
+    entry.title,
+    entry.tmdbId,
+    entry.type,
+    entry,
+    initialPlayback.autoPlay,
+    initialPlayback.color,
+    router,
+    isSeries,
+  ]);
 
   // Auto-hide chrome in theater mode — called on mouse move and when entering theater
   const revealChrome = useCallback(() => {
@@ -358,7 +310,7 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
             className="h-full w-full border-0"
             allowFullScreen
             allow="autoplay; fullscreen; picture-in-picture"
-            onLoad={sendResumeSeekMessages}
+            referrerPolicy="strict-origin-when-cross-origin"
             title={`Watch ${entry.title}`}
           />
         </div>
@@ -444,7 +396,7 @@ function EpisodeSidebar({
                   </div>
                 )}
                 {ep.stillUrl ? (
-                  <Image src={ep.stillUrl} alt="" fill sizes="112px" className="object-cover" />
+                  <Image src={ep.stillUrl} alt="" fill sizes="112px" className="object-cover" priority={isActive} />
                 ) : (
                   <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />
                 )}
