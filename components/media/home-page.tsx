@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { LibraryMediaEntry, LibrarySection } from '@/lib/media/types';
@@ -42,26 +42,42 @@ function SearchResultCard({
       type="button"
       onClick={() => onSelect(entry)}
       aria-label={`Show details for ${entry.title}`}
-      className="group flex w-full gap-3 rounded-lg border border-white/8 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
+      className="group flex w-full gap-4 rounded-xl border border-white/10 bg-white/[0.035] p-4 text-left shadow-[0_14px_45px_rgba(0,0,0,0.28)] transition hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
     >
-      <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md bg-zinc-800">
+      <div className="relative h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800 ring-1 ring-white/10 md:h-32 md:w-24">
         {entry.posterUrl ? (
-          <Image src={entry.posterUrl} alt={entry.title} fill sizes="56px" className="object-cover" />
-        ) : null}
+          <Image
+            src={entry.posterUrl}
+            alt={entry.title}
+            fill
+            sizes="(max-width: 768px) 80px, 96px"
+            className="object-cover transition-transform duration-300 group-hover:scale-[1.05]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-zinc-900 px-2 text-center text-xs font-semibold text-zinc-500">
+            {entry.title}
+          </div>
+        )}
       </div>
-      <div className="min-w-0 flex-1 py-0.5">
-        <p className="line-clamp-1 font-semibold text-white">{entry.title}</p>
-        <div className="mt-1 flex items-center gap-2 text-xs text-zinc-400">
+      <div className="flex min-w-0 flex-1 flex-col py-0.5">
+        <div className="flex items-start justify-between gap-3">
+          <p className="line-clamp-2 text-lg font-bold leading-tight text-white md:text-xl">{entry.title}</p>
+          <span className="hidden shrink-0 items-center gap-1 rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white transition-colors group-hover:bg-white/18 sm:flex">
+            <Info className="h-3.5 w-3.5" />
+            Details
+          </span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
           {entry.year ? <span>{entry.year}</span> : null}
           {typeof entry.rating === 'number' ? (
             <span className="text-amber-400">★ {entry.rating}</span>
           ) : null}
-          <span className="rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+          <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-300">
             {entry.type === 'movie' ? 'Movie' : 'TV'}
           </span>
         </div>
         {entry.synopsis ? (
-          <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{entry.synopsis}</p>
+          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-400">{entry.synopsis}</p>
         ) : null}
       </div>
     </button>
@@ -245,7 +261,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
             className="fixed inset-0 z-[80] flex flex-col bg-black/95 backdrop-blur-lg"
           >
             <div className="border-b border-white/8 px-6 py-4 md:px-12">
-              <div className="mx-auto flex max-w-3xl items-center gap-4">
+              <div className="mx-auto flex max-w-4xl items-center gap-4">
                 <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                 <input
                   ref={inputRef}
@@ -266,7 +282,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-6 md:px-12">
-              <div className="mx-auto max-w-3xl">
+              <div className="mx-auto max-w-4xl">
                 {!deferredQuery ? (
                   <p className="mt-10 text-center text-sm text-zinc-600">
                     Type to search across movies and TV series
@@ -278,7 +294,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
                     No results for &ldquo;{deferredQuery}&rdquo;
                   </p>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                     {searchResults.map((entry) => (
                       <SearchResultCard key={`${entry.type}:${entry.tmdbId}`} entry={entry} onSelect={openDetails} />
                     ))}
