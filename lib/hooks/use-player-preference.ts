@@ -8,8 +8,8 @@ const PLAYER_CHANGE_EVENT = 'papiflix-player-change';
 export type PlayerChoice = '1' | '2';
 
 export const PLAYER_LABELS: Record<PlayerChoice, string> = {
-  '1': 'Vidking',
-  '2': 'Videasy',
+  '1': 'Videasy',
+  '2': 'Vidking',
 };
 
 let memoryPlayerChoice: PlayerChoice | null = null;

@@ -36,7 +36,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
   };
 
   return (
-    <div className="relative h-[85vh] min-h-[560px] w-full overflow-hidden bg-black">
+    <div className="relative h-[76dvh] min-h-[620px] w-full overflow-hidden bg-black landscape:h-[86dvh] landscape:min-h-[360px] md:h-[85vh] md:min-h-[560px]">
       {/* Crossfading backdrop */}
       <AnimatePresence mode="sync">
         <motion.div
@@ -60,7 +60,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
       </AnimatePresence>
 
       {/* Foreground content */}
-      <div className="absolute inset-0 flex items-center pt-16">
+      <div className="absolute inset-0 flex items-center pb-14 pt-20 landscape:pb-8 landscape:pt-16">
         <div className="mx-auto w-full max-w-7xl px-6 md:px-12">
           <AnimatePresence mode="wait">
             <motion.div
@@ -69,13 +69,13 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -14 }}
               transition={{ duration: 0.45, delay: 0.12 }}
-              className="max-w-xl space-y-4"
+              className="max-w-xl space-y-3 sm:space-y-4"
             >
               <span className="inline-block rounded-full border border-white/20 bg-black/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-zinc-200 backdrop-blur-sm">
                 {active.type === 'movie' ? 'Movie' : 'TV Series'}
               </span>
 
-              <h1 className="text-4xl font-black leading-tight tracking-tight text-white drop-shadow-lg md:text-6xl">
+              <h1 className="text-4xl font-black leading-tight tracking-tight text-white drop-shadow-lg sm:text-5xl md:text-6xl">
                 {active.title}
               </h1>
 
@@ -90,7 +90,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
               </div>
 
               {active.synopsis ? (
-                <p className="line-clamp-3 text-sm leading-relaxed text-zinc-300 md:text-base">
+                <p className="line-clamp-2 text-sm leading-relaxed text-zinc-300 sm:line-clamp-3 md:text-base">
                   {active.synopsis}
                 </p>
               ) : null}
@@ -151,7 +151,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
 
       {/* Dot indicators */}
       {count > 1 ? (
-        <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-2">
+        <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2 landscape:bottom-4">
           {items.map((item, i) => (
             <button
               key={item.tmdbId}

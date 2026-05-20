@@ -42,15 +42,15 @@ function SearchResultCard({
       type="button"
       onClick={() => onSelect(entry)}
       aria-label={`Show details for ${entry.title}`}
-      className="group flex w-full gap-4 rounded-xl border border-white/10 bg-white/[0.035] p-4 text-left shadow-[0_14px_45px_rgba(0,0,0,0.28)] transition hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
+      className="group flex w-full gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-left shadow-[0_14px_45px_rgba(0,0,0,0.28)] transition hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red sm:gap-4 sm:rounded-xl sm:p-4"
     >
-      <div className="relative h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800 ring-1 ring-white/10 md:h-32 md:w-24">
+      <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-800 ring-1 ring-white/10 sm:h-28 sm:w-20 md:h-32 md:w-24">
         {entry.posterUrl ? (
           <Image
             src={entry.posterUrl}
             alt={entry.title}
             fill
-            sizes="(max-width: 768px) 80px, 96px"
+            sizes="(max-width: 640px) 64px, (max-width: 768px) 80px, 96px"
             className="object-cover transition-transform duration-300 group-hover:scale-[1.05]"
           />
         ) : (
@@ -61,7 +61,7 @@ function SearchResultCard({
       </div>
       <div className="flex min-w-0 flex-1 flex-col py-0.5">
         <div className="flex items-start justify-between gap-3">
-          <p className="line-clamp-2 text-lg font-bold leading-tight text-white md:text-xl">{entry.title}</p>
+          <p className="line-clamp-2 text-base font-bold leading-tight text-white sm:text-lg md:text-xl">{entry.title}</p>
           <span className="hidden shrink-0 items-center gap-1 rounded-md bg-white/10 px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white transition-colors group-hover:bg-white/18 sm:flex">
             <Info className="h-3.5 w-3.5" />
             Details
@@ -77,7 +77,7 @@ function SearchResultCard({
           </span>
         </div>
         {entry.synopsis ? (
-          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-zinc-400">{entry.synopsis}</p>
+          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-zinc-400 sm:line-clamp-3">{entry.synopsis}</p>
         ) : null}
       </div>
     </button>
@@ -260,7 +260,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
             transition={{ duration: 0.18 }}
             className="fixed inset-0 z-[80] flex flex-col bg-black/95 backdrop-blur-lg"
           >
-            <div className="border-b border-white/8 px-6 py-4 md:px-12">
+            <div className="border-b border-white/8 px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:px-6 md:px-12">
               <div className="mx-auto flex max-w-4xl items-center gap-4">
                 <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                 <input
@@ -269,7 +269,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search movies, series, or enter a numeric ID…"
-                  className="flex-1 bg-transparent text-lg text-white placeholder:text-zinc-600 focus:outline-none"
+                  className="flex-1 bg-transparent text-base text-white placeholder:text-zinc-600 focus:outline-none sm:text-lg"
                 />
                 <button
                   type="button"
@@ -281,7 +281,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-6 md:px-12">
+            <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-12">
               <div className="mx-auto max-w-4xl">
                 {!deferredQuery ? (
                   <p className="mt-10 text-center text-sm text-zinc-600">

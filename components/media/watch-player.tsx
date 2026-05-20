@@ -165,7 +165,7 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
     }));
 
   const playbackOptions = { ...initialPlayback, season: safeSeason, episode: safeEpisode };
-  const embedUrl = player === '2'
+  const embedUrl = player === '1'
     ? buildVideasyEmbedUrl(entry, playbackOptions)
     : buildEmbedUrl(entry, playbackOptions);
 
@@ -278,10 +278,10 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
   return (
       <div
         onMouseMove={revealChrome}
-        className="fixed inset-0 z-[70] flex bg-black text-white"
+        className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
       >
         {/* Left: player */}
-        <div className="relative min-w-0 flex-1">
+        <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
           <button
             type="button"
             onClick={handleBackToLibrary}
@@ -293,11 +293,11 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
           </button>
 
           <div
-            className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-12 items-center justify-center bg-gradient-to-b from-black/80 to-transparent px-16 transition-opacity duration-300 ${
+            className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
               isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >
-            <span className="text-center text-[13px] font-semibold uppercase tracking-widest text-white">
+            <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
               {entry.title}
               {isSeries && ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`}
             </span>
@@ -356,8 +356,8 @@ function EpisodeSidebar({
   onEpisodeChange,
 }: EpisodeSidebarProps) {
   return (
-    <div className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-white/5 bg-[#111]">
-      <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <select
           value={safeSeason}
           onChange={(e) => onSeasonChange(e.target.value)}
@@ -374,7 +374,7 @@ function EpisodeSidebar({
         <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
       </div>
 
-      <div className="thin-scrollbar flex-1 overflow-y-auto">
+      <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {seasonEpisodeCards.map((ep) => {
           const epNum = String(ep.episodeNumber);
           const isActive = epNum === safeEpisode;
@@ -387,7 +387,7 @@ function EpisodeSidebar({
                 isActive ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
               }`}
             >
-              <div className="relative h-16 w-28 shrink-0 overflow-hidden rounded-lg bg-black/40">
+              <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
                 {isActive && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
                     <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white">

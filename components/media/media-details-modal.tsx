@@ -41,7 +41,7 @@ function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boo
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
       {cast.map((member) => (
         <div key={`${member.id ?? member.name}-${member.character ?? 'cast'}`} className="min-w-0">
           <div className="relative mb-2 aspect-[2/3] overflow-hidden rounded-md bg-zinc-900">
@@ -238,7 +238,7 @@ export function MediaDetailsModal({ entry, onClose, onSelectEntry }: MediaDetail
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 px-3 py-6 text-white backdrop-blur-md md:px-6"
+          className="fixed inset-0 z-[90] flex items-stretch justify-stretch bg-black/85 p-0 text-white backdrop-blur-md sm:items-center sm:justify-center sm:px-3 sm:py-6 md:px-6"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) onClose();
           }}
@@ -251,25 +251,25 @@ export function MediaDetailsModal({ entry, onClose, onSelectEntry }: MediaDetail
             role="dialog"
             aria-modal="true"
             aria-label={`${displayEntry.title} details`}
-            className="thin-scrollbar relative max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-white/10 bg-[#111] shadow-2xl"
+            className="thin-scrollbar relative h-[100dvh] max-h-[100dvh] w-full overflow-y-auto border-white/10 bg-[#111] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-xl sm:border"
           >
             <button
               type="button"
               onClick={onClose}
               aria-label="Close details"
-              className="absolute right-4 top-4 z-20 rounded-full bg-black/50 p-2 text-zinc-300 transition-colors hover:bg-black/80 hover:text-white"
+              className="absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-zinc-200 transition-colors hover:bg-black/80 hover:text-white sm:right-4 sm:top-4 sm:h-auto sm:w-auto sm:p-2"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <div className="relative min-h-[22rem] overflow-hidden rounded-t-xl">
+            <div className="relative min-h-[20rem] overflow-hidden sm:min-h-[22rem] sm:rounded-t-xl">
               {backdropUrl ? (
                 <Image src={backdropUrl} alt="" fill priority sizes="100vw" className="object-cover" />
               ) : null}
               <div className="absolute inset-0 bg-gradient-to-r from-[#111] via-[#111]/75 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-black/50" />
 
-              <div className="relative z-10 grid gap-6 px-5 pb-8 pt-16 md:grid-cols-[13rem_1fr] md:px-8 md:pt-20">
+              <div className="relative z-10 grid gap-6 px-5 pb-6 pt-[calc(env(safe-area-inset-top)+4rem)] sm:pb-8 sm:pt-16 md:grid-cols-[13rem_1fr] md:px-8 md:pt-20">
                 <div className="relative hidden aspect-[2/3] overflow-hidden rounded-lg bg-zinc-900 shadow-xl md:block">
                   {posterUrl ? <Image src={posterUrl} alt={displayEntry.title} fill sizes="208px" className="object-cover" /> : null}
                 </div>
@@ -278,14 +278,14 @@ export function MediaDetailsModal({ entry, onClose, onSelectEntry }: MediaDetail
                   <p className="mb-3 text-xs font-bold uppercase tracking-[0.28em] text-zinc-400">
                     {displayEntry.type === 'movie' ? 'Movie' : 'TV Series'}
                   </p>
-                  <h2 className="text-3xl font-black leading-tight tracking-tight md:text-5xl">{displayEntry.title}</h2>
+                  <h2 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl md:text-5xl">{displayEntry.title}</h2>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-zinc-300">
                     {displayEntry.year ? <span>{displayEntry.year}</span> : null}
                     {typeof entry.rating === 'number' ? <span className="text-amber-400">Rating {entry.rating}</span> : null}
                     {typeof entry.voteCount === 'number' ? <span>{entry.voteCount.toLocaleString()} votes</span> : null}
                   </div>
                   {displayEntry.synopsis ? (
-                    <p className="mt-4 line-clamp-5 text-sm leading-relaxed text-zinc-200 md:text-base">
+                    <p className="mt-4 line-clamp-4 text-sm leading-relaxed text-zinc-200 sm:line-clamp-5 md:text-base">
                       {displayEntry.synopsis}
                     </p>
                   ) : null}
@@ -303,7 +303,7 @@ export function MediaDetailsModal({ entry, onClose, onSelectEntry }: MediaDetail
               </div>
             </div>
 
-            <div className="space-y-8 px-5 pb-8 md:px-8">
+            <div className="space-y-8 px-5 pb-[calc(env(safe-area-inset-bottom)+2rem)] md:px-8">
               <section>
                 <h3 className="mb-3 text-base font-bold">Cast</h3>
                 <CastList cast={cast} isLoading={isLoading} />

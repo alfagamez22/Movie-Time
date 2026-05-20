@@ -74,7 +74,11 @@ function PosterCard({
   return (
     <div
       // Regular rows stay compact; personal rows get a larger card treatment.
-      className={`group relative shrink-0 ${isRecentlyWatched ? 'w-[clamp(15rem,22vw,18rem)]' : 'w-[clamp(9rem,14vw,18rem)]'}`}
+      className={`group relative shrink-0 ${
+        isRecentlyWatched
+          ? 'w-[clamp(13rem,62vw,16rem)] sm:w-[clamp(15rem,22vw,18rem)]'
+          : 'w-[clamp(8.5rem,42vw,10rem)] sm:w-[clamp(9rem,14vw,18rem)] landscape:w-[clamp(8rem,16vw,10rem)]'
+      }`}
     >
       <button
         type="button"
@@ -106,7 +110,7 @@ function PosterCard({
           {/* Hover overlay */}
           <div
             className={`absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/35 to-transparent p-3 transition-opacity duration-200 ${
-              isRecentlyWatched ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              isRecentlyWatched ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'
             }`}
           >
             <p
@@ -218,7 +222,7 @@ export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, 
 
   return (
     <div className="group/row">
-      <h2 className="mb-3 px-6 text-base font-bold text-white md:px-12 md:text-lg">{title}</h2>
+      <h2 className="mb-3 px-5 text-base font-bold text-white sm:px-6 md:px-12 md:text-lg">{title}</h2>
       <div className="relative">
         {/* Left arrow */}
         <button
@@ -233,7 +237,7 @@ export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, 
         {/* No scroll-smooth class — direct el.scrollLeft assignments stay instant (for the silent jump) */}
         <div
           ref={rowRef}
-          className="flex gap-2 overflow-x-auto px-6 pb-2 scrollbar-hide md:px-12"
+          className="flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-hide sm:px-6 md:gap-2 md:px-12"
         >
           {rowItems.map((entry, i) => (
             <PosterCard
