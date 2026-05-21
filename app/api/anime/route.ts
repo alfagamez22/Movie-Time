@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getAnikotoLibrarySections, searchAnikotoLibrary } from '@/lib/anime/client';
+import { getAnimeLibrarySections, searchAnimeLibrary } from '@/lib/anime/client';
 import type { LibraryMediaEntry, MediaType } from '@/lib/media/types';
 
 function parseMediaType(value: string | null): MediaType | undefined {
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const query = searchParams.get('q')?.trim() || '';
 
   if (query) {
-    const search = await searchAnikotoLibrary(query, type);
+    const search = await searchAnimeLibrary(query, type);
 
     if (!search.ok) {
       return NextResponse.json(
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const sections = await getAnikotoLibrarySections();
+  const sections = await getAnimeLibrarySections();
   if (!sections.ok) {
     return NextResponse.json(
       {

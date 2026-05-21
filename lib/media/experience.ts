@@ -50,8 +50,8 @@ export const papianimeExperience: MediaExperienceConfig = {
   brandBackgroundSize: '160% auto',
   brandName: 'PapiAnime',
   detailsApiBasePath: '/api/anime',
-  emptySearchText: 'Type to search recent anime titles or enter an Anikoto ID',
-  footerText: 'Metadata provided by Anikoto. Playback powered by MegaPlay.',
+  emptySearchText: 'Search anime titles, browse current seasons, or enter an AniList ID',
+  footerText: 'Metadata provided by AniList. Playback powered by VidNest anime sources.',
   homeHref: '/anime',
   id: 'papianime',
   navLinks: [
@@ -62,6 +62,6 @@ export const papianimeExperience: MediaExperienceConfig = {
   ],
   preferenceMode: 'language',
   searchEndpoint: '/api/anime',
-  searchPlaceholder: 'Search recent anime titles or Anikoto ID...',
+  searchPlaceholder: 'Search anime titles or AniList ID...',
   watchBasePath: '/anime/watch',
 };

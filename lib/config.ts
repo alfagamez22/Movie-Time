@@ -12,13 +12,13 @@ function readUrlEnv(name: string, fallback: string): string {
 const APP_NAME = 'PapiFlix';
 
 export const appConfig = {
-  anikotoApiBaseUrl: readUrlEnv('ANIKOTO_API_BASE_URL', 'https://anikotoapi.site'),
-  jikanApiBaseUrl: readUrlEnv('JIKAN_API_BASE_URL', 'https://api.jikan.moe/v4'),
-  megaPlayEmbedBaseUrl: readUrlEnv('MEGAPLAY_EMBED_BASE_URL', 'https://megaplay.buzz/stream'),
+  aniZipApiBaseUrl: readUrlEnv('ANI_ZIP_API_BASE_URL', 'https://api.ani.zip'),
+  anilistGraphqlUrl: readUrlEnv('ANILIST_GRAPHQL_URL', 'https://graphql.anilist.co'),
   name: APP_NAME,
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
     'Search-driven movie and series library with native playback controls.',
+  vidnestAnimeApiBaseUrl: readUrlEnv('VIDNEST_ANIME_API_BASE_URL', 'https://new.vidnest.fun'),
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000',

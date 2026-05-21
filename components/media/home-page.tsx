@@ -7,7 +7,7 @@ import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
-import { ANIME_LANGUAGE_LABELS, PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
+import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import {
   removeRecentlyWatched,
   restoreHomeScrollIfRequested,
@@ -88,26 +88,9 @@ function SearchResultCard({
 
 function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
   const { player, setPlayer } = usePlayerPreference();
-  const { language, setLanguage } = useAnimeLanguagePreference();
 
   if (experience.preferenceMode === 'language') {
-    return (
-      <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-        {(['sub', 'dub'] as const).map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            onClick={() => setLanguage(choice)}
-            title={`Switch to ${ANIME_LANGUAGE_LABELS[choice]}`}
-            className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-              language === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            {ANIME_LANGUAGE_LABELS[choice]}
-          </button>
-        ))}
-      </div>
-    );
+    return null;
   }
 
   return (

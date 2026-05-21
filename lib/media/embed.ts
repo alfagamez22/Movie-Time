@@ -1,17 +1,27 @@
 import { appConfig } from '@/lib/config';
 
-import { getEpisodeLimit, isAnimeProvider, isTvEntry, type MediaEntry, type PlaybackLanguage } from './types';
+import {
+  getEpisodeLimit,
+  isAnimeProvider,
+  isTvEntry,
+  type AnimePlaybackServer,
+  type MediaEntry,
+  type PlaybackLanguage,
+} from './types';
 
 const DEFAULT_PLAYER_COLOR = 'e50914';
 const HEX_COLOR = /^[0-9a-fA-F]{6}$/;
 
 export interface PlaybackOptions {
   autoPlay: boolean;
+  autoNext?: boolean;
   color: string;
   episode: string;
   language: PlaybackLanguage;
   progress: number | null;
+  server?: AnimePlaybackServer;
   season: string;
+  skipIntro?: boolean;
 }
 
 type SearchParamValue = string | string[] | undefined;
@@ -60,19 +70,29 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   const color = sanitizePlayerColor(getFirstParam(searchParams.color));
   const autoPlayRaw = getFirstParam(searchParams.autoPlay);
   const autoPlay = autoPlayRaw === undefined ? true : autoPlayRaw !== 'false';
+  const autoNextRaw = getFirstParam(searchParams.autonext);
+  const autoNext = autoNextRaw === undefined ? true : autoNextRaw !== 'false';
   const progress = sanitizeProgress(getFirstParam(searchParams.progress));
   const language = getFirstParam(searchParams.lang) === 'dub' ? 'dub' : entry.defaultLanguage ?? 'sub';
+  const serverValue = getFirstParam(searchParams.server);
+  const server = serverValue === 'anitaku' ? 'anitaku' : serverValue === 'aniwave' ? 'aniwave' : undefined;
+  const skipIntroValue = getFirstParam(searchParams.skipintro);
+  const skipIntro =
+    skipIntroValue === undefined ? undefined : skipIntroValue === 'true' || skipIntroValue === '1';
 
   if (isAnimeProvider(entry.provider)) {
     const maxEpisodes = entry.type === 'tv' ? getEpisodeLimit(entry, 1) : 1;
 
     return {
       autoPlay,
+      autoNext,
       color,
       episode: clampPositiveInteger(getFirstParam(searchParams.e), maxEpisodes),
       language,
       progress,
+      server,
       season: '1',
+      skipIntro,
     };
   }
 
@@ -183,17 +203,10 @@ export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions)
 }
 
 export function buildMegaPlayEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
-  const episodeEmbedId = entry.provider === 'anikoto' ? entry.episodeEmbedIds?.[options.episode] : undefined;
-  const anilistId = entry.provider === 'anikoto' ? entry.anilistId : entry.id;
-  const malId = entry.provider === 'anikoto' ? entry.malId : undefined;
-  const path = episodeEmbedId
-    ? `s-2/${encodeURIComponent(episodeEmbedId)}/${options.language}`
-    : anilistId
-      ? `ani/${encodeURIComponent(anilistId)}/${options.episode}/${options.language}`
-      : malId
-        ? `mal/${encodeURIComponent(malId)}/${options.episode}/${options.language}`
-        : `ani/${encodeURIComponent(entry.id)}/${options.episode}/${options.language}`;
-  const url = new URL(`${appConfig.megaPlayEmbedBaseUrl}/${path}`);
+  const anilistId = entry.provider === 'anikoto' ? entry.anilistId || entry.id : entry.id;
+  const url = new URL(
+    `https://vidnest.fun/anime/${encodeURIComponent(anilistId)}/${options.episode}/${options.language}`,
+  );
 
   if (options.autoPlay) {
     url.searchParams.set('autoplay', 'true');

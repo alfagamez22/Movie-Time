@@ -3,7 +3,33 @@ export type BrowseMediaType = MediaType | 'all';
 export type MediaProvider = 'tmdb' | 'anilist' | 'anikoto';
 export type MediaExperience = 'papiflix' | 'papianime';
 export type PlaybackLanguage = 'sub' | 'dub';
+export type AnimePlaybackServer = 'aniwave' | 'anitaku';
 export type AnimeFormat = 'TV' | 'TV_SHORT' | 'MOVIE' | 'SPECIAL' | 'OVA' | 'ONA' | 'MUSIC';
+
+export interface PlaybackMarker {
+  endTime: number;
+  startTime: number;
+}
+
+export interface AnimePlaybackTrack {
+  default: boolean;
+  kind: 'captions' | 'subtitles';
+  label: string;
+  src: string;
+  srclang: string;
+}
+
+export interface AnimePlaybackPayload {
+  actualLanguage: PlaybackLanguage;
+  displayTitle: string;
+  intro?: PlaybackMarker;
+  outro?: PlaybackMarker;
+  posterUrl?: string;
+  server: AnimePlaybackServer;
+  sourceType: 'hls' | 'mp4';
+  src: string;
+  tracks: AnimePlaybackTrack[];
+}
 
 export interface EpisodePreview {
   airDate?: string;

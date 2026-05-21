@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { lookupAnikotoMediaDetails } from '@/lib/anime/client';
+import { lookupAnimeMediaDetails } from '@/lib/anime/client';
 import { resolveAnimeMediaEntry } from '@/lib/anime/resolve';
 
 interface AnimeDetailsRouteContext {
@@ -18,7 +18,7 @@ export async function GET(request: Request, context: AnimeDetailsRouteContext) {
     return NextResponse.json({ error: 'Anime entry not found.' }, { status: 404 });
   }
 
-  const details = await lookupAnikotoMediaDetails(resolvedEntry.entry.id);
+  const details = await lookupAnimeMediaDetails(resolvedEntry.entry.id);
   if (!details.ok) {
     return NextResponse.json({ error: details.message }, { status: details.status });
   }

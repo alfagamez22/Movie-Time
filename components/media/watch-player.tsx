@@ -33,13 +33,8 @@ import {
   type MediaEntry,
   type SeasonDetails,
 } from '@/lib/media/types';
-
-interface WatchPlayerProps {
-  entry: MediaEntry;
-  experience: MediaExperienceConfig;
-  initialPlayback: PlaybackOptions;
-  initialSeasonDetails?: SeasonDetails | null;
-}
+import { AnimeWatchPlayer } from './anime-watch-player';
+import type { WatchPlayerProps } from './watch-player.types';
 
 interface NormalizedPlayerProgress {
   durationSeconds?: number;
@@ -348,26 +343,21 @@ export function WatchPlayer({
   }, [player, isAnime, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
-    const href = isAnime
-      ? buildWatchHref(entry, {
-          basePath: experience.watchBasePath,
-          episode: safeEpisode,
-          language: effectiveLanguage,
-        })
-      : buildWatchHref(entry, {
-          autoPlay: initialPlayback.autoPlay,
-          basePath: experience.watchBasePath,
-          color: initialPlayback.color,
-          episode: safeEpisode,
-          progress: null,
-          season: safeSeason,
-        });
+    if (isAnime) return;
+
+    const href = buildWatchHref(entry, {
+      autoPlay: initialPlayback.autoPlay,
+      basePath: experience.watchBasePath,
+      color: initialPlayback.color,
+      episode: safeEpisode,
+      progress: null,
+      season: safeSeason,
+    });
 
     if (`${window.location.pathname}${window.location.search}` === href) return;
 
     startTransition(() => router.replace(href, { scroll: false }));
   }, [
-    effectiveLanguage,
     entry,
     experience.watchBasePath,
     initialPlayback.autoPlay,
@@ -441,6 +431,17 @@ export function WatchPlayer({
   const handleSwitchAnimeLanguage = useCallback(() => {
     handleAnimeLanguageChange(animeLanguage === 'sub' ? 'dub' : 'sub');
   }, [animeLanguage, handleAnimeLanguageChange]);
+
+  if (isAnime) {
+    return (
+      <AnimeWatchPlayer
+        entry={entry}
+        experience={experience}
+        initialPlayback={initialPlayback}
+        initialSeasonDetails={initialSeasonDetails}
+      />
+    );
+  }
 
   return (
     <div
