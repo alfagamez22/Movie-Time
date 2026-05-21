@@ -20,7 +20,7 @@ export async function GET(request: Request, context: MediaRouteContext) {
   }
 
   return NextResponse.json({
-    canonicalSlug: buildWatchSlug(resolvedEntry.entry.title, resolvedEntry.entry.tmdbId),
+    canonicalSlug: buildWatchSlug(resolvedEntry.entry.title, resolvedEntry.entry.id),
     data: resolvedEntry.entry,
     matchedBy: resolvedEntry.matchedBy,
     source: 'live',

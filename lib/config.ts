@@ -12,6 +12,9 @@ function readUrlEnv(name: string, fallback: string): string {
 const APP_NAME = 'PapiFlix';
 
 export const appConfig = {
+  anikotoApiBaseUrl: readUrlEnv('ANIKOTO_API_BASE_URL', 'https://anikotoapi.site'),
+  jikanApiBaseUrl: readUrlEnv('JIKAN_API_BASE_URL', 'https://api.jikan.moe/v4'),
+  megaPlayEmbedBaseUrl: readUrlEnv('MEGAPLAY_EMBED_BASE_URL', 'https://megaplay.buzz/stream'),
   name: APP_NAME,
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||

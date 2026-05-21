@@ -6,14 +6,16 @@ import { ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import { buildWatchHref } from '@/lib/media/routes';
-import type { LibraryMediaEntry } from '@/lib/media/types';
+import { getMediaKindLabel, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
 
 interface HeroBannerProps {
   items: LibraryMediaEntry[];
   onInfoSelect?: (entry: LibraryMediaEntry) => void;
+  preferredAnimeLanguage?: PlaybackLanguage;
+  watchBasePath?: string;
 }
 
-export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
+export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, watchBasePath }: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const count = items.length;
 
@@ -72,7 +74,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
               className="max-w-xl space-y-3 sm:space-y-4"
             >
               <span className="inline-block rounded-full border border-white/20 bg-black/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-zinc-200 backdrop-blur-sm">
-                {active.type === 'movie' ? 'Movie' : 'TV Series'}
+                {getMediaKindLabel(active)}
               </span>
 
               <h1 className="text-4xl font-black leading-tight tracking-tight text-white drop-shadow-lg sm:text-5xl md:text-6xl">
@@ -84,7 +86,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
                 {typeof active.rating === 'number' ? (
                   <>
                     <span className="h-1 w-1 rounded-full bg-zinc-500" />
-                    <span className="font-semibold text-amber-400">★ {active.rating}</span>
+                    <span className="font-semibold text-amber-400">* {active.rating}</span>
                   </>
                 ) : null}
               </div>
@@ -97,7 +99,10 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
 
               <div className="flex flex-wrap gap-3 pt-1">
                 <Link
-                  href={buildWatchHref(active)}
+                  href={buildWatchHref(active, {
+                    basePath: watchBasePath,
+                    language: preferredAnimeLanguage,
+                  })}
                   className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2.5 text-sm font-bold text-black transition-all hover:bg-zinc-200 active:scale-95"
                 >
                   <Play className="h-4 w-4 fill-current" />
@@ -114,7 +119,10 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
                   </button>
                 ) : (
                   <Link
-                    href={buildWatchHref(active)}
+                    href={buildWatchHref(active, {
+                      basePath: watchBasePath,
+                      language: preferredAnimeLanguage,
+                    })}
                     className="inline-flex items-center gap-2 rounded-md bg-zinc-700/60 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-zinc-600/70 active:scale-95"
                   >
                     <Info className="h-4 w-4" />
@@ -154,7 +162,7 @@ export function HeroBanner({ items, onInfoSelect }: HeroBannerProps) {
         <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2 landscape:bottom-4">
           {items.map((item, i) => (
             <button
-              key={item.tmdbId}
+              key={item.id}
               type="button"
               onClick={() => go(i)}
               aria-label={`Show ${item.title}`}

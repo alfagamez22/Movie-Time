@@ -26,13 +26,13 @@ export async function GET(request: Request, context: SeasonRouteContext) {
     return NextResponse.json({ error: 'TV series entry not found.' }, { status: 404 });
   }
 
-  const tmdbSeasonLookup = await lookupTmdbSeasonDetails(resolvedEntry.entry.tmdbId, seasonNumber);
+  const tmdbSeasonLookup = await lookupTmdbSeasonDetails(resolvedEntry.entry.id, seasonNumber);
   if (!tmdbSeasonLookup.ok) {
     return NextResponse.json({ error: tmdbSeasonLookup.message }, { status: tmdbSeasonLookup.status });
   }
 
   return NextResponse.json({
     data: tmdbSeasonLookup.data,
-    tmdbId: resolvedEntry.entry.tmdbId,
+    id: resolvedEntry.entry.id,
   });
 }

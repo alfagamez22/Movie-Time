@@ -6,26 +6,28 @@ import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'reac
 import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
-import type { LibraryMediaEntry, LibrarySection } from '@/lib/media/types';
-import { usePlayerPreference, PLAYER_LABELS, type PlayerChoice } from '@/lib/hooks/use-player-preference';
+import type { MediaExperienceConfig } from '@/lib/media/experience';
+import { ANIME_LANGUAGE_LABELS, PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import {
   removeRecentlyWatched,
   restoreHomeScrollIfRequested,
   saveHomeScrollPosition,
   useRecentlyWatched,
 } from '@/lib/hooks/use-recently-watched';
+import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
 import { MediaDetailsModal } from './media-details-modal';
 
 interface HomePageProps {
-  sections: LibrarySection[];
   discoveryError: string | null;
+  experience: MediaExperienceConfig;
+  sections: LibrarySection[];
 }
 
 function getFeaturedItems(sections: LibrarySection[]): LibraryMediaEntry[] {
   return (sections[0]?.entries ?? [])
-    .filter((e) => Boolean(e.backdropUrl))
+    .filter((entry) => Boolean(entry.backdropUrl))
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
     .slice(0, 6);
 }
@@ -70,10 +72,10 @@ function SearchResultCard({
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
           {entry.year ? <span>{entry.year}</span> : null}
           {typeof entry.rating === 'number' ? (
-            <span className="text-amber-400">★ {entry.rating}</span>
+            <span className="text-amber-400">* {entry.rating}</span>
           ) : null}
           <span className="rounded-full border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-300">
-            {entry.type === 'movie' ? 'Movie' : 'TV'}
+            {getMediaKindLabel(entry)}
           </span>
         </div>
         {entry.synopsis ? (
@@ -84,14 +86,57 @@ function SearchResultCard({
   );
 }
 
-export function HomePage({ sections, discoveryError }: HomePageProps) {
+function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
+  const { player, setPlayer } = usePlayerPreference();
+  const { language, setLanguage } = useAnimeLanguagePreference();
+
+  if (experience.preferenceMode === 'language') {
+    return (
+      <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+        {(['sub', 'dub'] as const).map((choice) => (
+          <button
+            key={choice}
+            type="button"
+            onClick={() => setLanguage(choice)}
+            title={`Switch to ${ANIME_LANGUAGE_LABELS[choice]}`}
+            className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+              language === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            {ANIME_LANGUAGE_LABELS[choice]}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+      {(['1', '2'] as const).map((choice) => (
+        <button
+          key={choice}
+          type="button"
+          onClick={() => setPlayer(choice)}
+          title={`Switch to ${PLAYER_LABELS[choice]}`}
+          className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+            player === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          P{choice}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function HomePage({ discoveryError, experience, sections }: HomePageProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LibraryMediaEntry[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const [navScrolled, setNavScrolled] = useState(false);
-  const { player, setPlayer } = usePlayerPreference();
-  const recentlyWatched = useRecentlyWatched();
+  const { language } = useAnimeLanguagePreference();
+  const recentlyWatched = useRecentlyWatched(experience.id);
   const inputRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query.trim());
   const isSearchPending = query.trim() !== deferredQuery;
@@ -119,15 +164,18 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
 
   const removeRecentEntry = useCallback(
     (entry: LibraryMediaEntry) => {
-      removeRecentlyWatched(entry);
-      if (selectedEntry?.type === entry.type && selectedEntry.tmdbId === entry.tmdbId) {
+      removeRecentlyWatched(entry, experience.id);
+      if (
+        selectedEntry?.type === entry.type &&
+        selectedEntry.id === entry.id &&
+        selectedEntry.provider === entry.provider
+      ) {
         setSelectedEntry(null);
       }
     },
-    [selectedEntry],
+    [experience.id, selectedEntry],
   );
 
-  // Sticky nav background on scroll
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -135,65 +183,69 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
   }, []);
 
   useEffect(() => {
-    restoreHomeScrollIfRequested();
+    restoreHomeScrollIfRequested(experience.id);
 
     let frame: number | null = null;
     const saveScroll = () => {
       if (frame != null) return;
       frame = requestAnimationFrame(() => {
         frame = null;
-        saveHomeScrollPosition();
+        saveHomeScrollPosition(experience.id);
       });
     };
 
+    const onPageHide = () => saveHomeScrollPosition(experience.id);
+
     saveScroll();
     window.addEventListener('scroll', saveScroll, { passive: true });
-    window.addEventListener('pagehide', saveHomeScrollPosition);
+    window.addEventListener('pagehide', onPageHide);
 
     return () => {
       if (frame != null) cancelAnimationFrame(frame);
       window.removeEventListener('scroll', saveScroll);
-      window.removeEventListener('pagehide', saveHomeScrollPosition);
+      window.removeEventListener('pagehide', onPageHide);
     };
-  }, []);
+  }, [experience.id]);
 
-  // Focus search input when overlay opens
   useEffect(() => {
     if (!searchOpen) return;
-    const t = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(t);
+    const timeoutId = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(timeoutId);
   }, [searchOpen]);
 
-  // ESC to close search
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeSearch();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeSearch();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [closeSearch]);
 
-  // Live search
   useEffect(() => {
     if (!deferredQuery) return;
+
     const controller = new AbortController();
-    void fetch(`/api/media?q=${encodeURIComponent(deferredQuery)}`, { signal: controller.signal })
+    void fetch(`${experience.searchEndpoint}?q=${encodeURIComponent(deferredQuery)}`, { signal: controller.signal })
       .then(async (res) => {
         const json = (await res.json().catch(() => null)) as { data?: LibraryMediaEntry[] } | null;
-        if (!controller.signal.aborted) setSearchResults(json?.data ?? []);
+        if (!controller.signal.aborted) {
+          setSearchResults(json?.data ?? []);
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        if (!controller.signal.aborted) setSearchResults([]);
+        if (!controller.signal.aborted) {
+          setSearchResults([]);
+        }
       });
+
     return () => controller.abort(new DOMException('Query changed', 'AbortError'));
-  }, [deferredQuery]);
+  }, [deferredQuery, experience.searchEndpoint]);
 
   const featuredItems = getFeaturedItems(sections);
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
-      {/* Sticky navbar */}
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
@@ -201,44 +253,25 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:px-12">
           <Link
-            href="/"
+            href={experience.homeHref}
             className="h-12 w-36 shrink-0 select-none bg-no-repeat sm:h-14 sm:w-44"
-            aria-label="PapiFlix home"
+            aria-label={`${experience.brandName} home`}
             style={{
-              backgroundImage: "url('/icons/papiflixbanner.png')",
-              backgroundPosition: '47% center',
-              backgroundSize: '200% auto',
+              backgroundImage: `url('${experience.brandBannerSrc}')`,
+              backgroundPosition: experience.brandBackgroundPosition,
+              backgroundSize: experience.brandBackgroundSize,
             }}
           >
-            <span className="sr-only">PapiFlix</span>
+            <span className="sr-only">{experience.brandName}</span>
           </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium text-zinc-300 md:flex">
-            <Link href="/" className="transition-colors hover:text-white">
-              Home
-            </Link>
-            <Link href="/" className="transition-colors hover:text-white">
-              Movies
-            </Link>
-            <Link href="/" className="transition-colors hover:text-white">
-              TV Shows
-            </Link>
-          </nav>
-          {/* Player switcher */}
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-            {(['1', '2'] as PlayerChoice[]).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPlayer(p)}
-                title={`Switch to ${PLAYER_LABELS[p]}`}
-                className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-                  player === p ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                P{p}
-              </button>
+            {experience.navLinks.map((link) => (
+              <Link key={`${link.label}-${link.href}`} href={link.href} className="transition-colors hover:text-white">
+                {link.label}
+              </Link>
             ))}
-          </div>
+          </nav>
+          <PreferenceSwitcher experience={experience} />
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -250,7 +283,6 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
         </div>
       </header>
 
-      {/* Full-screen search overlay */}
       <AnimatePresence>
         {searchOpen ? (
           <motion.div
@@ -267,8 +299,8 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
                   ref={inputRef}
                   type="text"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search movies, series, or enter a numeric ID…"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={experience.searchPlaceholder}
                   className="flex-1 bg-transparent text-base text-white placeholder:text-zinc-600 focus:outline-none sm:text-lg"
                 />
                 <button
@@ -284,11 +316,9 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
             <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-12">
               <div className="mx-auto max-w-4xl">
                 {!deferredQuery ? (
-                  <p className="mt-10 text-center text-sm text-zinc-600">
-                    Type to search across movies and TV series
-                  </p>
+                  <p className="mt-10 text-center text-sm text-zinc-600">{experience.emptySearchText}</p>
                 ) : isSearchPending ? (
-                  <p className="text-center text-sm text-zinc-500">Searching…</p>
+                  <p className="text-center text-sm text-zinc-500">Searching...</p>
                 ) : searchResults.length === 0 ? (
                   <p className="text-center text-sm text-zinc-500">
                     No results for &ldquo;{deferredQuery}&rdquo;
@@ -296,7 +326,7 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {searchResults.map((entry) => (
-                      <SearchResultCard key={`${entry.type}:${entry.tmdbId}`} entry={entry} onSelect={openDetails} />
+                      <SearchResultCard key={`${entry.provider}:${entry.type}:${entry.id}`} entry={entry} onSelect={openDetails} />
                     ))}
                   </div>
                 )}
@@ -306,10 +336,15 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
         ) : null}
       </AnimatePresence>
 
-      {/* Hero banner */}
-      {featuredItems.length > 0 ? <HeroBanner items={featuredItems} onInfoSelect={openDetails} /> : null}
+      {featuredItems.length > 0 ? (
+        <HeroBanner
+          items={featuredItems}
+          onInfoSelect={openDetails}
+          preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
+          watchBasePath={experience.watchBasePath}
+        />
+      ) : null}
 
-      {/* Discovery error notice */}
       {discoveryError && sections.length === 0 ? (
         <div className="mx-auto max-w-7xl px-6 py-6 md:px-12">
           <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-200">
@@ -318,10 +353,10 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
         </div>
       ) : null}
 
-      {/* Browse rows */}
       <div className="space-y-10 py-8">
         {recentlyWatched.length > 0 ? (
           <BrowseRow
+            anchorId="recently-watched"
             key="recently-watched"
             title="Recently Watched"
             entries={recentlyWatched}
@@ -331,14 +366,26 @@ export function HomePage({ sections, discoveryError }: HomePageProps) {
           />
         ) : null}
         {sections.map((section) => (
-          <BrowseRow key={section.id} title={section.title} entries={section.entries} onEntrySelect={openDetails} />
+          <BrowseRow
+            anchorId={section.id}
+            key={section.id}
+            title={section.title}
+            entries={section.entries}
+            onEntrySelect={openDetails}
+          />
         ))}
       </div>
 
-      <MediaDetailsModal entry={selectedEntry} onClose={closeDetails} onSelectEntry={selectDetailsEntry} />
+      <MediaDetailsModal
+        entry={selectedEntry}
+        experience={experience}
+        onClose={closeDetails}
+        onSelectEntry={selectDetailsEntry}
+        preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
+      />
 
       <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-600 md:px-12">
-        Metadata and artwork provided by The Movie Database.
+        {experience.footerText}
       </footer>
     </main>
   );

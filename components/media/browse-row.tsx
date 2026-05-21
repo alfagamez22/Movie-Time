@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Info, Play, X } from 'lucide-react';
 import type { LibraryMediaEntry } from '@/lib/media/types';
 
 interface BrowseRowProps {
+  anchorId?: string;
   entries: LibraryMediaEntry[];
   loop?: boolean;
   onEntryRemove?: (entry: LibraryMediaEntry) => void;
@@ -119,7 +120,7 @@ function PosterCard({
               {entry.title}
             </p>
             {typeof entry.rating === 'number' && !isRecentlyWatched ? (
-              <p className="mt-0.5 text-[11px] font-medium text-amber-400">★ {entry.rating}</p>
+              <p className="mt-0.5 text-[11px] font-medium text-amber-400">* {entry.rating}</p>
             ) : null}
             <div className={`mt-2 flex items-center gap-2 ${progress ? 'justify-between' : 'justify-stretch'}`}>
               {progress ? (
@@ -160,7 +161,7 @@ function PosterCard({
   );
 }
 
-export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, title }: BrowseRowProps) {
+export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEntrySelect, title }: BrowseRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
@@ -188,12 +189,12 @@ export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, 
     if (!el || isJumping.current) return;
     const third = el.scrollWidth / 3;
     if (el.scrollLeft >= third * 2) {
-      // Entered copy3 → jump back to copy2
+      // Entered copy3, jump back to copy2.
       isJumping.current = true;
       el.scrollLeft -= third;
       setTimeout(() => { isJumping.current = false; }, 80);
     } else if (el.scrollLeft < 4) {
-      // Entered copy1 boundary → jump forward to copy2
+      // Entered copy1 boundary, jump forward to copy2.
       isJumping.current = true;
       el.scrollLeft += third;
       setTimeout(() => { isJumping.current = false; }, 80);
@@ -210,7 +211,7 @@ export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, 
 
   const scroll = (dir: 'left' | 'right') => {
     if (!rowRef.current) return;
-    // 80% of viewport width per click — feels like one full "page" shift
+    // 80% of viewport width per click feels like one full "page" shift.
     const amount = rowRef.current.clientWidth * 0.8;
     rowRef.current.scrollBy({ left: dir === 'left' ? -amount : amount, behavior: 'smooth' });
   };
@@ -221,7 +222,7 @@ export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, 
   const rowItems = shouldLoop ? [...entries, ...entries, ...entries] : entries;
 
   return (
-    <div className="group/row">
+    <div id={anchorId} className="group/row scroll-mt-24">
       <h2 className="mb-3 px-5 text-base font-bold text-white sm:px-6 md:px-12 md:text-lg">{title}</h2>
       <div className="relative">
         {/* Left arrow */}
@@ -234,14 +235,14 @@ export function BrowseRow({ entries, loop = true, onEntryRemove, onEntrySelect, 
           <ChevronLeft className="h-7 w-7 text-white drop-shadow-md" />
         </button>
 
-        {/* No scroll-smooth class — direct el.scrollLeft assignments stay instant (for the silent jump) */}
+        {/* No scroll-smooth class so direct el.scrollLeft assignments stay instant for the silent jump. */}
         <div
           ref={rowRef}
           className="flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-hide sm:px-6 md:gap-2 md:px-12"
         >
           {rowItems.map((entry, i) => (
             <PosterCard
-              key={`${shouldLoop ? 'loop' : 'single'}-${i}-${entry.type}:${entry.tmdbId}`}
+              key={`${shouldLoop ? 'loop' : 'single'}-${i}-${entry.provider}:${entry.type}:${entry.id}`}
               entry={entry}
               onRemove={onEntryRemove}
               onSelect={onEntrySelect}

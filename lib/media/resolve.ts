@@ -32,8 +32,8 @@ async function lookupById(tmdbId: string, typeHint?: MediaType): Promise<MediaEn
   return null;
 }
 
-export function buildCanonicalMediaSlug(entry: Pick<MediaEntry, 'title' | 'tmdbId'>): string {
-  return normalizeSlug(entry.title) || entry.tmdbId;
+export function buildCanonicalMediaSlug(entry: Pick<MediaEntry, 'id' | 'title'>): string {
+  return normalizeSlug(entry.title) || entry.id;
 }
 
 export async function resolveLiveMediaEntry(
@@ -75,7 +75,7 @@ export async function resolveLiveMediaEntry(
   const normalizedIdentifier = normalizeSlug(trimmedIdentifier);
   const exactMatch = search.entries.find((candidate) => normalizeSlug(candidate.title) === normalizedIdentifier);
   const selectedEntry = exactMatch ?? search.entries[0];
-  const entry = await lookupById(selectedEntry.tmdbId, selectedEntry.type);
+  const entry = await lookupById(selectedEntry.id, selectedEntry.type);
 
   if (!entry) {
     return null;

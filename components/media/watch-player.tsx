@@ -5,17 +5,36 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
-import { buildEmbedUrl, buildVideasyEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
-import { usePlayerPreference } from '@/lib/hooks/use-player-preference';
+import type { MediaExperienceConfig } from '@/lib/media/experience';
+import {
+  buildEmbedUrl,
+  buildMegaPlayEmbedUrl,
+  buildVideasyEmbedUrl,
+  type PlaybackOptions,
+} from '@/lib/media/embed';
+import {
+  ANIME_LANGUAGE_LABELS,
+  useAnimeLanguagePreference,
+  usePlayerPreference,
+  type AnimeLanguageChoice,
+} from '@/lib/hooks/use-player-preference';
 import {
   requestHomeScrollRestore,
   trackRecentlyWatched,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
-import { getEpisodeLimit, isTvEntry, type EpisodePreview, type MediaEntry, type SeasonDetails } from '@/lib/media/types';
+import {
+  getEpisodeLimit,
+  isAnimeProvider,
+  isTvEntry,
+  type EpisodePreview,
+  type MediaEntry,
+  type SeasonDetails,
+} from '@/lib/media/types';
 
 interface WatchPlayerProps {
   entry: MediaEntry;
+  experience: MediaExperienceConfig;
   initialPlayback: PlaybackOptions;
   initialSeasonDetails?: SeasonDetails | null;
 }
@@ -25,6 +44,8 @@ interface NormalizedPlayerProgress {
   progressPercent?: number;
   progressSeconds: number;
 }
+
+const ANIME_EPISODE_GROUP_SIZE = 50;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -120,8 +141,57 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
   };
 }
 
-export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = null }: WatchPlayerProps) {
+function LoadingOverlay({
+  isAnime,
+  isLoading,
+  onSwitchLanguage,
+  showFallback,
+}: {
+  isAnime: boolean;
+  isLoading: boolean;
+  onSwitchLanguage?: () => void;
+  showFallback: boolean;
+}) {
+  if (!isLoading && !showFallback) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55 px-6 backdrop-blur-sm">
+      <div className="pointer-events-auto max-w-md rounded-2xl border border-white/10 bg-black/75 p-5 text-center shadow-2xl">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
+          {showFallback ? 'Playback Check' : 'Loading Player'}
+        </p>
+        <h2 className="mt-3 text-xl font-bold text-white">
+          {showFallback ? 'The embedded player did not finish loading.' : 'Preparing your stream...'}
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+          {showFallback
+            ? 'Reload this episode or switch the available playback option if the stream stays blank.'
+            : 'Opening the stream wrapper now.'}
+        </p>
+        {showFallback && isAnime && onSwitchLanguage ? (
+          <button
+            type="button"
+            onClick={onSwitchLanguage}
+            className="mt-4 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Switch Sub/Dub
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function WatchPlayer({
+  entry,
+  experience,
+  initialPlayback,
+  initialSeasonDetails = null,
+}: WatchPlayerProps) {
   const router = useRouter();
+  const isAnime = isAnimeProvider(entry.provider);
   const isSeries = isTvEntry(entry);
 
   const [season, setSeason] = useState(initialPlayback.season);
@@ -129,11 +199,15 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
   const [activeSeasonDetails, setActiveSeasonDetails] = useState<SeasonDetails | null>(initialSeasonDetails);
   const [seasonDetailsError, setSeasonDetailsError] = useState<string | null>(null);
   const [isChromeVisible, setIsChromeVisible] = useState(true);
+  const [isPlayerLoading, setIsPlayerLoading] = useState(true);
+  const [showPlayerFallback, setShowPlayerFallback] = useState(false);
+  const [animeLanguage, setAnimeLanguage] = useState(initialPlayback.language);
   const { player } = usePlayerPreference();
+  const { setLanguage: setStoredAnimeLanguage } = useAnimeLanguagePreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
-  const latestProgressRef = useRef<number | null>(initialPlayback.progress);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -141,40 +215,62 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
   const safeEpisodeLimit = isSeries
     ? (activeSeasonDetails?.episodeCount ?? getEpisodeLimit(entry, safeSeason))
     : 1;
-  const safeEpisode = isSeries
-    ? String(Math.min(Math.max(1, Number.parseInt(episode, 10)), safeEpisodeLimit))
-    : '1';
+  const safeEpisode = String(Math.min(Math.max(1, Number.parseInt(episode, 10)), safeEpisodeLimit));
+  const effectiveLanguage = isAnime ? animeLanguage : initialPlayback.language;
 
-  const seasonOptions = isSeries
-    ? Array.from({ length: entry.maxSeasons }, (_, i) => String(i + 1))
+  const seasonOptions = !isAnime && isSeries
+    ? Array.from({ length: entry.maxSeasons }, (_, index) => String(index + 1))
     : [];
   const episodeOptions = isSeries
-    ? Array.from({ length: safeEpisodeLimit }, (_, i) => String(i + 1))
+    ? Array.from({ length: safeEpisodeLimit }, (_, index) => String(index + 1))
     : [];
 
-  const seasonEpisodeCards: EpisodePreview[] =
-    activeSeasonDetails?.episodes ??
-    episodeOptions.map((epNum) => ({
-      airDate: undefined,
-      episodeNumber: Number.parseInt(epNum, 10),
-      name: `Episode ${epNum.padStart(2, '0')}`,
-      overview: '',
-      runtime: undefined,
-      seasonNumber: Number.parseInt(safeSeason, 10),
-      stillUrl: undefined,
-    }));
+  const seasonEpisodeCards: EpisodePreview[] = (activeSeasonDetails?.episodes ?? []).length > 0
+    ? activeSeasonDetails?.episodes ?? []
+    : episodeOptions.map((episodeNumber) => ({
+        airDate: undefined,
+        episodeNumber: Number.parseInt(episodeNumber, 10),
+        name: `Episode ${episodeNumber.padStart(2, '0')}`,
+        overview: '',
+        runtime: undefined,
+        seasonNumber: isAnime ? 1 : Number.parseInt(safeSeason, 10),
+        stillUrl: isAnime ? entry.backdropUrl ?? entry.posterUrl : undefined,
+      }));
 
-  const playbackOptions = { ...initialPlayback, season: safeSeason, episode: safeEpisode };
-  const embedUrl = player === '1'
-    ? buildVideasyEmbedUrl(entry, playbackOptions)
-    : buildEmbedUrl(entry, playbackOptions);
+  const playbackOptions = {
+    ...initialPlayback,
+    episode: safeEpisode,
+    language: effectiveLanguage,
+    season: safeSeason,
+  };
+  const embedUrl = isAnime
+    ? buildMegaPlayEmbedUrl(entry, playbackOptions)
+    : player === '1'
+      ? buildVideasyEmbedUrl(entry, playbackOptions)
+      : buildEmbedUrl(entry, playbackOptions);
 
   useEffect(() => {
-    trackRecentlyWatched(entry, {
-      episode: isSeries ? safeEpisode : undefined,
-      season: isSeries ? safeSeason : undefined,
-    });
-  }, [entry, isSeries, safeEpisode, safeSeason]);
+    const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
+    trackRecentlyWatched(
+      trackingEntry,
+      {
+        episode: isSeries ? safeEpisode : undefined,
+        season: !isAnime && isSeries ? safeSeason : undefined,
+      },
+      experience.id,
+    );
+  }, [effectiveLanguage, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
+
+  useEffect(() => {
+    hasIframeLoadedRef.current = false;
+    const timeoutId = window.setTimeout(() => {
+      if (hasIframeLoadedRef.current) return;
+      setIsPlayerLoading(false);
+      setShowPlayerFallback(true);
+    }, isAnime ? 20000 : 12000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [embedUrl, isAnime]);
 
   useEffect(() => {
     const expectedOrigin = new URL(embedUrl).origin;
@@ -183,62 +279,72 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (event.origin !== expectedOrigin) return;
 
+      hasIframeLoadedRef.current = true;
+      setIsPlayerLoading(false);
+      setShowPlayerFallback(false);
+
       const progress = extractPlayerProgress(event.data);
       if (!progress) return;
-      latestProgressRef.current = progress.progressSeconds;
 
       const now = Date.now();
       if (now - lastProgressWriteRef.current < 5_000 && progress.progressPercent !== 100) return;
       lastProgressWriteRef.current = now;
 
-      trackRecentlyWatched(entry, {
-        durationSeconds: progress.durationSeconds,
-        episode: isSeries ? safeEpisode : undefined,
-        progressPercent: progress.progressPercent,
-        progressSeconds: progress.progressSeconds,
-        season: isSeries ? safeSeason : undefined,
-      });
+      const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
+      trackRecentlyWatched(
+        trackingEntry,
+        {
+          durationSeconds: progress.durationSeconds,
+          episode: isSeries ? safeEpisode : undefined,
+          progressPercent: progress.progressPercent,
+          progressSeconds: progress.progressSeconds,
+          season: !isAnime && isSeries ? safeSeason : undefined,
+        },
+        experience.id,
+      );
     };
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [embedUrl, entry, isSeries, safeEpisode, safeSeason]);
+  }, [effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
 
-  // Keep URL in sync with current season/episode
   useEffect(() => {
-    if (!isSeries) return;
-    const href = buildWatchHref(entry, {
-      autoPlay: initialPlayback.autoPlay,
-      color: initialPlayback.color,
-      episode: safeEpisode,
-      progress: null,
-      season: safeSeason,
-    });
+    const href = isAnime
+      ? buildWatchHref(entry, {
+          basePath: experience.watchBasePath,
+          episode: safeEpisode,
+          language: effectiveLanguage,
+        })
+      : buildWatchHref(entry, {
+          autoPlay: initialPlayback.autoPlay,
+          basePath: experience.watchBasePath,
+          color: initialPlayback.color,
+          episode: safeEpisode,
+          progress: null,
+          season: safeSeason,
+        });
 
     if (`${window.location.pathname}${window.location.search}` === href) return;
 
     startTransition(() => router.replace(href, { scroll: false }));
   }, [
-    safeSeason,
-    safeEpisode,
-    entry.title,
-    entry.tmdbId,
-    entry.type,
+    effectiveLanguage,
     entry,
+    experience.watchBasePath,
     initialPlayback.autoPlay,
     initialPlayback.color,
+    isAnime,
     router,
-    isSeries,
+    safeEpisode,
+    safeSeason,
   ]);
 
-  // Auto-hide chrome in theater mode — called on mouse move and when entering theater
   const revealChrome = useCallback(() => {
     setIsChromeVisible(true);
     if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
     chromeTimerRef.current = setTimeout(() => setIsChromeVisible(false), 3000);
   }, []);
 
-  // Clear any lingering timer on unmount
   useEffect(() => {
     return () => {
       if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
@@ -247,76 +353,124 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
 
   const handleSeasonChange = useCallback(
     async (newSeason: string) => {
+      if (isAnime) {
+        return;
+      }
+
+      setIsPlayerLoading(true);
+      setShowPlayerFallback(false);
       setSeason(newSeason);
       setEpisode('1');
       setActiveSeasonDetails(null);
       setSeasonDetailsError(null);
 
       try {
-        const resp = await fetch(
-          `/api/media/${encodeURIComponent(entry.slug)}/seasons/${newSeason}?type=${entry.type}&id=${entry.tmdbId}`,
+        const response = await fetch(
+          `/api/media/${encodeURIComponent(entry.slug)}/seasons/${newSeason}?type=${entry.type}&id=${entry.id}`,
         );
-        if (!resp.ok) throw new Error('Season fetch failed');
-        const json: { data: SeasonDetails } = await resp.json();
+        if (!response.ok) throw new Error('Season fetch failed');
+        const json: { data: SeasonDetails } = await response.json();
         setActiveSeasonDetails(json.data);
       } catch {
         setSeasonDetailsError('Could not load episode list for this season.');
       }
     },
-    [entry.slug, entry.type, entry.tmdbId],
+    [entry.id, entry.slug, entry.type, isAnime],
   );
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
+    setIsPlayerLoading(true);
+    setShowPlayerFallback(false);
     setEpisode(newEpisode);
   }, []);
 
+  const handleAnimeLanguageChange = useCallback(
+    (nextLanguage: AnimeLanguageChoice) => {
+      setIsPlayerLoading(true);
+      setShowPlayerFallback(false);
+      setAnimeLanguage(nextLanguage);
+      setStoredAnimeLanguage(nextLanguage);
+    },
+    [setStoredAnimeLanguage],
+  );
+
   const handleBackToLibrary = useCallback(() => {
-    requestHomeScrollRestore();
-    router.push('/', { scroll: false });
-  }, [router]);
+    requestHomeScrollRestore(experience.id);
+    router.push(experience.homeHref, { scroll: false });
+  }, [experience.homeHref, experience.id, router]);
+
+  const handleSwitchAnimeLanguage = useCallback(() => {
+    handleAnimeLanguageChange(animeLanguage === 'sub' ? 'dub' : 'sub');
+  }, [animeLanguage, handleAnimeLanguageChange]);
 
   return (
-      <div
-        onMouseMove={revealChrome}
-        className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
-      >
-        {/* Left: player */}
-        <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
-          <button
-            type="button"
-            onClick={handleBackToLibrary}
-            aria-label="Back to library"
-            title="Back to library"
-            className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
+    <div
+      onMouseMove={revealChrome}
+      className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
+    >
+      <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
+        <button
+          type="button"
+          onClick={handleBackToLibrary}
+          aria-label="Back to library"
+          title="Back to library"
+          className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
 
-          <div
-            className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
-              isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
-            }`}
-          >
-            <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
-              {entry.title}
-              {isSeries && ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`}
-            </span>
-          </div>
-
-          <iframe
-            key={`${player}-${safeSeason}-${safeEpisode}`}
-            ref={iframeRef}
-            src={embedUrl}
-            className="h-full w-full border-0"
-            allowFullScreen
-            allow="autoplay; fullscreen; picture-in-picture"
-            referrerPolicy="strict-origin-when-cross-origin"
-            title={`Watch ${entry.title}`}
-          />
+        <div
+          className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
+            isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
+            {entry.title}
+            {isSeries ? (isAnime ? ` EP ${safeEpisode.padStart(2, '0')}` : ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`) : ''}
+          </span>
         </div>
 
-        {/* Right: episode sidebar */}
-        {isSeries && (
+        <LoadingOverlay
+          isAnime={isAnime}
+          isLoading={isPlayerLoading}
+          onSwitchLanguage={isAnime ? handleSwitchAnimeLanguage : undefined}
+          showFallback={showPlayerFallback}
+        />
+
+        <iframe
+          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${safeSeason}-${safeEpisode}`}
+          ref={iframeRef}
+          src={embedUrl}
+          className="h-full w-full border-0"
+          allowFullScreen
+          allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+          onError={() => {
+            hasIframeLoadedRef.current = false;
+            setIsPlayerLoading(false);
+            setShowPlayerFallback(true);
+          }}
+          onLoad={() => {
+            hasIframeLoadedRef.current = true;
+            setIsPlayerLoading(false);
+            setShowPlayerFallback(false);
+          }}
+          referrerPolicy="strict-origin-when-cross-origin"
+          title={`Watch ${entry.title}`}
+        />
+      </div>
+
+      {isSeries ? (
+        isAnime ? (
+          <AnimeEpisodeSidebar
+            key={entry.id}
+            episodeCards={seasonEpisodeCards}
+            language={effectiveLanguage}
+            onEpisodeChange={handleEpisodeChange}
+            onLanguageChange={handleAnimeLanguageChange}
+            safeEpisode={safeEpisode}
+            safeEpisodeLimit={safeEpisodeLimit}
+          />
+        ) : (
           <EpisodeSidebar
             safeSeason={safeSeason}
             safeEpisode={safeEpisode}
@@ -324,25 +478,24 @@ export function WatchPlayer({ entry, initialPlayback, initialSeasonDetails = nul
             seasonOptions={seasonOptions}
             seasonEpisodeCards={seasonEpisodeCards}
             seasonDetailsError={seasonDetailsError}
-            onSeasonChange={(s) => void handleSeasonChange(s)}
+            onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
             onEpisodeChange={handleEpisodeChange}
           />
-        )}
-      </div>
+        )
+      ) : null}
+    </div>
   );
 }
 
-// Shared episode sidebar used in both theater and normal mode
-
 interface EpisodeSidebarProps {
-  safeSeason: string;
+  onEpisodeChange: (episode: string) => void;
+  onSeasonChange: (season: string) => void;
   safeEpisode: string;
   safeEpisodeLimit: number;
-  seasonOptions: string[];
-  seasonEpisodeCards: EpisodePreview[];
+  safeSeason: string;
   seasonDetailsError: string | null;
-  onSeasonChange: (season: string) => void;
-  onEpisodeChange: (episode: string) => void;
+  seasonEpisodeCards: EpisodePreview[];
+  seasonOptions: string[];
 }
 
 function EpisodeSidebar({
@@ -360,67 +513,175 @@ function EpisodeSidebar({
       <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <select
           value={safeSeason}
-          onChange={(e) => onSeasonChange(e.target.value)}
+          onChange={(event) => onSeasonChange(event.target.value)}
           className="cursor-pointer bg-transparent text-sm font-semibold text-white outline-none"
           title="Select season"
           aria-label="Select season"
         >
-          {seasonOptions.map((s) => (
-            <option key={s} value={s} className="bg-[#1a1a1a] text-white">
-              Season {s}
+          {seasonOptions.map((season) => (
+            <option key={season} value={season} className="bg-[#1a1a1a] text-white">
+              Season {season}
             </option>
           ))}
         </select>
         <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
       </div>
 
-      <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-        {seasonEpisodeCards.map((ep) => {
-          const epNum = String(ep.episodeNumber);
-          const isActive = epNum === safeEpisode;
-          return (
-            <button
-              key={epNum}
-              type="button"
-              onClick={() => onEpisodeChange(epNum)}
-              className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
-                isActive ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
-              }`}
-            >
-              <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
-                {isActive && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white">
-                      <div className="ml-0.5 border-b-[5px] border-l-[8px] border-t-[5px] border-b-transparent border-t-transparent border-l-white" />
-                    </div>
-                  </div>
-                )}
-                {ep.stillUrl ? (
-                  <Image src={ep.stillUrl} alt="" fill sizes="112px" className="object-cover" priority={isActive} />
-                ) : (
-                  <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1 py-0.5">
-                <p className="mb-0.5 text-[11px] text-zinc-400">
-                  E{epNum}
-                  {ep.runtime != null ? ` · ${ep.runtime}m` : ''}
-                </p>
-                <p className="line-clamp-1 text-xs font-medium text-white">{ep.name}</p>
-                {ep.overview ? (
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">{ep.overview}</p>
-                ) : null}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      <EpisodeCardList cards={seasonEpisodeCards} onEpisodeChange={onEpisodeChange} safeEpisode={safeEpisode} />
 
-      {seasonDetailsError && (
+      {seasonDetailsError ? (
         <div className="m-3 shrink-0 rounded-lg border border-amber-400/20 bg-amber-400/5 p-2 text-xs text-amber-200">
           {seasonDetailsError}
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+function AnimeEpisodeSidebar({
+  episodeCards,
+  language,
+  onEpisodeChange,
+  onLanguageChange,
+  safeEpisode,
+  safeEpisodeLimit,
+}: {
+  episodeCards: EpisodePreview[];
+  language: 'dub' | 'sub';
+  onEpisodeChange: (episode: string) => void;
+  onLanguageChange: (language: 'dub' | 'sub') => void;
+  safeEpisode: string;
+  safeEpisodeLimit: number;
+}) {
+  const [selectedGroupStart, setSelectedGroupStart] = useState(() => {
+    const episodeNumber = Number.parseInt(safeEpisode, 10);
+    return Math.floor((Math.max(episodeNumber, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) * ANIME_EPISODE_GROUP_SIZE + 1;
+  });
+
+  const episodeGroups = Array.from({ length: Math.ceil(safeEpisodeLimit / ANIME_EPISODE_GROUP_SIZE) }, (_, index) => {
+    const startEpisode = index * ANIME_EPISODE_GROUP_SIZE + 1;
+    const endEpisode = Math.min(safeEpisodeLimit, startEpisode + ANIME_EPISODE_GROUP_SIZE - 1);
+
+    return {
+      endEpisode,
+      label: `${startEpisode}-${endEpisode}`,
+      value: String(startEpisode),
+    };
+  });
+
+  const visibleEpisodeCards =
+    episodeGroups.length > 1
+      ? episodeCards.filter(
+          (episode) =>
+            episode.episodeNumber >= selectedGroupStart &&
+            episode.episodeNumber < selectedGroupStart + ANIME_EPISODE_GROUP_SIZE,
+        )
+      : episodeCards;
+
+  return (
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#101014] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
+      <div className="space-y-3 border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-white">Episode List</span>
+          <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
+        </div>
+        <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+          {(['sub', 'dub'] as const).map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              onClick={() => onLanguageChange(choice)}
+              className={`rounded-full px-3 py-1 font-medium transition-colors ${
+                language === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              {ANIME_LANGUAGE_LABELS[choice]}
+            </button>
+          ))}
+        </div>
+        {episodeGroups.length > 1 ? (
+          <div className="space-y-1">
+            <label htmlFor="anime-episode-group" className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+              Episode Range
+            </label>
+            <select
+              id="anime-episode-group"
+              value={String(selectedGroupStart)}
+              onChange={(event) => setSelectedGroupStart(Number.parseInt(event.target.value, 10))}
+              className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/20"
+              aria-label="Select episode range"
+            >
+              {episodeGroups.map((group) => (
+                <option key={group.value} value={group.value} className="bg-[#111] text-white">
+                  Episodes {group.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+      </div>
+
+      <EpisodeCardList
+        key={selectedGroupStart}
+        cards={visibleEpisodeCards}
+        onEpisodeChange={onEpisodeChange}
+        safeEpisode={safeEpisode}
+      />
+    </div>
+  );
+}
+
+function EpisodeCardList({
+  cards,
+  onEpisodeChange,
+  safeEpisode,
+}: {
+  cards: EpisodePreview[];
+  onEpisodeChange: (episode: string) => void;
+  safeEpisode: string;
+}) {
+  return (
+    <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+      {cards.map((episode) => {
+        const episodeNumber = String(episode.episodeNumber);
+        const isActive = episodeNumber === safeEpisode;
+
+        return (
+          <button
+            key={episodeNumber}
+            type="button"
+            onClick={() => onEpisodeChange(episodeNumber)}
+            className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
+              isActive ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
+            }`}
+          >
+            <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
+              {isActive ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white">
+                    <div className="ml-0.5 border-b-[5px] border-l-[8px] border-t-[5px] border-b-transparent border-t-transparent border-l-white" />
+                  </div>
+                </div>
+              ) : null}
+              {episode.stillUrl ? (
+                <Image src={episode.stillUrl} alt="" fill sizes="112px" className="object-cover" priority={isActive} />
+              ) : (
+                <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 py-0.5">
+              <p className="mb-0.5 text-[11px] text-zinc-400">
+                E{episodeNumber}
+                {episode.runtime != null ? ` · ${episode.runtime}m` : ''}
+              </p>
+              <p className="line-clamp-1 text-xs font-medium text-white">{episode.name}</p>
+              {episode.overview ? (
+                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">{episode.overview}</p>
+              ) : null}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

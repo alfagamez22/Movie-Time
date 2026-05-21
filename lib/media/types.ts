@@ -1,5 +1,9 @@
 export type MediaType = 'movie' | 'tv';
 export type BrowseMediaType = MediaType | 'all';
+export type MediaProvider = 'tmdb' | 'anilist' | 'anikoto';
+export type MediaExperience = 'papiflix' | 'papianime';
+export type PlaybackLanguage = 'sub' | 'dub';
+export type AnimeFormat = 'TV' | 'TV_SHORT' | 'MOVIE' | 'SPECIAL' | 'OVA' | 'ONA' | 'MUSIC';
 
 export interface EpisodePreview {
   airDate?: string;
@@ -22,13 +26,22 @@ export interface SeasonDetails {
 }
 
 interface CatalogEntryBase {
+  animeFormat?: AnimeFormat;
+  anilistId?: string;
   backdropUrl?: string;
+  defaultLanguage?: PlaybackLanguage;
+  episodeCount?: number;
+  episodeEmbedIds?: Record<string, string>;
+  id: string;
+  malId?: string;
   posterUrl?: string;
-  tmdbId: string;
+  provider: MediaProvider;
+  rating?: number;
   title: string;
   slug?: string;
   aliases?: string[];
   synopsis: string;
+  voteCount?: number;
   year?: number;
 }
 
@@ -52,12 +65,19 @@ interface MediaEntryBase extends Omit<CatalogEntryBase, 'slug' | 'aliases'> {
 }
 
 export interface LibraryMediaEntry {
+  animeFormat?: AnimeFormat;
+  anilistId?: string;
   backdropUrl?: string;
+  defaultLanguage?: PlaybackLanguage;
+  episodeCount?: number;
+  episodeEmbedIds?: Record<string, string>;
+  id: string;
+  malId?: string;
   posterUrl?: string;
+  provider: MediaProvider;
   rating?: number;
   synopsis: string;
   title: string;
-  tmdbId: string;
   type: MediaType;
   voteCount?: number;
   year?: number;
@@ -77,10 +97,19 @@ export interface MediaCastMember {
   profileUrl?: string;
 }
 
+export interface MediaTrailer {
+  embedUrl?: string;
+  thumbnailUrl?: string;
+  title: string;
+  url: string;
+  youtubeId?: string;
+}
+
 export interface MediaDetailsPayload {
   cast: MediaCastMember[];
   entry: MediaEntry;
   recommendations: LibraryMediaEntry[];
+  trailers: MediaTrailer[];
 }
 
 export interface MovieMediaEntry extends MediaEntryBase {
@@ -101,18 +130,45 @@ export function isTvEntry(entry: CatalogEntry | MediaEntry): entry is TvCatalogE
   return entry.type === 'tv';
 }
 
+export function isAnimeProvider(provider: MediaProvider): boolean {
+  return provider === 'anilist' || provider === 'anikoto';
+}
+
 export function toLibraryMediaEntry(entry: CatalogEntry | MediaEntry): LibraryMediaEntry {
   return {
+    animeFormat: entry.animeFormat,
+    anilistId: entry.anilistId,
     backdropUrl: entry.backdropUrl,
+    defaultLanguage: entry.defaultLanguage,
+    episodeCount: entry.episodeCount,
+    episodeEmbedIds: entry.episodeEmbedIds,
+    id: entry.id,
+    malId: entry.malId,
     posterUrl: entry.posterUrl,
+    provider: entry.provider,
+    rating: entry.rating,
     synopsis: entry.synopsis,
     title: entry.title,
-    tmdbId: entry.tmdbId,
     type: entry.type,
+    voteCount: entry.voteCount,
     year: entry.year,
   };
 }
 
 export function getEpisodeLimit(entry: TvCatalogEntry | TvMediaEntry, season: string | number): number {
   return entry.episodesBySeason?.[String(season)] ?? entry.maxEpisodes;
+}
+
+export function getMediaKindLabel(
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'animeFormat' | 'provider' | 'type'>,
+): string {
+  if (isAnimeProvider(entry.provider)) {
+    if (entry.type === 'movie') {
+      return 'Anime Movie';
+    }
+
+    return entry.animeFormat === 'TV_SHORT' ? 'Anime Short' : 'Anime Series';
+  }
+
+  return entry.type === 'movie' ? 'Movie' : 'TV Series';
 }

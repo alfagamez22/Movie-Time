@@ -20,7 +20,7 @@ export async function GET(request: Request, context: MediaDetailsRouteContext) {
     return NextResponse.json({ error: 'Media entry not found.' }, { status: 404 });
   }
 
-  const details = await lookupTmdbMediaDetails(resolvedEntry.entry.tmdbId, resolvedEntry.entry.type);
+  const details = await lookupTmdbMediaDetails(resolvedEntry.entry.id, resolvedEntry.entry.type);
   if (!details.ok) {
     return NextResponse.json({ error: details.message }, { status: details.status });
   }

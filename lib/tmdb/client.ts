@@ -554,11 +554,12 @@ function createLibraryEntryFromBrowseResult(
 
   return {
     backdropUrl: buildTmdbImageUrl(result.backdrop_path),
+    id: String(result.id),
     posterUrl: buildTmdbImageUrl(result.poster_path, 'w300'),
+    provider: 'tmdb',
     rating: normalizeRating(result.vote_average),
     synopsis: result.overview?.trim() || '',
     title: title.trim(),
-    tmdbId: String(result.id),
     type,
     voteCount: typeof result.vote_count === 'number' ? result.vote_count : undefined,
     year: getReleaseYear(type === 'movie' ? result.release_date : result.first_air_date),
@@ -569,12 +570,15 @@ function createMovieEntry(response: TmdbMovieResponse, tmdbId: string): MovieMed
   return {
     aliases: [],
     backdropUrl: buildTmdbImageUrl(response.backdrop_path),
+    id: tmdbId,
     posterUrl: buildTmdbImageUrl(response.poster_path, 'w300'),
+    provider: 'tmdb',
+    rating: normalizeRating(response.vote_average),
     slug: tmdbId,
     synopsis: response.overview?.trim() || '',
     title: response.title,
-    tmdbId,
     type: 'movie',
+    voteCount: typeof response.vote_count === 'number' ? response.vote_count : undefined,
     year: getReleaseYear(response.release_date),
   };
 }
@@ -590,15 +594,18 @@ function createTvEntry(response: TmdbTvResponse, tmdbId: string): TvMediaEntry {
     aliases: [],
     backdropUrl: buildTmdbImageUrl(response.backdrop_path),
     episodesBySeason,
+    id: tmdbId,
     maxEpisodes: seasonEpisodeCounts.length > 0 ? Math.max(...seasonEpisodeCounts) : fallbackEpisodeCount,
     maxSeasons: seasonNumbers.length > 0 ? Math.max(...seasonNumbers) : fallbackSeasonCount,
     posterUrl: buildTmdbImageUrl(response.poster_path, 'w300'),
+    provider: 'tmdb',
+    rating: normalizeRating(response.vote_average),
     slug: tmdbId,
     synopsis: response.overview?.trim() || '',
     title: response.name,
-    tmdbId,
     totalEpisodes: fallbackEpisodeCount,
     type: 'tv',
+    voteCount: typeof response.vote_count === 'number' ? response.vote_count : undefined,
     year: getReleaseYear(response.first_air_date),
   };
 }
@@ -633,7 +640,7 @@ function takeDistinctEntries(entries: Array<LibraryMediaEntry | null>, limit = 1
       return;
     }
 
-    uniqueEntries.set(`${entry.type}:${entry.tmdbId}`, entry);
+    uniqueEntries.set(`${entry.provider}:${entry.type}:${entry.id}`, entry);
   });
 
   return Array.from(uniqueEntries.values()).slice(0, limit);
@@ -871,6 +878,7 @@ export async function lookupTmdbMediaDetails(tmdbId: string, type: MediaType): P
       cast,
       entry: entryLookup.entry,
       recommendations,
+      trailers: [],
     },
     ok: true,
   };

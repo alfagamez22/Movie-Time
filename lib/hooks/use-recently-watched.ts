@@ -2,15 +2,11 @@
 
 import { useSyncExternalStore } from 'react';
 
-import type { LibraryMediaEntry, MediaEntry } from '@/lib/media/types';
+import type { LibraryMediaEntry, MediaEntry, MediaExperience } from '@/lib/media/types';
 
-const RECENTLY_WATCHED_KEY = 'papiflix-recently-watched-v1';
-const RECENTLY_WATCHED_COOKIE = 'papiflix_recently_watched_v1';
-const RECENTLY_WATCHED_EVENT = 'papiflix-recently-watched-change';
-const HOME_SCROLL_KEY = 'papiflix-home-scroll-y';
-const RESTORE_HOME_SCROLL_KEY = 'papiflix-restore-home-scroll';
 const MAX_RECENTLY_WATCHED = 12;
 const MAX_COOKIE_LENGTH = 3800;
+const EMPTY_RECENTLY_WATCHED: RecentlyWatchedEntry[] = [];
 
 export interface RecentlyWatchedEntry extends LibraryMediaEntry {
   durationSeconds?: number;
@@ -29,9 +25,50 @@ interface TrackPlaybackOptions {
   season?: string;
 }
 
-let cachedRawValue = '';
-let cachedEntries: RecentlyWatchedEntry[] = [];
-const EMPTY_RECENTLY_WATCHED: RecentlyWatchedEntry[] = [];
+interface NamespaceKeys {
+  eventName: string;
+  homeScrollKey: string;
+  recentlyWatchedCookie: string;
+  recentlyWatchedStorageKey: string;
+  restoreHomeScrollKey: string;
+}
+
+type RecentlyWatchedNamespace = MediaExperience;
+
+const rawValueCache = new Map<RecentlyWatchedNamespace, string>();
+const entryCache = new Map<RecentlyWatchedNamespace, RecentlyWatchedEntry[]>();
+
+function getNamespacePrefix(namespace: RecentlyWatchedNamespace): string {
+  return namespace === 'papianime' ? 'papianime' : 'papiflix';
+}
+
+function getNamespaceKeys(namespace: RecentlyWatchedNamespace): NamespaceKeys {
+  const prefix = getNamespacePrefix(namespace);
+
+  return {
+    eventName: `${prefix}-recently-watched-change`,
+    homeScrollKey: `${prefix}-home-scroll-y`,
+    recentlyWatchedCookie: `${prefix}_recently_watched_v1`,
+    recentlyWatchedStorageKey: `${prefix}-recently-watched-v1`,
+    restoreHomeScrollKey: `${prefix}-restore-home-scroll`,
+  };
+}
+
+function getCachedRawValue(namespace: RecentlyWatchedNamespace): string {
+  return rawValueCache.get(namespace) ?? '';
+}
+
+function setCachedRawValue(namespace: RecentlyWatchedNamespace, value: string) {
+  rawValueCache.set(namespace, value);
+}
+
+function getCachedEntries(namespace: RecentlyWatchedNamespace): RecentlyWatchedEntry[] {
+  return entryCache.get(namespace) ?? EMPTY_RECENTLY_WATCHED;
+}
+
+function setCachedEntries(namespace: RecentlyWatchedNamespace, entries: RecentlyWatchedEntry[]) {
+  entryCache.set(namespace, entries);
+}
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -42,25 +79,40 @@ function normalizeEntry(value: unknown): RecentlyWatchedEntry | null {
 
   const entry = value as Partial<RecentlyWatchedEntry>;
   if (
-    typeof entry.tmdbId !== 'string' ||
+    typeof entry.id !== 'string' ||
     typeof entry.title !== 'string' ||
+    typeof entry.provider !== 'string' ||
     (entry.type !== 'movie' && entry.type !== 'tv')
   ) {
     return null;
   }
 
-  return {
-    backdropUrl: typeof entry.backdropUrl === 'string' ? entry.backdropUrl : undefined,
-    durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
-    episode: typeof entry.episode === 'string' ? entry.episode : undefined,
-    posterUrl: typeof entry.posterUrl === 'string' ? entry.posterUrl : undefined,
+    return {
+      animeFormat: typeof entry.animeFormat === 'string' ? entry.animeFormat : undefined,
+      anilistId: typeof entry.anilistId === 'string' ? entry.anilistId : undefined,
+      backdropUrl: typeof entry.backdropUrl === 'string' ? entry.backdropUrl : undefined,
+      defaultLanguage: entry.defaultLanguage === 'dub' ? 'dub' : entry.defaultLanguage === 'sub' ? 'sub' : undefined,
+      durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
+      episode: typeof entry.episode === 'string' ? entry.episode : undefined,
+      episodeCount: typeof entry.episodeCount === 'number' ? entry.episodeCount : undefined,
+      episodeEmbedIds:
+        entry.episodeEmbedIds && typeof entry.episodeEmbedIds === 'object'
+          ? Object.fromEntries(
+              Object.entries(entry.episodeEmbedIds).filter((candidate): candidate is [string, string] => {
+                return typeof candidate[0] === 'string' && typeof candidate[1] === 'string';
+              }),
+            )
+          : undefined,
+      id: entry.id,
+      malId: typeof entry.malId === 'string' ? entry.malId : undefined,
+      posterUrl: typeof entry.posterUrl === 'string' ? entry.posterUrl : undefined,
     progressPercent: typeof entry.progressPercent === 'number' ? entry.progressPercent : undefined,
     progressSeconds: typeof entry.progressSeconds === 'number' ? entry.progressSeconds : undefined,
+      provider: entry.provider === 'anilist' ? 'anilist' : entry.provider === 'anikoto' ? 'anikoto' : 'tmdb',
     rating: typeof entry.rating === 'number' ? entry.rating : undefined,
     season: typeof entry.season === 'string' ? entry.season : undefined,
     synopsis: typeof entry.synopsis === 'string' ? entry.synopsis : '',
     title: entry.title,
-    tmdbId: entry.tmdbId,
     type: entry.type,
     voteCount: typeof entry.voteCount === 'number' ? entry.voteCount : undefined,
     watchedAt: typeof entry.watchedAt === 'number' ? entry.watchedAt : Date.now(),
@@ -76,7 +128,9 @@ function readCookie(name: string): string {
     .split('; ')
     .find((candidate) => candidate.startsWith(prefix));
 
-  if (!cookie) return '';
+  if (!cookie) {
+    return '';
+  }
 
   try {
     return decodeURIComponent(cookie.slice(prefix.length));
@@ -85,9 +139,10 @@ function readCookie(name: string): string {
   }
 }
 
-function writeSessionCookie(entries: RecentlyWatchedEntry[]) {
+function writeSessionCookie(namespace: RecentlyWatchedNamespace, entries: RecentlyWatchedEntry[]) {
   if (!isBrowser()) return;
 
+  const keys = getNamespaceKeys(namespace);
   let cookieEntries = entries;
   let encodedValue = encodeURIComponent(JSON.stringify(cookieEntries));
 
@@ -96,15 +151,18 @@ function writeSessionCookie(entries: RecentlyWatchedEntry[]) {
     encodedValue = encodeURIComponent(JSON.stringify(cookieEntries));
   }
 
-  document.cookie = `${RECENTLY_WATCHED_COOKIE}=${encodedValue}; Path=/; SameSite=Lax`;
+  document.cookie = `${keys.recentlyWatchedCookie}=${encodedValue}; Path=/; SameSite=Lax`;
 }
 
-function readRawRecentlyWatched(): string {
+function readRawRecentlyWatched(namespace: RecentlyWatchedNamespace): string {
   if (!isBrowser()) return '';
+
+  const keys = getNamespaceKeys(namespace);
+
   try {
-    return sessionStorage.getItem(RECENTLY_WATCHED_KEY) || readCookie(RECENTLY_WATCHED_COOKIE);
+    return sessionStorage.getItem(keys.recentlyWatchedStorageKey) || readCookie(keys.recentlyWatchedCookie);
   } catch {
-    return readCookie(RECENTLY_WATCHED_COOKIE);
+    return readCookie(keys.recentlyWatchedCookie);
   }
 }
 
@@ -125,30 +183,34 @@ function parseRecentlyWatched(rawValue: string): RecentlyWatchedEntry[] {
   }
 }
 
-function getRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
-  const rawValue = readRawRecentlyWatched();
-  if (rawValue === cachedRawValue) return cachedEntries;
+function getRecentlyWatchedSnapshot(namespace: RecentlyWatchedNamespace): RecentlyWatchedEntry[] {
+  const rawValue = readRawRecentlyWatched(namespace);
+  if (rawValue === getCachedRawValue(namespace)) {
+    return getCachedEntries(namespace);
+  }
 
-  cachedRawValue = rawValue;
-  cachedEntries = parseRecentlyWatched(rawValue);
-  return cachedEntries;
+  const entries = parseRecentlyWatched(rawValue);
+  setCachedRawValue(namespace, rawValue);
+  setCachedEntries(namespace, entries);
+  return entries;
 }
 
 function getServerRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
   return EMPTY_RECENTLY_WATCHED;
 }
 
-function subscribeRecentlyWatched(onStoreChange: () => void) {
+function subscribeRecentlyWatched(namespace: RecentlyWatchedNamespace, onStoreChange: () => void) {
+  const keys = getNamespaceKeys(namespace);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === RECENTLY_WATCHED_KEY) onStoreChange();
+    if (event.key === keys.recentlyWatchedStorageKey) onStoreChange();
   };
 
   window.addEventListener('storage', onStorage);
-  window.addEventListener(RECENTLY_WATCHED_EVENT, onStoreChange);
+  window.addEventListener(keys.eventName, onStoreChange);
 
   return () => {
     window.removeEventListener('storage', onStorage);
-    window.removeEventListener(RECENTLY_WATCHED_EVENT, onStoreChange);
+    window.removeEventListener(keys.eventName, onStoreChange);
   };
 }
 
@@ -170,63 +232,84 @@ function compactEntry(
   const canCarryProgress =
     entry.type === 'movie' || (previous?.season === options.season && previous?.episode === options.episode);
 
-  return {
-    backdropUrl: entry.backdropUrl,
+    return {
+      animeFormat: entry.animeFormat,
+      anilistId: entry.anilistId,
+      backdropUrl: entry.backdropUrl,
+      defaultLanguage: entry.defaultLanguage,
     durationSeconds:
       sanitizeNonNegativeNumber(options.durationSeconds) ??
       (canCarryProgress ? previous?.durationSeconds : undefined),
-    episode: options.episode,
+      episode: options.episode,
+      episodeCount: entry.episodeCount,
+      episodeEmbedIds: entry.episodeEmbedIds,
+      id: entry.id,
+      malId: entry.malId,
     posterUrl: entry.posterUrl,
     progressPercent:
       sanitizePercent(options.progressPercent) ?? (canCarryProgress ? previous?.progressPercent : undefined),
     progressSeconds:
       sanitizeNonNegativeNumber(options.progressSeconds) ??
       (canCarryProgress ? previous?.progressSeconds : undefined),
+    provider: entry.provider,
+    rating: entry.rating,
     season: options.season,
     synopsis: entry.synopsis.slice(0, 180),
     title: entry.title,
-    tmdbId: entry.tmdbId,
     type: entry.type,
+    voteCount: entry.voteCount,
     watchedAt: Date.now(),
     year: entry.year,
   };
 }
 
-export function trackRecentlyWatched(entry: LibraryMediaEntry | MediaEntry, options: TrackPlaybackOptions = {}) {
+export function trackRecentlyWatched(
+  entry: LibraryMediaEntry | MediaEntry,
+  options: TrackPlaybackOptions = {},
+  namespace: RecentlyWatchedNamespace = 'papiflix',
+) {
   if (!isBrowser()) return;
 
-  const previousEntries = getRecentlyWatchedSnapshot();
+  const keys = getNamespaceKeys(namespace);
+  const previousEntries = getRecentlyWatchedSnapshot(namespace);
   const previousEntry = previousEntries.find((candidate) => {
-    return candidate.type === entry.type && candidate.tmdbId === entry.tmdbId;
+    return candidate.type === entry.type && candidate.id === entry.id && candidate.provider === entry.provider;
   });
   const nextEntry = compactEntry(entry, options, previousEntry);
   const nextEntries = [
     nextEntry,
     ...previousEntries.filter((candidate) => {
-      return candidate.type !== nextEntry.type || candidate.tmdbId !== nextEntry.tmdbId;
+      return (
+        candidate.type !== nextEntry.type ||
+        candidate.id !== nextEntry.id ||
+        candidate.provider !== nextEntry.provider
+      );
     }),
   ].slice(0, MAX_RECENTLY_WATCHED);
 
   const rawValue = JSON.stringify(nextEntries);
   try {
-    sessionStorage.setItem(RECENTLY_WATCHED_KEY, rawValue);
+    sessionStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
   } catch {
     // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
   }
-  writeSessionCookie(nextEntries);
-  cachedRawValue = rawValue;
-  cachedEntries = nextEntries;
-  window.dispatchEvent(new Event(RECENTLY_WATCHED_EVENT));
+  writeSessionCookie(namespace, nextEntries);
+  setCachedRawValue(namespace, rawValue);
+  setCachedEntries(namespace, nextEntries);
+  window.dispatchEvent(new Event(keys.eventName));
 }
 
 export function getRecentlyWatchedProgress(
-  entry: Pick<LibraryMediaEntry | MediaEntry, 'tmdbId' | 'type'>,
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'id' | 'provider' | 'type'>,
   options: Pick<TrackPlaybackOptions, 'episode' | 'season'> = {},
+  namespace: RecentlyWatchedNamespace = 'papiflix',
 ) {
   if (!isBrowser()) return null;
 
-  const match = getRecentlyWatchedSnapshot().find((candidate) => {
-    if (candidate.type !== entry.type || candidate.tmdbId !== entry.tmdbId) return false;
+  const match = getRecentlyWatchedSnapshot(namespace).find((candidate) => {
+    if (candidate.type !== entry.type || candidate.id !== entry.id || candidate.provider !== entry.provider) {
+      return false;
+    }
     if (entry.type === 'tv' && options.season && candidate.season !== options.season) return false;
     if (entry.type === 'tv' && options.episode && candidate.episode !== options.episode) return false;
     return typeof candidate.progressSeconds === 'number';
@@ -241,57 +324,69 @@ export function getRecentlyWatchedProgress(
   };
 }
 
-export function removeRecentlyWatched(entry: Pick<LibraryMediaEntry, 'tmdbId' | 'type'>) {
+export function removeRecentlyWatched(
+  entry: Pick<LibraryMediaEntry, 'id' | 'provider' | 'type'>,
+  namespace: RecentlyWatchedNamespace = 'papiflix',
+) {
   if (!isBrowser()) return;
 
-  const nextEntries = getRecentlyWatchedSnapshot().filter((candidate) => {
-    return candidate.type !== entry.type || candidate.tmdbId !== entry.tmdbId;
+  const keys = getNamespaceKeys(namespace);
+  const nextEntries = getRecentlyWatchedSnapshot(namespace).filter((candidate) => {
+    return candidate.type !== entry.type || candidate.id !== entry.id || candidate.provider !== entry.provider;
   });
 
   const rawValue = JSON.stringify(nextEntries);
   try {
-    sessionStorage.setItem(RECENTLY_WATCHED_KEY, rawValue);
+    sessionStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
   } catch {
     // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
   }
-  writeSessionCookie(nextEntries);
-  cachedRawValue = rawValue;
-  cachedEntries = nextEntries;
-  window.dispatchEvent(new Event(RECENTLY_WATCHED_EVENT));
+  writeSessionCookie(namespace, nextEntries);
+  setCachedRawValue(namespace, rawValue);
+  setCachedEntries(namespace, nextEntries);
+  window.dispatchEvent(new Event(keys.eventName));
 }
 
-export function useRecentlyWatched() {
+export function useRecentlyWatched(namespace: RecentlyWatchedNamespace = 'papiflix') {
   return useSyncExternalStore(
-    subscribeRecentlyWatched,
-    getRecentlyWatchedSnapshot,
+    (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange),
+    () => getRecentlyWatchedSnapshot(namespace),
     getServerRecentlyWatchedSnapshot,
   );
 }
 
-export function saveHomeScrollPosition() {
+export function saveHomeScrollPosition(namespace: RecentlyWatchedNamespace = 'papiflix') {
   if (!isBrowser()) return;
+
+  const keys = getNamespaceKeys(namespace);
+
   try {
-    sessionStorage.setItem(HOME_SCROLL_KEY, String(Math.max(0, Math.round(window.scrollY))));
+    sessionStorage.setItem(keys.homeScrollKey, String(Math.max(0, Math.round(window.scrollY))));
   } catch {
     // Non-critical convenience state.
   }
 }
 
-export function requestHomeScrollRestore() {
+export function requestHomeScrollRestore(namespace: RecentlyWatchedNamespace = 'papiflix') {
   if (!isBrowser()) return;
+
+  const keys = getNamespaceKeys(namespace);
+
   try {
-    sessionStorage.setItem(RESTORE_HOME_SCROLL_KEY, '1');
+    sessionStorage.setItem(keys.restoreHomeScrollKey, '1');
   } catch {
     // Non-critical convenience state.
   }
 }
 
-export function restoreHomeScrollIfRequested() {
+export function restoreHomeScrollIfRequested(namespace: RecentlyWatchedNamespace = 'papiflix') {
   if (!isBrowser()) return;
+
+  const keys = getNamespaceKeys(namespace);
 
   let shouldRestore = false;
   try {
-    shouldRestore = sessionStorage.getItem(RESTORE_HOME_SCROLL_KEY) === '1';
+    shouldRestore = sessionStorage.getItem(keys.restoreHomeScrollKey) === '1';
   } catch {
     return;
   }
@@ -300,8 +395,8 @@ export function restoreHomeScrollIfRequested() {
 
   let scrollY = 0;
   try {
-    sessionStorage.removeItem(RESTORE_HOME_SCROLL_KEY);
-    scrollY = Number.parseInt(sessionStorage.getItem(HOME_SCROLL_KEY) || '0', 10);
+    sessionStorage.removeItem(keys.restoreHomeScrollKey);
+    scrollY = Number.parseInt(sessionStorage.getItem(keys.homeScrollKey) || '0', 10);
   } catch {
     return;
   }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { getAnikotoLibrarySections, searchAnikotoLibrary } from '@/lib/anime/client';
 import type { LibraryMediaEntry, MediaType } from '@/lib/media/types';
-import { getTmdbLibrarySections, searchTmdbLibrary } from '@/lib/tmdb/client';
 
 function parseMediaType(value: string | null): MediaType | undefined {
   if (value === 'movie' || value === 'tv') {
@@ -27,13 +27,13 @@ export async function GET(request: Request) {
   const query = searchParams.get('q')?.trim() || '';
 
   if (query) {
-    const tmdbSearch = await searchTmdbLibrary(query, type);
+    const search = await searchAnikotoLibrary(query, type);
 
-    if (!tmdbSearch.ok) {
+    if (!search.ok) {
       return NextResponse.json(
         {
           data: [],
-          error: tmdbSearch.message,
+          error: search.message,
           filters: {
             query,
             type: type ?? null,
@@ -43,29 +43,29 @@ export async function GET(request: Request) {
           total: 0,
           totalResults: 0,
         },
-        { status: tmdbSearch.status === 404 ? 404 : 200 },
+        { status: search.status === 404 ? 404 : 200 },
       );
     }
 
     return NextResponse.json({
-      data: tmdbSearch.entries,
+      data: search.entries,
       filters: {
         query,
         type: type ?? null,
       },
       mode: 'search',
       source: 'live',
-      total: tmdbSearch.entries.length,
-      totalResults: tmdbSearch.totalResults,
+      total: search.entries.length,
+      totalResults: search.totalResults,
     });
   }
 
-  const tmdbSections = await getTmdbLibrarySections();
-  if (!tmdbSections.ok) {
+  const sections = await getAnikotoLibrarySections();
+  if (!sections.ok) {
     return NextResponse.json(
       {
         data: [],
-        error: tmdbSections.message,
+        error: sections.message,
         filters: {
           query: null,
           type: type ?? null,
@@ -79,10 +79,10 @@ export async function GET(request: Request) {
   }
 
   const browseEntries = dedupeEntries(
-    tmdbSections.sections
+    sections.sections
       .flatMap((section) => section.entries)
       .filter((entry) => !type || entry.type === type),
-  ).slice(0, 36);
+  ).slice(0, 42);
 
   return NextResponse.json({
     data: browseEntries,

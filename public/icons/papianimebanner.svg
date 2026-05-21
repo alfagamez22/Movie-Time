@@ -1,0 +1,12 @@
+<svg width="640" height="180" viewBox="0 0 640 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="180" rx="24" fill="#0A0A0A"/>
+  <path d="M42 132L104 40H144L82 132H42Z" fill="#E50914"/>
+  <path d="M102 132L164 40H204L142 132H102Z" fill="#F97316"/>
+  <text x="220" y="88" fill="#FFFFFF" font-family="Outfit, Arial, sans-serif" font-size="52" font-weight="800" letter-spacing="1.5">Papi</text>
+  <text x="220" y="136" fill="#38BDF8" font-family="Outfit, Arial, sans-serif" font-size="64" font-weight="900" letter-spacing="2">Anime</text>
+  <path d="M220 148H448" stroke="#38BDF8" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="496" cy="66" r="22" fill="#111827" stroke="#38BDF8" stroke-width="4"/>
+  <circle cx="496" cy="66" r="8" fill="#38BDF8"/>
+  <path d="M530 108L586 52" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M550 124L598 76" stroke="#E50914" stroke-width="6" stroke-linecap="round"/>
+</svg>

@@ -1,12 +1,9 @@
 import type { Metadata, Viewport } from 'next';
-import { Outfit } from 'next/font/google';
 
 import { PwaServiceWorker } from '@/components/media/pwa-service-worker';
 import { appConfig } from '@/lib/config';
 
 import './globals.css';
-
-const outfit = Outfit({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   applicationName: appConfig.name,
@@ -75,7 +72,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={outfit.className} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         {children}
         <PwaServiceWorker />
       </body>

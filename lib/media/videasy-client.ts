@@ -275,7 +275,7 @@ async function buildAesKeyCandidates(value: string): Promise<string[]> {
 
 async function fetchRemoteMetadata(entry: MediaEntry): Promise<{ imdbId: string; title: string; year: number | string }> {
   const response = await fetch(
-    `${PUBLIC_DB_BASE_URL}/${entry.type}/${encodeURIComponent(entry.tmdbId)}?append_to_response=external_ids`,
+    `${PUBLIC_DB_BASE_URL}/${entry.type}/${encodeURIComponent(entry.id)}?append_to_response=external_ids`,
     {
       cache: 'no-store',
       headers: {
@@ -471,11 +471,11 @@ export async function fetchServerSourceBundle(
     mediaType: entry.type,
     seasonId: season,
     title: metadata.title,
-    tmdbId: entry.tmdbId,
+    tmdbId: entry.id,
     year: metadata.year,
   });
 
-  const decryptedPayload = await decryptSourcePayload(encryptedPayload, entry.tmdbId);
+  const decryptedPayload = await decryptSourcePayload(encryptedPayload, entry.id);
   const qualities = normalizeSourceOptions(decryptedPayload.sources);
 
   if (qualities.length === 0) {

@@ -1,16 +1,17 @@
 import { appConfig } from '@/lib/config';
 
-import { getEpisodeLimit, isTvEntry, type MediaEntry } from './types';
+import { getEpisodeLimit, isAnimeProvider, isTvEntry, type MediaEntry, type PlaybackLanguage } from './types';
 
 const DEFAULT_PLAYER_COLOR = 'e50914';
 const HEX_COLOR = /^[0-9a-fA-F]{6}$/;
 
 export interface PlaybackOptions {
-  season: string;
-  episode: string;
-  color: string;
   autoPlay: boolean;
+  color: string;
+  episode: string;
+  language: PlaybackLanguage;
   progress: number | null;
+  season: string;
 }
 
 type SearchParamValue = string | string[] | undefined;
@@ -60,32 +61,48 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   const autoPlayRaw = getFirstParam(searchParams.autoPlay);
   const autoPlay = autoPlayRaw === undefined ? true : autoPlayRaw !== 'false';
   const progress = sanitizeProgress(getFirstParam(searchParams.progress));
+  const language = getFirstParam(searchParams.lang) === 'dub' ? 'dub' : entry.defaultLanguage ?? 'sub';
+
+  if (isAnimeProvider(entry.provider)) {
+    const maxEpisodes = entry.type === 'tv' ? getEpisodeLimit(entry, 1) : 1;
+
+    return {
+      autoPlay,
+      color,
+      episode: clampPositiveInteger(getFirstParam(searchParams.e), maxEpisodes),
+      language,
+      progress,
+      season: '1',
+    };
+  }
 
   if (isTvEntry(entry)) {
     const season = clampPositiveInteger(getFirstParam(searchParams.s), entry.maxSeasons);
     return {
-      season,
-      episode: clampPositiveInteger(getFirstParam(searchParams.e), getEpisodeLimit(entry, season)),
-      color,
       autoPlay,
+      color,
+      episode: clampPositiveInteger(getFirstParam(searchParams.e), getEpisodeLimit(entry, season)),
+      language,
       progress,
+      season,
     };
   }
 
   return {
-    season: '1',
-    episode: '1',
-    color,
     autoPlay,
+    color,
+    episode: '1',
+    language,
     progress,
+    season: '1',
   };
 }
 
 export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const base = 'https://player.videasy.net';
   const path = isTvEntry(entry)
-    ? `${base}/tv/${encodeURIComponent(entry.tmdbId)}/${options.season}/${options.episode}`
-    : `${base}/movie/${encodeURIComponent(entry.tmdbId)}`;
+    ? `${base}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${base}/movie/${encodeURIComponent(entry.id)}`;
 
   const url = new URL(path);
   url.searchParams.set('color', options.color);
@@ -110,8 +127,8 @@ export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions
 export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const baseUrl = appConfig.vidkingEmbedBaseUrl;
   const path = isTvEntry(entry)
-    ? `${baseUrl}/tv/${encodeURIComponent(entry.tmdbId)}/${options.season}/${options.episode}`
-    : `${baseUrl}/movie/${encodeURIComponent(entry.tmdbId)}`;
+    ? `${baseUrl}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${baseUrl}/movie/${encodeURIComponent(entry.id)}`;
 
   const url = new URL(path);
   url.searchParams.set('color', options.color);
@@ -126,6 +143,26 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
 
   if (isTvEntry(entry)) {
     url.searchParams.set('nextEpisode', 'true');
+  }
+
+  return url.toString();
+}
+
+export function buildMegaPlayEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
+  const episodeEmbedId = entry.provider === 'anikoto' ? entry.episodeEmbedIds?.[options.episode] : undefined;
+  const anilistId = entry.provider === 'anikoto' ? entry.anilistId : entry.id;
+  const malId = entry.provider === 'anikoto' ? entry.malId : undefined;
+  const path = episodeEmbedId
+    ? `s-2/${encodeURIComponent(episodeEmbedId)}/${options.language}`
+    : anilistId
+      ? `ani/${encodeURIComponent(anilistId)}/${options.episode}/${options.language}`
+      : malId
+        ? `mal/${encodeURIComponent(malId)}/${options.episode}/${options.language}`
+        : `ani/${encodeURIComponent(entry.id)}/${options.episode}/${options.language}`;
+  const url = new URL(`${appConfig.megaPlayEmbedBaseUrl}/${path}`);
+
+  if (options.autoPlay) {
+    url.searchParams.set('autoplay', 'true');
   }
 
   return url.toString();
