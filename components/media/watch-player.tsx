@@ -8,8 +8,10 @@ import { ArrowLeft } from 'lucide-react';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
   buildEmbedUrl,
+  buildVidFastEmbedUrl,
   buildMegaPlayEmbedUrl,
   buildVideasyEmbedUrl,
+  buildVidSrcEmbedUrl,
   type PlaybackOptions,
 } from '@/lib/media/embed';
 import {
@@ -46,6 +48,15 @@ interface NormalizedPlayerProgress {
 }
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
+const VIDFAST_ALLOWED_ORIGINS = new Set([
+  'https://vidfast.pro',
+  'https://vidfast.in',
+  'https://vidfast.io',
+  'https://vidfast.me',
+  'https://vidfast.net',
+  'https://vidfast.pm',
+  'https://vidfast.xyz',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -208,6 +219,7 @@ export function WatchPlayer({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
+  const vidsrcElapsedRef = useRef(0);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -243,11 +255,16 @@ export function WatchPlayer({
     language: effectiveLanguage,
     season: safeSeason,
   };
+  const isVidFastPlayer = !isAnime && player === '1';
   const embedUrl = isAnime
     ? buildMegaPlayEmbedUrl(entry, playbackOptions)
     : player === '1'
-      ? buildVideasyEmbedUrl(entry, playbackOptions)
-      : buildEmbedUrl(entry, playbackOptions);
+      ? buildVidFastEmbedUrl(entry, playbackOptions)
+      : player === '2'
+        ? buildVidSrcEmbedUrl(entry, playbackOptions)
+        : player === '3'
+          ? buildVideasyEmbedUrl(entry, playbackOptions)
+          : buildEmbedUrl(entry, playbackOptions);
 
   useEffect(() => {
     const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
@@ -277,7 +294,7 @@ export function WatchPlayer({
 
     const onMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
-      if (event.origin !== expectedOrigin) return;
+      if (isVidFastPlayer ? !VIDFAST_ALLOWED_ORIGINS.has(event.origin) : event.origin !== expectedOrigin) return;
 
       hasIframeLoadedRef.current = true;
       setIsPlayerLoading(false);
@@ -306,7 +323,29 @@ export function WatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
+  }, [effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
+
+  // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
+  // wall-clock time as a proxy for playback progress while the player is active.
+  useEffect(() => {
+    if (player !== '2' || isAnime || isPlayerLoading || showPlayerFallback) return;
+
+    vidsrcElapsedRef.current = 0;
+    const intervalId = setInterval(() => {
+      vidsrcElapsedRef.current += 10;
+      trackRecentlyWatched(
+        entry,
+        {
+          episode: isSeries ? safeEpisode : undefined,
+          progressSeconds: vidsrcElapsedRef.current,
+          season: isSeries ? safeSeason : undefined,
+        },
+        experience.id,
+      );
+    }, 10_000);
+
+    return () => clearInterval(intervalId);
+  }, [player, isAnime, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
     const href = isAnime

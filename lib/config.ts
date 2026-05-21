@@ -19,6 +19,7 @@ export const appConfig = {
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
     'Search-driven movie and series library with native playback controls.',
+  vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000',
 };

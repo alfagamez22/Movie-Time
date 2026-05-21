@@ -124,6 +124,31 @@ export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions
   return url.toString();
 }
 
+export function buildVidFastEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
+  const baseUrl = appConfig.vidfastEmbedBaseUrl;
+  const path = isTvEntry(entry)
+    ? `${baseUrl}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${baseUrl}/movie/${encodeURIComponent(entry.id)}`;
+
+  const url = new URL(path);
+  url.searchParams.set('theme', options.color);
+
+  if (options.autoPlay) {
+    url.searchParams.set('autoPlay', 'true');
+  }
+
+  if (options.progress !== null) {
+    url.searchParams.set('startAt', String(Math.floor(options.progress)));
+  }
+
+  if (isTvEntry(entry)) {
+    url.searchParams.set('nextButton', 'true');
+    url.searchParams.set('autoNext', 'true');
+  }
+
+  return url.toString();
+}
+
 export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const baseUrl = appConfig.vidkingEmbedBaseUrl;
   const path = isTvEntry(entry)
@@ -146,6 +171,15 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
   }
 
   return url.toString();
+}
+
+export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
+  const base = 'https://vidsrc.to/embed';
+  const path = isTvEntry(entry)
+    ? `${base}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${base}/movie/${encodeURIComponent(entry.id)}`;
+
+  return path;
 }
 
 export function buildMegaPlayEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {

@@ -4,7 +4,7 @@ This repository now separates application code from deployability concerns:
 
 - `app/api` exposes the catalog as stable HTTP endpoints.
 - `content/media` stores editable movie and TV entries with readable slugs.
-- `lib/media` owns catalog resolution and Vidking embed URL generation.
+- `lib/media` owns catalog resolution and playback embed URL generation.
 - `lib/slugs` owns slug normalization and alias handling.
 - `.github/workflows/validate.yml` runs the repo validation pipeline.
 - `Dockerfile` packages the app using Next.js standalone output for container-based hosts.
@@ -14,6 +14,7 @@ This repository now separates application code from deployability concerns:
 - `NEXT_PUBLIC_APP_NAME`: public app label used in metadata and UI.
 - `NEXT_PUBLIC_APP_DESCRIPTION`: public description used in metadata.
 - `NEXT_PUBLIC_SITE_URL`: canonical public URL for the deployed app.
+- `VIDFAST_EMBED_BASE_URL`: embed base URL for VidFast, defaults to `https://vidfast.net`.
 - `VIDKING_EMBED_BASE_URL`: embed base URL, defaults to Vidking.
 - `TMDB_API_TOKEN` or `TMDB_API_KEY`: server-side credentials for live TMDB metadata lookups.
 

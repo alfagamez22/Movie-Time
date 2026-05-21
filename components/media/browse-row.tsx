@@ -6,6 +6,8 @@ import { ChevronLeft, ChevronRight, Info, Play, X } from 'lucide-react';
 
 import type { LibraryMediaEntry } from '@/lib/media/types';
 
+const MAX_LOOPABLE_ENTRIES = 8;
+
 interface BrowseRowProps {
   anchorId?: string;
   entries: LibraryMediaEntry[];
@@ -166,7 +168,8 @@ export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEnt
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
   const hasEntries = entries.length > 0;
-  const shouldLoop = loop && entries.length > 2;
+  // Large TMDB rows become noticeably heavier when tripled for the seamless loop.
+  const shouldLoop = loop && entries.length > 2 && entries.length <= MAX_LOOPABLE_ENTRIES;
 
   // Scroll to the middle copy after mount
   useEffect(() => {
@@ -222,7 +225,7 @@ export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEnt
   const rowItems = shouldLoop ? [...entries, ...entries, ...entries] : entries;
 
   return (
-    <div id={anchorId} className="group/row scroll-mt-24">
+    <div id={anchorId} className="group/row content-auto-section scroll-mt-24">
       <h2 className="mb-3 px-5 text-base font-bold text-white sm:px-6 md:px-12 md:text-lg">{title}</h2>
       <div className="relative">
         {/* Left arrow */}

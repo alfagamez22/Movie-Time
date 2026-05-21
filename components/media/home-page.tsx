@@ -112,7 +112,7 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
 
   return (
     <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-      {(['1', '2'] as const).map((choice) => (
+      {(['1', '2', '3', '4'] as const).map((choice) => (
         <button
           key={choice}
           type="button"

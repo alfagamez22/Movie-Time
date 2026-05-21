@@ -2,12 +2,17 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-export type PlayerChoice = '1' | '2';
+export type PlayerChoice = '1' | '2' | '3' | '4';
 export type AnimeLanguageChoice = 'dub' | 'sub';
 
+const PLAYER_STORAGE_VERSION = '2';
+const PLAYER_STORAGE_VERSION_KEY = 'papiflix-player-version';
+
 export const PLAYER_LABELS: Record<PlayerChoice, string> = {
-  '1': 'Videasy',
-  '2': 'Vidking',
+  '1': 'VidFast',
+  '2': 'VidSrc',
+  '3': 'Videasy',
+  '4': 'Vidking',
 };
 
 export const ANIME_LANGUAGE_LABELS: Record<AnimeLanguageChoice, string> = {
@@ -23,11 +28,23 @@ interface ChoiceStore<T extends string> {
   storageKey: string;
 }
 
+function normalizePlayerChoice(value: string | null): PlayerChoice {
+  return value === '2' ? '2' : value === '3' ? '3' : value === '4' ? '4' : '1';
+}
+
+function migratePlayerChoice(value: string | null, version: string | null): PlayerChoice {
+  if (version === PLAYER_STORAGE_VERSION) {
+    return normalizePlayerChoice(value);
+  }
+
+  return value === '1' ? '2' : value === '2' ? '3' : value === '3' ? '4' : '1';
+}
+
 const playerStore: ChoiceStore<PlayerChoice> = {
   changeEvent: 'papiflix-player-change',
   defaultValue: '1',
   memoryValue: null,
-  normalize: (value) => (value === '2' ? '2' : '1'),
+  normalize: normalizePlayerChoice,
   storageKey: 'papiflix-player',
 };
 
@@ -45,7 +62,17 @@ function getChoiceSnapshot<T extends string>(store: ChoiceStore<T>): T {
   }
 
   try {
-    store.memoryValue = store.normalize(localStorage.getItem(store.storageKey));
+    if (store.storageKey === playerStore.storageKey) {
+      const migratedChoice = migratePlayerChoice(
+        localStorage.getItem(store.storageKey),
+        localStorage.getItem(PLAYER_STORAGE_VERSION_KEY),
+      );
+      store.memoryValue = migratedChoice as T;
+      localStorage.setItem(store.storageKey, migratedChoice);
+      localStorage.setItem(PLAYER_STORAGE_VERSION_KEY, PLAYER_STORAGE_VERSION);
+    } else {
+      store.memoryValue = store.normalize(localStorage.getItem(store.storageKey));
+    }
   } catch {
     // Storage can be full or unavailable; keep the current tab usable.
   }
@@ -75,6 +102,9 @@ function persistChoice<T extends string>(store: ChoiceStore<T>, choice: T) {
   store.memoryValue = choice;
   try {
     localStorage.setItem(store.storageKey, choice);
+    if (store.storageKey === playerStore.storageKey) {
+      localStorage.setItem(PLAYER_STORAGE_VERSION_KEY, PLAYER_STORAGE_VERSION);
+    }
   } catch {
     // If storage is full, the selection still applies for this session.
   }
