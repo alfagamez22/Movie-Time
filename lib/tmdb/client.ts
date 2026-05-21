@@ -8,6 +8,7 @@ import {
   type MediaCastMember,
   type MediaDetailsPayload,
   type MediaEntry,
+  type MediaTrailer,
   type MediaType,
   type MovieMediaEntry,
   type SeasonDetails,
@@ -862,15 +863,58 @@ async function fetchTmdbRelatedEntries(tmdbId: string, type: MediaType): Promise
   return isTmdbFailure(similar) ? [] : mapPageResultsToEntries(similar.results, type, 18);
 }
 
+interface TmdbVideoResult {
+  id: string;
+  key: string;
+  name: string;
+  official: boolean;
+  published_at: string;
+  site: string;
+  type: string;
+}
+
+interface TmdbVideosResponse {
+  results: TmdbVideoResult[];
+}
+
+const VIDEO_TYPE_ORDER = ['Trailer', 'Teaser', 'Clip', 'Featurette', 'Behind the Scenes', 'Bloopers'];
+
+async function fetchTmdbTrailers(tmdbId: string, type: MediaType): Promise<MediaTrailer[]> {
+  const payload = await requestOfficialTmdb<TmdbVideosResponse>(
+    `/${type}/${encodeURIComponent(tmdbId)}/videos`,
+    { language: DEFAULT_TMDB_LANGUAGE },
+  );
+
+  const results = isTmdbFailure(payload) ? [] : payload.results;
+
+  return results
+    .filter((v) => v.site === 'YouTube' && v.key)
+    .sort((a, b) => {
+      const aOrder = VIDEO_TYPE_ORDER.indexOf(a.type);
+      const bOrder = VIDEO_TYPE_ORDER.indexOf(b.type);
+      const typeScore = (aOrder === -1 ? 99 : aOrder) - (bOrder === -1 ? 99 : bOrder);
+      if (typeScore !== 0) return typeScore;
+      return (b.official ? 1 : 0) - (a.official ? 1 : 0);
+    })
+    .map((v) => ({
+      embedUrl: `https://www.youtube.com/embed/${v.key}?autoplay=1`,
+      thumbnailUrl: `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`,
+      title: v.name,
+      url: `https://www.youtube.com/watch?v=${v.key}`,
+      youtubeId: v.key,
+    }));
+}
+
 export async function lookupTmdbMediaDetails(tmdbId: string, type: MediaType): Promise<TmdbMediaDetailsResult> {
   const entryLookup = await lookupTmdbMediaEntry(tmdbId, type);
   if (!entryLookup.ok) {
     return entryLookup;
   }
 
-  const [cast, recommendations] = await Promise.all([
+  const [cast, recommendations, trailers] = await Promise.all([
     fetchTmdbCastMembers(tmdbId, type),
     fetchTmdbRelatedEntries(tmdbId, type),
+    fetchTmdbTrailers(tmdbId, type),
   ]);
 
   return {
@@ -878,7 +922,7 @@ export async function lookupTmdbMediaDetails(tmdbId: string, type: MediaType): P
       cast,
       entry: entryLookup.entry,
       recommendations,
-      trailers: [],
+      trailers,
     },
     ok: true,
   };
