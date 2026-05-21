@@ -51,6 +51,45 @@
     background: rgba(255, 255, 255, 0.18);
     border-radius: 999px;
   }
+  .poster-card-regular {
+    width: clamp(8.5rem, 42vw, 10rem);
+  }
+  .poster-card-recent {
+    width: clamp(13rem, 62vw, 16rem);
+  }
+  @media (min-width: 640px) {
+    .poster-card-regular {
+      width: clamp(9rem, 14vw, 18rem);
+    }
+    .poster-card-recent {
+      width: clamp(15rem, 22vw, 18rem);
+    }
+  }
+  @media (orientation: landscape) and (max-width: 1023.98px) {
+    .poster-card-regular {
+      width: clamp(8rem, 16vw, 10rem);
+    }
+  }
+  @media (min-width: 1024px) {
+    .poster-card-regular {
+      width: clamp(12rem, 12vw, 14rem);
+    }
+  }
+  @media (min-width: 1280px) {
+    .poster-card-regular {
+      width: clamp(13rem, 11vw, 15rem);
+    }
+  }
+  @media (min-width: 1536px) {
+    .poster-card-regular {
+      width: clamp(14rem, 10vw, 16rem);
+    }
+  }
+  @media (min-width: 2200px) {
+    .poster-card-regular {
+      width: clamp(16rem, 8.5vw, 18rem);
+    }
+  }
 }
 
 @layer base {

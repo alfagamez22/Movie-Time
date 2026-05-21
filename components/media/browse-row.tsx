@@ -77,11 +77,7 @@ function PosterCard({
   return (
     <div
       // Regular rows stay compact; personal rows get a larger card treatment.
-      className={`group relative shrink-0 ${
-        isRecentlyWatched
-          ? 'w-[clamp(13rem,62vw,16rem)] sm:w-[clamp(15rem,22vw,18rem)]'
-          : 'w-[clamp(8.5rem,42vw,10rem)] sm:w-[clamp(9rem,14vw,18rem)] landscape:w-[clamp(8rem,16vw,10rem)]'
-      }`}
+      className={`group relative shrink-0 ${isRecentlyWatched ? 'poster-card-recent' : 'poster-card-regular'}`}
     >
       <button
         type="button"
@@ -99,7 +95,11 @@ function PosterCard({
               src={entry.posterUrl}
               alt={entry.title}
               fill
-              sizes={isRecentlyWatched ? '(max-width: 768px) 15rem, 22vw' : '(max-width: 768px) 9rem, 14vw'}
+              sizes={
+                isRecentlyWatched
+                  ? '(max-width: 768px) 15rem, 18rem'
+                  : '(max-width: 640px) 42vw, (max-width: 1023px) 16vw, (max-width: 1279px) 14rem, (max-width: 1535px) 15rem, (max-width: 2199px) 16rem, 18rem'
+              }
               className={`object-cover transition-transform duration-300 ${
                 isRecentlyWatched ? 'group-hover:scale-[1.04]' : 'group-hover:scale-[1.08]'
               }`}
