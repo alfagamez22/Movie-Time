@@ -136,11 +136,6 @@ export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions
     url.searchParams.set('time', progress);
   }
 
-  if (isTvEntry(entry)) {
-    url.searchParams.set('nextEpisode', 'true');
-    url.searchParams.set('autoplayNextEpisode', 'true');
-  }
-
   return url.toString();
 }
 
@@ -162,8 +157,8 @@ export function buildVidFastEmbedUrl(entry: MediaEntry, options: PlaybackOptions
   }
 
   if (isTvEntry(entry)) {
-    url.searchParams.set('nextButton', 'true');
-    url.searchParams.set('autoNext', 'true');
+    url.searchParams.set('nextButton', 'false');
+    url.searchParams.set('autoNext', 'false');
   }
 
   return url.toString();
@@ -184,10 +179,6 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
 
   if (options.progress !== null) {
     url.searchParams.set('progress', String(options.progress));
-  }
-
-  if (isTvEntry(entry)) {
-    url.searchParams.set('nextEpisode', 'true');
   }
 
   return url.toString();

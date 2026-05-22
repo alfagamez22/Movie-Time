@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
@@ -52,6 +52,9 @@ const VIDFAST_ALLOWED_ORIGINS = new Set([
   'https://vidfast.net',
   'https://vidfast.pm',
   'https://vidfast.xyz',
+  'https://vidninja.pro',
+  'https://www.vidninja.pro',
+  'https://watch.vidninja.pro',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,25 +151,18 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
   };
 }
 
-function isEpisodeNavigationEvent(data: unknown): boolean {
-  const parsed = parseMessageData(data);
-  if (!isRecord(parsed)) return false;
 
-  const nestedRecords = [parsed.data, parsed.payload, parsed.detail].filter(isRecord);
-  const records = [parsed, ...nestedRecords];
-  const eventName = readEventName(records);
-
-  if (/^(next|nextepisode|next_episode|autonext|auto_next|ended|complete|finished|end)$/.test(eventName)) {
+function isAllowedVidFastOrigin(origin: string, expectedOrigin: string): boolean {
+  if (origin === expectedOrigin || VIDFAST_ALLOWED_ORIGINS.has(origin)) {
     return true;
   }
 
-  for (const record of records) {
-    if (record.nextEpisode === true || record.next === true || record.autoNext === true) {
-      return true;
-    }
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return hostname === 'watch.vidninja.pro' || hostname === 'vidninja.pro' || hostname.endsWith('.vidninja.pro');
+  } catch {
+    return false;
   }
-
-  return false;
 }
 
 function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
@@ -278,8 +274,6 @@ export function WatchPlayer({
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const vidsrcElapsedRef = useRef(0);
-  const selfInitiatedLoadRef = useRef(true);
-  const lastEmbedNavTimeRef = useRef(0);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -314,6 +308,7 @@ export function WatchPlayer({
     ...initialPlayback,
     episode: safeEpisode,
     language: effectiveLanguage,
+    progress: player === '4' ? null : initialPlayback.progress,
     season: safeSeason,
   };
   const isVidFastPlayer = !isAnime && player === '1';
@@ -328,7 +323,6 @@ export function WatchPlayer({
           : buildEmbedUrl(entry, playbackOptions);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
-    selfInitiatedLoadRef.current = true;
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
     setEpisode(newEpisode);
@@ -361,25 +355,13 @@ export function WatchPlayer({
     const expectedOrigin = new URL(embedUrl).origin;
 
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return;
-      if (isVidFastPlayer ? !VIDFAST_ALLOWED_ORIGINS.has(event.origin) : event.origin !== expectedOrigin) return;
+      const isTrackedSource = event.source === iframeRef.current?.contentWindow;
+      if (!isTrackedSource) return;
+      if (isVidFastPlayer ? !isAllowedVidFastOrigin(event.origin, expectedOrigin) : event.origin !== expectedOrigin) return;
 
       hasIframeLoadedRef.current = true;
       setIsPlayerLoading(false);
       setShowPlayerFallback(false);
-
-      if (isSeries && isEpisodeNavigationEvent(event.data)) {
-        const now = Date.now();
-        if (now - lastEmbedNavTimeRef.current > 2000) {
-          lastEmbedNavTimeRef.current = now;
-          const currentEp = Number.parseInt(safeEpisode, 10);
-          if (currentEp < safeEpisodeLimit) {
-            selfInitiatedLoadRef.current = true;
-            handleEpisodeChange(String(currentEp + 1));
-          }
-        }
-        return;
-      }
 
       const progress = extractPlayerProgress(event.data);
       if (!progress) return;
@@ -404,7 +386,7 @@ export function WatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [effectiveLanguage, embedUrl, entry, experience.id, handleEpisodeChange, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeEpisodeLimit, safeSeason]);
+  }, [effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
 
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
@@ -472,7 +454,6 @@ export function WatchPlayer({
         return;
       }
 
-      selfInitiatedLoadRef.current = true;
       setIsPlayerLoading(true);
       setShowPlayerFallback(false);
       setSeason(newSeason);
@@ -551,6 +532,19 @@ export function WatchPlayer({
           <Download className="h-5 w-5" />
         </a>
 
+        {isSeries && Number.parseInt(safeEpisode, 10) < safeEpisodeLimit ? (
+          <button
+            type="button"
+            onClick={() => handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1))}
+            aria-label="Next episode"
+            title="Next episode"
+            className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/55 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-black/70 hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          >
+            <span>Next Episode</span>
+            <SkipForward className="h-4 w-4" />
+          </button>
+        ) : null}
+
         <div
           className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
             isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -582,19 +576,6 @@ export function WatchPlayer({
             setShowPlayerFallback(true);
           }}
           onLoad={() => {
-            if (!selfInitiatedLoadRef.current && isSeries) {
-              const now = Date.now();
-              if (now - lastEmbedNavTimeRef.current > 2000) {
-                lastEmbedNavTimeRef.current = now;
-                const currentEp = Number.parseInt(safeEpisode, 10);
-                if (currentEp < safeEpisodeLimit) {
-                  selfInitiatedLoadRef.current = true;
-                  handleEpisodeChange(String(currentEp + 1));
-                  return;
-                }
-              }
-            }
-            selfInitiatedLoadRef.current = false;
             hasIframeLoadedRef.current = true;
             setIsPlayerLoading(false);
             setShowPlayerFallback(false);
