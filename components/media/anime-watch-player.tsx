@@ -767,6 +767,38 @@ export function AnimeWatchPlayer({
     setShowQualityMenu(false);
   };
 
+  const handleDownloadVideo = () => {
+    if (!resolvedSourceUrl) {
+      return;
+    }
+
+    const filename = `${entry.title} EP${String(currentEpisode).padStart(2, '0')}${resolvedSourceType === 'hls' ? '.m3u8' : '.mp4'}`;
+
+    if (resolvedSourceUrl.startsWith('/api/anime/playback/proxy?')) {
+      const proxyUrl = new URL(resolvedSourceUrl, window.location.origin);
+      proxyUrl.searchParams.set('download', '1');
+      proxyUrl.searchParams.set('filename', filename);
+      const anchor = document.createElement('a');
+      anchor.href = `${proxyUrl.pathname}${proxyUrl.search}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      return;
+    }
+
+    if (resolvedSourceType === 'mp4') {
+      const downloadUrl = `/api/playback/proxy?url=${encodeURIComponent(resolvedSourceUrl)}&download=1&filename=${encodeURIComponent(filename)}`;
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      return;
+    }
+
+    window.open(resolvedSourceUrl, '_blank', 'noopener,noreferrer');
+  };
+
   useEffect(() => {
     if (!showQualityMenu) return;
 
@@ -895,18 +927,7 @@ export function AnimeWatchPlayer({
         {resolvedSourceUrl ? (
           <button
             type="button"
-            onClick={() => {
-              const a = document.createElement('a');
-              a.href = resolvedSourceUrl;
-              a.target = '_blank';
-              a.rel = 'noopener noreferrer';
-              if (resolvedSourceType === 'mp4') {
-                a.download = `${entry.title} EP${String(currentEpisode).padStart(2, '0')}.mp4`;
-              }
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }}
+            onClick={handleDownloadVideo}
             aria-label="Download video"
             title="Download video"
             className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] z-40 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white backdrop-blur-sm transition-all hover:bg-black/70 hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${

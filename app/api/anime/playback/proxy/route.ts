@@ -28,6 +28,21 @@ const PROFILE_HEADERS: Record<
   },
 };
 
+function sanitizeDownloadFilename(rawFilename: string | null): string {
+  const fallbackFilename = 'video.mp4';
+  if (!rawFilename) {
+    return fallbackFilename;
+  }
+
+  const trimmedFilename = rawFilename.trim();
+  if (!trimmedFilename) {
+    return fallbackFilename;
+  }
+
+  const safeFilename = trimmedFilename.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').slice(0, 180);
+  return safeFilename || fallbackFilename;
+}
+
 function isPrivateHostname(hostname: string): boolean {
   const normalizedHostname = hostname.toLowerCase();
 
@@ -92,6 +107,9 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const targetUrlParam = requestUrl.searchParams.get('url');
   const profileParam = requestUrl.searchParams.get('profile');
+  const downloadParam = requestUrl.searchParams.get('download');
+  const shouldForceDownload = downloadParam === '1' || downloadParam === 'true';
+  const requestedFilename = sanitizeDownloadFilename(requestUrl.searchParams.get('filename'));
 
   if (!targetUrlParam) {
     return new Response('Missing playback url.', { status: 400 });
@@ -160,10 +178,28 @@ export async function GET(request: Request) {
     responseHeaders.set('content-length', Buffer.byteLength(rewrittenBody).toString());
     responseHeaders.set('content-type', 'application/vnd.apple.mpegurl');
 
+    if (shouldForceDownload) {
+      const encodedFilename = encodeURIComponent(requestedFilename);
+      responseHeaders.set('content-type', 'application/octet-stream');
+      responseHeaders.set(
+        'content-disposition',
+        `attachment; filename="${requestedFilename}"; filename*=UTF-8''${encodedFilename}`,
+      );
+    }
+
     return new Response(rewrittenBody, {
       headers: responseHeaders,
       status: upstreamResponse.status,
     });
+  }
+
+  if (shouldForceDownload) {
+    const encodedFilename = encodeURIComponent(requestedFilename);
+    responseHeaders.set('content-type', 'application/octet-stream');
+    responseHeaders.set(
+      'content-disposition',
+      `attachment; filename="${requestedFilename}"; filename*=UTF-8''${encodedFilename}`,
+    );
   }
 
   return new Response(upstreamResponse.body, {

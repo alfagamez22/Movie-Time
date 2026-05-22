@@ -327,6 +327,13 @@ export function WatchPlayer({
           ? buildVideasyEmbedUrl(entry, playbackOptions)
           : buildEmbedUrl(entry, playbackOptions);
 
+  const handleEpisodeChange = useCallback((newEpisode: string) => {
+    selfInitiatedLoadRef.current = true;
+    setIsPlayerLoading(true);
+    setShowPlayerFallback(false);
+    setEpisode(newEpisode);
+  }, []);
+
   useEffect(() => {
     const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
     trackRecentlyWatched(
@@ -486,13 +493,6 @@ export function WatchPlayer({
     },
     [entry.id, entry.slug, entry.type, isAnime],
   );
-
-  const handleEpisodeChange = useCallback((newEpisode: string) => {
-    selfInitiatedLoadRef.current = true;
-    setIsPlayerLoading(true);
-    setShowPlayerFallback(false);
-    setEpisode(newEpisode);
-  }, []);
 
   const handleAnimeLanguageChange = useCallback(
     (nextLanguage: AnimeLanguageChoice) => {
