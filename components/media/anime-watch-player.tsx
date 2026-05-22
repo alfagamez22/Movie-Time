@@ -17,6 +17,7 @@ import { buildWatchHref } from '@/lib/media/routes';
 import {
   getEpisodeLimit,
   type AnimePlaybackPayload,
+  type AnimePlaybackQualityOption,
   type AnimePlaybackServer,
   type EpisodePreview,
 } from '@/lib/media/types';
@@ -32,6 +33,11 @@ interface QualityLevel {
   height: number;
   index: number;
 }
+
+const ANIME_SERVER_LABELS: Record<AnimePlaybackServer, string> = {
+  anitaku: 'AniTaku',
+  aniwave: 'Aniwave',
+};
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 
@@ -324,6 +330,21 @@ function SidebarControls({
             ))}
           </div>
 
+          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+            {(['aniwave', 'anitaku'] as const).map((server) => (
+              <button
+                key={server}
+                type="button"
+                onClick={() => onServerChange(server)}
+                className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
+                  currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                {ANIME_SERVER_LABELS[server]}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -415,12 +436,15 @@ export function AnimeWatchPlayer({
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [currentQuality, setCurrentQuality] = useState(-1);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [selectedQualitySrc, setSelectedQualitySrc] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const qualityMenuRef = useRef<HTMLDivElement>(null);
   const lastProgressWriteRef = useRef(0);
   const autoSkippedEpisodeRef = useRef<string | null>(null);
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSeekRef = useRef<number | null>(null);
+  const shouldResumePlaybackRef = useRef(false);
   const requestedRef = useRef({ episode: initialEpisode, language: initialPlayback.language, server: initialPlayback.server ?? storedServer });
 
   const savedProgress =
@@ -436,6 +460,11 @@ export function AnimeWatchPlayer({
         )
       : null;
   const resumeStartSeconds = resumeOverrideSeconds ?? savedProgress?.progressSeconds ?? 0;
+  const manualQualityOptions = playbackData?.qualityOptions ?? [];
+  const activeManualQuality =
+    manualQualityOptions.find((candidate) => candidate.src === (selectedQualitySrc ?? playbackData?.src)) ?? null;
+  const resolvedSourceUrl = selectedQualitySrc ?? playbackData?.src;
+  const resolvedSourceType = activeManualQuality?.sourceType ?? playbackData?.sourceType;
 
   useEffect(() => {
     requestedRef.current = {
@@ -464,6 +493,7 @@ export function AnimeWatchPlayer({
           throw new Error(json?.error ?? 'Could not load anime playback.');
         }
 
+        setSelectedQualitySrc(null);
         setPlaybackData(json.data);
         setIsLoading(false);
         setError(null);
@@ -492,7 +522,7 @@ export function AnimeWatchPlayer({
 
   useEffect(() => {
     const video = videoRef.current;
-    const sourceUrl = playbackData?.src;
+    const sourceUrl = resolvedSourceUrl;
 
     if (!video || !sourceUrl) {
       return;
@@ -507,7 +537,7 @@ export function AnimeWatchPlayer({
     setQualityLevels([]);
     setCurrentQuality(-1);
 
-    if (playbackData.sourceType === 'hls' && Hls.isSupported()) {
+    if (resolvedSourceType === 'hls' && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
       });
@@ -531,7 +561,7 @@ export function AnimeWatchPlayer({
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [playbackData]);
+  }, [resolvedSourceType, resolvedSourceUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -544,21 +574,26 @@ export function AnimeWatchPlayer({
     autoSkippedEpisodeRef.current = null;
 
     const applyStartPosition = () => {
-      if (resumeStartSeconds > 0 && Number.isFinite(resumeStartSeconds)) {
-        const safeResume = Math.max(0, Math.min(resumeStartSeconds, Math.max(0, video.duration - 5)));
+      const targetStartSeconds = pendingSeekRef.current ?? resumeStartSeconds;
+      if (targetStartSeconds > 0 && Number.isFinite(targetStartSeconds)) {
+        const safeResume = Math.max(0, Math.min(targetStartSeconds, Math.max(0, video.duration - 5)));
         if (safeResume > 0) {
           video.currentTime = safeResume;
         }
       }
+
+      pendingSeekRef.current = null;
 
       if (skipIntroEnabled && playbackData.intro && autoSkippedEpisodeRef.current !== playbackKey && video.currentTime < playbackData.intro.endTime) {
         video.currentTime = playbackData.intro.endTime;
         autoSkippedEpisodeRef.current = playbackKey;
       }
 
-      if (initialPlayback.autoPlay !== false) {
+      if (shouldResumePlaybackRef.current || initialPlayback.autoPlay !== false) {
         void video.play().catch(() => undefined);
       }
+
+      shouldResumePlaybackRef.current = false;
     };
 
     video.addEventListener('loadedmetadata', applyStartPosition);
@@ -720,6 +755,18 @@ export function AnimeWatchPlayer({
     setShowQualityMenu(false);
   };
 
+  const handleManualQualityChange = (qualityOption: AnimePlaybackQualityOption) => {
+    if (!videoRef.current || selectedQualitySrc === qualityOption.src) {
+      setShowQualityMenu(false);
+      return;
+    }
+
+    pendingSeekRef.current = videoRef.current.currentTime;
+    shouldResumePlaybackRef.current = !videoRef.current.paused && !videoRef.current.ended;
+    setSelectedQualitySrc(qualityOption.src);
+    setShowQualityMenu(false);
+  };
+
   useEffect(() => {
     if (!showQualityMenu) return;
 
@@ -737,6 +784,13 @@ export function AnimeWatchPlayer({
     Boolean(playbackData?.intro) &&
     playheadSeconds >= (playbackData?.intro?.startTime ?? Number.MAX_SAFE_INTEGER) &&
     playheadSeconds < (playbackData?.intro?.endTime ?? -1);
+  const showQualityControl = qualityLevels.length > 1 || manualQualityOptions.length > 1;
+  const qualityButtonLabel =
+    manualQualityOptions.length > 1
+      ? activeManualQuality?.label ?? 'Quality'
+      : currentQuality === -1
+        ? 'Auto'
+        : `${qualityLevels.find((l) => l.index === currentQuality)?.height ?? '?'}p`;
 
   return (
     <div
@@ -777,7 +831,7 @@ export function AnimeWatchPlayer({
           </button>
         ) : null}
 
-        {qualityLevels.length > 1 ? (
+        {showQualityControl ? (
           <div
             ref={qualityMenuRef}
             className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex flex-col items-end transition-opacity duration-300 ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
@@ -788,10 +842,30 @@ export function AnimeWatchPlayer({
               className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
             >
               <Settings className="h-3.5 w-3.5" />
-              {currentQuality === -1 ? 'Auto' : `${qualityLevels.find((l) => l.index === currentQuality)?.height ?? '?'}p`}
+              {qualityButtonLabel}
             </button>
             {showQualityMenu ? (
               <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-black/90 backdrop-blur-sm">
+                {manualQualityOptions.length > 1 ? (
+                  manualQualityOptions.map((qualityOption) => (
+                    <button
+                      key={qualityOption.src}
+                      type="button"
+                      onClick={() => handleManualQualityChange(qualityOption)}
+                      className={`flex w-full items-center px-4 py-2 text-xs font-medium transition-colors ${
+                        activeManualQuality?.src === qualityOption.src
+                          ? 'bg-white/10 text-white'
+                          : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      {qualityOption.label}
+                      {activeManualQuality?.src === qualityOption.src ? (
+                        <span className="ml-auto pl-4 text-netflix-red">*</span>
+                      ) : null}
+                    </button>
+                  ))
+                ) : (
+                  <>
                 <button
                   type="button"
                   onClick={() => handleQualityChange(-1)}
@@ -811,6 +885,8 @@ export function AnimeWatchPlayer({
                     {currentQuality === level.index ? <span className="ml-auto pl-4 text-netflix-red">●</span> : null}
                   </button>
                 ))}
+                  </>
+                )}
               </div>
             ) : null}
           </div>
@@ -869,6 +945,20 @@ export function AnimeWatchPlayer({
                 }`}
               >
                 {choice === 'sub' ? 'Sub' : 'Dub'}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+            {(['aniwave', 'anitaku'] as const).map((server) => (
+              <button
+                key={server}
+                type="button"
+                onClick={() => handleServerChange(server)}
+                className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
+                  currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                {ANIME_SERVER_LABELS[server]}
               </button>
             ))}
           </div>

@@ -3,6 +3,7 @@ import 'server-only';
 import { appConfig } from '@/lib/config';
 import {
   type AnimePlaybackPayload,
+  type AnimePlaybackQualityOption,
   type AnimePlaybackServer,
   type AnimePlaybackTrack,
   type PlaybackLanguage,
@@ -155,6 +156,57 @@ function normalizeTracks(records: VidNestTrackRecord[] | null | undefined): Anim
   return Array.from(tracks.values());
 }
 
+function getSourceType(candidate: VidNestSourceRecord): 'hls' | 'mp4' {
+  const sourceUrl = cleanUrl(candidate.file ?? candidate.url).toLowerCase();
+  return sourceUrl.includes('.m3u8') || candidate.type?.toLowerCase().includes('hls') ? 'hls' : 'mp4';
+}
+
+function getQualityLabel(candidate: VidNestSourceRecord, fallbackIndex: number): string {
+  const normalizedQuality = candidate.quality?.trim();
+  if (normalizedQuality) {
+    return normalizedQuality.toLowerCase().endsWith('p') ? normalizedQuality : `${normalizedQuality}p`;
+  }
+
+  return `Source ${fallbackIndex + 1}`;
+}
+
+function normalizeQualityOptions(
+  records: VidNestSourceRecord[] | null | undefined,
+  sourceProfile: ProxyProfile,
+): AnimePlaybackQualityOption[] {
+  const normalizedSources = (records ?? [])
+    .map((candidate, index) => {
+      const sourceUrl = cleanUrl(candidate.file ?? candidate.url);
+      if (!sourceUrl) {
+        return null;
+      }
+
+      return {
+        index,
+        label: getQualityLabel(candidate, index),
+        sourceType: getSourceType(candidate),
+        src: buildProxyUrl(sourceUrl, sourceProfile),
+      };
+    })
+    .filter((candidate): candidate is { index: number; label: string; sourceType: 'hls' | 'mp4'; src: string } => Boolean(candidate));
+
+  const uniqueSources = new Map<string, AnimePlaybackQualityOption>();
+  normalizedSources.forEach((candidate) => {
+    uniqueSources.set(candidate.src, {
+      label: candidate.label,
+      sourceType: candidate.sourceType,
+      src: candidate.src,
+    });
+  });
+
+  const mp4Options = Array.from(uniqueSources.values()).filter((candidate) => candidate.sourceType === 'mp4');
+  if (mp4Options.length > 1) {
+    return mp4Options.sort((left, right) => right.label.localeCompare(left.label, undefined, { numeric: true }));
+  }
+
+  return [];
+}
+
 function normalizePlaybackRecord(
   record: VidNestPlaybackRecord,
   server: AnimePlaybackServer,
@@ -176,6 +228,7 @@ function normalizePlaybackRecord(
     ? 'hls'
     : 'mp4';
   const sourceProfile: ProxyProfile = server === 'anitaku' ? 'anitaku-media' : 'aniwave-media';
+  const qualityOptions = normalizeQualityOptions(record.sources, sourceProfile);
 
   return {
     actualLanguage: language,
@@ -183,6 +236,7 @@ function normalizePlaybackRecord(
     intro: normalizeMarker(record.intro),
     outro: normalizeMarker(record.outro),
     posterUrl: record.metadata?.poster?.trim() || record.metadata?.image?.trim() || fallbackMetadata?.posterUrl,
+    qualityOptions,
     server,
     sourceType,
     src: buildProxyUrl(sourceUrl, sourceProfile),

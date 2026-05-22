@@ -19,12 +19,19 @@ export interface AnimePlaybackTrack {
   srclang: string;
 }
 
+export interface AnimePlaybackQualityOption {
+  label: string;
+  sourceType: 'hls' | 'mp4';
+  src: string;
+}
+
 export interface AnimePlaybackPayload {
   actualLanguage: PlaybackLanguage;
   displayTitle: string;
   intro?: PlaybackMarker;
   outro?: PlaybackMarker;
   posterUrl?: string;
+  qualityOptions: AnimePlaybackQualityOption[];
   server: AnimePlaybackServer;
   sourceType: 'hls' | 'mp4';
   src: string;
