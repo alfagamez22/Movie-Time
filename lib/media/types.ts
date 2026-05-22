@@ -34,9 +34,12 @@ export interface AnimePlaybackPayload {
 export interface EpisodePreview {
   airDate?: string;
   episodeNumber: number;
+  fallbackStillUrl?: string;
+  isReleased?: boolean;
   name: string;
   overview: string;
   runtime?: number;
+  scheduledAt?: number;
   seasonNumber: number;
   stillUrl?: string;
 }
@@ -48,6 +51,7 @@ export interface SeasonDetails {
   name: string;
   overview: string;
   posterUrl?: string;
+  releasedEpisodeCount?: number;
   seasonNumber: number;
 }
 
@@ -60,6 +64,8 @@ interface CatalogEntryBase {
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
+  nextEpisodeAt?: number;
+  nextEpisodeNumber?: number;
   posterUrl?: string;
   provider: MediaProvider;
   rating?: number;
@@ -99,6 +105,8 @@ export interface LibraryMediaEntry {
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
+  nextEpisodeAt?: number;
+  nextEpisodeNumber?: number;
   posterUrl?: string;
   provider: MediaProvider;
   rating?: number;
@@ -170,6 +178,8 @@ export function toLibraryMediaEntry(entry: CatalogEntry | MediaEntry): LibraryMe
     episodeEmbedIds: entry.episodeEmbedIds,
     id: entry.id,
     malId: entry.malId,
+    nextEpisodeAt: entry.nextEpisodeAt,
+    nextEpisodeNumber: entry.nextEpisodeNumber,
     posterUrl: entry.posterUrl,
     provider: entry.provider,
     rating: entry.rating,

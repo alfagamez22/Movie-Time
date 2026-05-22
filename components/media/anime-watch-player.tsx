@@ -11,6 +11,7 @@ import {
   getRecentlyWatchedProgress,
   requestHomeScrollRestore,
   trackRecentlyWatched,
+  useWatchedEpisodes,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import {
@@ -34,11 +35,49 @@ interface QualityLevel {
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 
+function buildEpisodeHistoryKey(episodeNumber: number): string {
+  return `1:${episodeNumber}`;
+}
+
+function formatUpcomingEpisodeLabel(episode: EpisodePreview): string | null {
+  if (episode.isReleased !== false) {
+    return null;
+  }
+
+  const scheduledAt = typeof episode.scheduledAt === 'number' ? episode.scheduledAt * 1000 : null;
+  if (!scheduledAt) {
+    return 'Upcoming';
+  }
+
+  const millisecondsUntil = scheduledAt - Date.now();
+  const dayMilliseconds = 24 * 60 * 60 * 1000;
+  const hourMilliseconds = 60 * 60 * 1000;
+
+  if (millisecondsUntil <= hourMilliseconds) {
+    return 'Airing soon';
+  }
+
+  if (millisecondsUntil < dayMilliseconds) {
+    return `Airs in ${Math.max(1, Math.ceil(millisecondsUntil / hourMilliseconds))}h`;
+  }
+
+  if (millisecondsUntil < dayMilliseconds * 2) {
+    return 'Airs tomorrow';
+  }
+
+  if (millisecondsUntil < dayMilliseconds * 7) {
+    return `Airs in ${Math.max(1, Math.ceil(millisecondsUntil / dayMilliseconds))}d`;
+  }
+
+  return `Airs ${new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(scheduledAt))}`;
+}
+
 function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
   if (props.entry.type !== 'tv') {
     return [
       {
         episodeNumber: 1,
+        fallbackStillUrl: props.entry.backdropUrl ?? props.entry.posterUrl,
         name: props.entry.title,
         overview: props.entry.synopsis,
         seasonNumber: 1,
@@ -58,6 +97,7 @@ function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
 
     return {
       episodeNumber,
+      fallbackStillUrl: props.entry.backdropUrl ?? props.entry.posterUrl,
       name: `Episode ${String(episodeNumber).padStart(2, '0')}`,
       overview: '',
       seasonNumber: 1,
@@ -88,27 +128,75 @@ function LoadingState({ error, isLoading }: { error: string | null; isLoading: b
   );
 }
 
+function EpisodeStillImage({
+  alt,
+  fallbackSrc,
+  priority,
+  src,
+}: {
+  alt: string;
+  fallbackSrc?: string;
+  priority: boolean;
+  src?: string;
+}) {
+  const [useFallback, setUseFallback] = useState(false);
+  const resolvedSrc = useFallback ? fallbackSrc : src || fallbackSrc;
+
+  if (!resolvedSrc) {
+    return <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />;
+  }
+
+  return (
+    <Image
+      key={`${src ?? 'none'}:${fallbackSrc ?? 'none'}`}
+      src={resolvedSrc}
+      alt={alt}
+      fill
+      sizes="112px"
+      className="object-cover"
+      priority={priority}
+      onError={() => {
+        if (!useFallback && fallbackSrc && fallbackSrc !== resolvedSrc) {
+          setUseFallback(true);
+        }
+      }}
+    />
+  );
+}
+
 function EpisodeCardList({
   cards,
   currentEpisode,
   onEpisodeChange,
+  watchedEpisodeKeys,
 }: {
   cards: EpisodePreview[];
   currentEpisode: number;
   onEpisodeChange: (episode: number) => void;
+  watchedEpisodeKeys: Set<string>;
 }) {
   return (
     <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
       {cards.map((episode) => {
         const isActive = episode.episodeNumber === currentEpisode;
+        const isUpcoming = episode.isReleased === false;
+        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(episode.episodeNumber));
+        const upcomingLabel = formatUpcomingEpisodeLabel(episode);
 
         return (
           <button
             key={episode.episodeNumber}
             type="button"
+            disabled={isUpcoming}
             onClick={() => onEpisodeChange(episode.episodeNumber)}
             className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
-              isActive ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
+              isActive
+                ? 'bg-white/[0.08]'
+                : isUpcoming
+                  ? 'cursor-not-allowed bg-white/[0.015] opacity-55'
+                  : isWatched
+                    ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]'
+                    : 'hover:bg-white/[0.05]'
             }`}
           >
             <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
@@ -119,11 +207,12 @@ function EpisodeCardList({
                   </div>
                 </div>
               ) : null}
-              {episode.stillUrl ? (
-                <Image src={episode.stillUrl} alt="" fill sizes="112px" className="object-cover" priority={isActive} />
-              ) : (
-                <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />
-              )}
+              <EpisodeStillImage
+                alt=""
+                fallbackSrc={episode.fallbackStillUrl}
+                priority={isActive}
+                src={episode.stillUrl}
+              />
             </div>
             <div className="min-w-0 flex-1 py-0.5">
               <p className="mb-0.5 text-[11px] text-zinc-400">
@@ -131,6 +220,16 @@ function EpisodeCardList({
                 {episode.runtime != null ? ` · ${episode.runtime}m` : ''}
               </p>
               <p className="line-clamp-1 text-xs font-medium text-white">{episode.name}</p>
+              {isUpcoming && upcomingLabel ? (
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-300">
+                  {upcomingLabel}
+                </p>
+              ) : null}
+              {isWatched && !isActive && !isUpcoming ? (
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                  Watched
+                </p>
+              ) : null}
               {episode.overview ? (
                 <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">{episode.overview}</p>
               ) : null}
@@ -149,6 +248,7 @@ function SidebarControls({
   currentServer,
   episodeCards,
   episodeLimit,
+  watchedEpisodeKeys,
   onEpisodeChange,
   onLanguageChange,
   onServerChange,
@@ -162,6 +262,7 @@ function SidebarControls({
   currentServer: AnimePlaybackServer;
   episodeCards: EpisodePreview[];
   episodeLimit: number;
+  watchedEpisodeKeys: Set<string>;
   onEpisodeChange: (episode: number) => void;
   onLanguageChange: (language: 'dub' | 'sub') => void;
   onServerChange: (server: AnimePlaybackServer) => void;
@@ -171,7 +272,10 @@ function SidebarControls({
 }) {
   const defaultGroupStart =
     Math.floor((Math.max(currentEpisode, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) * ANIME_EPISODE_GROUP_SIZE + 1;
-  const [selectedGroupStart, setSelectedGroupStart] = useState(defaultGroupStart);
+  const [selectedRange, setSelectedRange] = useState(() => ({
+    episodeAnchor: currentEpisode,
+    start: defaultGroupStart,
+  }));
 
   const episodeGroups = Array.from({ length: Math.ceil(episodeLimit / ANIME_EPISODE_GROUP_SIZE) }, (_, index) => {
     const startEpisode = index * ANIME_EPISODE_GROUP_SIZE + 1;
@@ -184,15 +288,15 @@ function SidebarControls({
     };
   });
 
-  const activeGroupStart =
-    currentEpisode >= selectedGroupStart && currentEpisode < selectedGroupStart + ANIME_EPISODE_GROUP_SIZE
-      ? selectedGroupStart
-      : defaultGroupStart;
+  const activeGroupStart = selectedRange.episodeAnchor === currentEpisode ? selectedRange.start : defaultGroupStart;
 
   const visibleEpisodeCards =
     episodeGroups.length > 1
       ? episodeCards.filter((episode) => {
-          return episode.episodeNumber >= activeGroupStart && episode.episodeNumber < activeGroupStart + ANIME_EPISODE_GROUP_SIZE;
+          return (
+            episode.episodeNumber >= activeGroupStart &&
+            episode.episodeNumber < activeGroupStart + ANIME_EPISODE_GROUP_SIZE
+          );
         })
       : episodeCards;
 
@@ -250,7 +354,12 @@ function SidebarControls({
             <select
               id="anime-episode-group"
               value={String(activeGroupStart)}
-              onChange={(event) => setSelectedGroupStart(Number.parseInt(event.target.value, 10))}
+              onChange={(event) =>
+                setSelectedRange({
+                  episodeAnchor: currentEpisode,
+                  start: Number.parseInt(event.target.value, 10),
+                })
+              }
               className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/20"
               aria-label="Select episode range"
             >
@@ -264,7 +373,12 @@ function SidebarControls({
         ) : null}
       </div>
 
-      <EpisodeCardList cards={visibleEpisodeCards} currentEpisode={currentEpisode} onEpisodeChange={onEpisodeChange} />
+      <EpisodeCardList
+        cards={visibleEpisodeCards}
+        currentEpisode={currentEpisode}
+        onEpisodeChange={onEpisodeChange}
+        watchedEpisodeKeys={watchedEpisodeKeys}
+      />
     </div>
   );
 }
@@ -279,9 +393,13 @@ export function AnimeWatchPlayer({
   const { language: storedLanguage, setLanguage: setStoredLanguage } = useAnimeLanguagePreference();
   const { server: storedServer, setServer: setStoredServer } = useAnimeServerPreference();
   const isSeries = entry.type === 'tv';
+  const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
   const episodeCards = getEpisodeCards({ entry, experience, initialPlayback, initialSeasonDetails });
-  const episodeLimit = isSeries ? (initialSeasonDetails?.episodeCount ?? getEpisodeLimit(entry, 1)) : 1;
-  const initialEpisode = Math.min(Math.max(1, Number.parseInt(initialPlayback.episode, 10) || 1), episodeLimit);
+  const playableEpisodeLimit = isSeries
+    ? (initialSeasonDetails?.releasedEpisodeCount ?? getEpisodeLimit(entry, 1))
+    : 1;
+  const episodeLimit = isSeries ? (initialSeasonDetails?.episodeCount ?? playableEpisodeLimit) : 1;
+  const initialEpisode = Math.min(Math.max(1, Number.parseInt(initialPlayback.episode, 10) || 1), playableEpisodeLimit);
 
   const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
   const [currentLanguage, setCurrentLanguage] = useState<'dub' | 'sub'>(initialPlayback.language ?? storedLanguage);
@@ -483,8 +601,8 @@ export function AnimeWatchPlayer({
       const handleEnded = () => {
         writeProgress();
 
-        if (autoNextEnabled && isSeries && currentEpisode < episodeLimit) {
-          setCurrentEpisode((episode) => Math.min(episodeLimit, episode + 1));
+        if (autoNextEnabled && isSeries && currentEpisode < playableEpisodeLimit) {
+          setCurrentEpisode((episode) => Math.min(playableEpisodeLimit, episode + 1));
         }
       };
 
@@ -502,7 +620,7 @@ export function AnimeWatchPlayer({
       video.removeEventListener('pause', writeProgress);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [autoNextEnabled, currentEpisode, currentLanguage, entry, episodeLimit, experience.id, isSeries]);
+  }, [autoNextEnabled, currentEpisode, currentLanguage, entry, experience.id, isSeries, playableEpisodeLimit]);
 
   useEffect(() => {
     const trackingEntry = { ...entry, defaultLanguage: currentLanguage };
@@ -575,10 +693,14 @@ export function AnimeWatchPlayer({
   };
 
   const handleEpisodeChange = (episode: number) => {
+    if (episode > playableEpisodeLimit) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setPlaybackData(null);
-    setCurrentEpisode(Math.min(Math.max(1, episode), episodeLimit));
+    setCurrentEpisode(Math.min(Math.max(1, episode), playableEpisodeLimit));
     setResumeOverrideSeconds(0);
   };
 
@@ -726,6 +848,7 @@ export function AnimeWatchPlayer({
           currentServer={currentServer}
           episodeCards={episodeCards}
           episodeLimit={episodeLimit}
+          watchedEpisodeKeys={watchedEpisodeKeys}
           onEpisodeChange={handleEpisodeChange}
           onLanguageChange={handleLanguageChange}
           onServerChange={handleServerChange}

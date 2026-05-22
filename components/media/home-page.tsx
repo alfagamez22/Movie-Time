@@ -8,12 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
-import {
-  removeRecentlyWatched,
-  restoreHomeScrollIfRequested,
-  saveHomeScrollPosition,
-  useRecentlyWatched,
-} from '@/lib/hooks/use-recently-watched';
+import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
@@ -226,7 +221,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   }, [deferredQuery, experience.searchEndpoint]);
 
   const featuredItems = getFeaturedItems(sections);
-
   return (
     <main className="min-h-screen bg-[#050505] text-white">
       <header
@@ -324,6 +318,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           items={featuredItems}
           onInfoSelect={openDetails}
           preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
+          recentlyWatched={recentlyWatched}
           watchBasePath={experience.watchBasePath}
         />
       ) : null}
@@ -365,6 +360,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         onClose={closeDetails}
         onSelectEntry={selectDetailsEntry}
         preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
+        recentlyWatched={recentlyWatched}
       />
 
       <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-600 md:px-12">

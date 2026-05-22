@@ -7,6 +7,7 @@ import type { LibraryMediaEntry, MediaEntry, MediaExperience } from '@/lib/media
 const MAX_RECENTLY_WATCHED = 12;
 const MAX_COOKIE_LENGTH = 3800;
 const EMPTY_RECENTLY_WATCHED: RecentlyWatchedEntry[] = [];
+const EMPTY_WATCHED_EPISODES = new Set<string>();
 
 export interface RecentlyWatchedEntry extends LibraryMediaEntry {
   durationSeconds?: number;
@@ -31,12 +32,15 @@ interface NamespaceKeys {
   recentlyWatchedCookie: string;
   recentlyWatchedStorageKey: string;
   restoreHomeScrollKey: string;
+  watchedEpisodesStorageKey: string;
 }
 
 type RecentlyWatchedNamespace = MediaExperience;
 
 const rawValueCache = new Map<RecentlyWatchedNamespace, string>();
 const entryCache = new Map<RecentlyWatchedNamespace, RecentlyWatchedEntry[]>();
+const watchedEpisodesRawValueCache = new Map<RecentlyWatchedNamespace, string>();
+const watchedEpisodesSetCache = new Map<RecentlyWatchedNamespace, Map<string, Set<string>>>();
 
 function getNamespacePrefix(namespace: RecentlyWatchedNamespace): string {
   return namespace === 'papianime' ? 'papianime' : 'papiflix';
@@ -51,6 +55,7 @@ function getNamespaceKeys(namespace: RecentlyWatchedNamespace): NamespaceKeys {
     recentlyWatchedCookie: `${prefix}_recently_watched_v1`,
     recentlyWatchedStorageKey: `${prefix}-recently-watched-v1`,
     restoreHomeScrollKey: `${prefix}-restore-home-scroll`,
+    watchedEpisodesStorageKey: `${prefix}-watched-episodes-v1`,
   };
 }
 
@@ -68,6 +73,22 @@ function getCachedEntries(namespace: RecentlyWatchedNamespace): RecentlyWatchedE
 
 function setCachedEntries(namespace: RecentlyWatchedNamespace, entries: RecentlyWatchedEntry[]) {
   entryCache.set(namespace, entries);
+}
+
+function getCachedWatchedEpisodesRawValue(namespace: RecentlyWatchedNamespace): string {
+  return watchedEpisodesRawValueCache.get(namespace) ?? '';
+}
+
+function setCachedWatchedEpisodesRawValue(namespace: RecentlyWatchedNamespace, value: string) {
+  watchedEpisodesRawValueCache.set(namespace, value);
+}
+
+function getCachedWatchedEpisodeSets(namespace: RecentlyWatchedNamespace): Map<string, Set<string>> {
+  return watchedEpisodesSetCache.get(namespace) ?? new Map<string, Set<string>>();
+}
+
+function setCachedWatchedEpisodeSets(namespace: RecentlyWatchedNamespace, value: Map<string, Set<string>>) {
+  watchedEpisodesSetCache.set(namespace, value);
 }
 
 function isBrowser() {
@@ -202,7 +223,9 @@ function getServerRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
 function subscribeRecentlyWatched(namespace: RecentlyWatchedNamespace, onStoreChange: () => void) {
   const keys = getNamespaceKeys(namespace);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === keys.recentlyWatchedStorageKey) onStoreChange();
+    if (event.key === keys.recentlyWatchedStorageKey || event.key === keys.watchedEpisodesStorageKey) {
+      onStoreChange();
+    }
   };
 
   window.addEventListener('storage', onStorage);
@@ -222,6 +245,161 @@ function sanitizeNonNegativeNumber(value: number | undefined): number | undefine
 function sanitizePercent(value: number | undefined): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
   return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function readRawWatchedEpisodes(namespace: RecentlyWatchedNamespace): string {
+  if (!isBrowser()) return '';
+
+  const keys = getNamespaceKeys(namespace);
+
+  try {
+    return localStorage.getItem(keys.watchedEpisodesStorageKey) || '';
+  } catch {
+    return '';
+  }
+}
+
+function buildMediaStorageKey(entry: Pick<LibraryMediaEntry | MediaEntry, 'id' | 'provider' | 'type'>): string {
+  return `${entry.provider}:${entry.type}:${entry.id}`;
+}
+
+function buildEpisodeStorageKey(season: string | undefined, episode: string | undefined): string | null {
+  if (!episode) {
+    return null;
+  }
+
+  return `${season ?? '1'}:${episode}`;
+}
+
+function parseWatchedEpisodesMap(rawValue: string): Record<string, string[]> {
+  if (!rawValue) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).map(([entryKey, watchedEpisodes]) => {
+        if (!Array.isArray(watchedEpisodes)) {
+          return [entryKey, []];
+        }
+
+        return [
+          entryKey,
+          watchedEpisodes.filter((value): value is string => typeof value === 'string'),
+        ];
+      }),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function getWatchedEpisodesMap(namespace: RecentlyWatchedNamespace): Record<string, string[]> {
+  return parseWatchedEpisodesMap(readRawWatchedEpisodes(namespace));
+}
+
+function getWatchedEpisodeSnapshot(
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'id' | 'provider' | 'type'> | null,
+  namespace: RecentlyWatchedNamespace,
+): Set<string> {
+  if (!entry || !isBrowser()) {
+    return EMPTY_WATCHED_EPISODES;
+  }
+
+  const rawValue = readRawWatchedEpisodes(namespace);
+  if (rawValue !== getCachedWatchedEpisodesRawValue(namespace)) {
+    const parsedMap = parseWatchedEpisodesMap(rawValue);
+    const cachedSets = new Map<string, Set<string>>();
+
+    Object.entries(parsedMap).forEach(([mediaKey, episodes]) => {
+      cachedSets.set(mediaKey, new Set<string>(episodes));
+    });
+
+    setCachedWatchedEpisodesRawValue(namespace, rawValue);
+    setCachedWatchedEpisodeSets(namespace, cachedSets);
+  }
+
+  return getCachedWatchedEpisodeSets(namespace).get(buildMediaStorageKey(entry)) ?? EMPTY_WATCHED_EPISODES;
+}
+
+function writeWatchedEpisodesMap(namespace: RecentlyWatchedNamespace, watchedEpisodesMap: Record<string, string[]>) {
+  if (!isBrowser()) return;
+
+  const keys = getNamespaceKeys(namespace);
+  const rawValue = JSON.stringify(watchedEpisodesMap);
+
+  try {
+    localStorage.setItem(keys.watchedEpisodesStorageKey, rawValue);
+  } catch {
+    // Keep the session usable even when persistent storage is unavailable.
+  }
+
+  const cachedSets = new Map<string, Set<string>>();
+  Object.entries(watchedEpisodesMap).forEach(([mediaKey, episodes]) => {
+    cachedSets.set(mediaKey, new Set<string>(episodes));
+  });
+
+  setCachedWatchedEpisodesRawValue(namespace, rawValue);
+  setCachedWatchedEpisodeSets(namespace, cachedSets);
+}
+
+function shouldMarkEpisodeWatched(options: TrackPlaybackOptions, previous?: RecentlyWatchedEntry): boolean {
+  const canReusePreviousProgress = previous?.season === options.season && previous?.episode === options.episode;
+  const progressPercent =
+    sanitizePercent(options.progressPercent) ??
+    (canReusePreviousProgress ? sanitizePercent(previous?.progressPercent) : undefined);
+  if (typeof progressPercent === 'number' && progressPercent >= 85) {
+    return true;
+  }
+
+  const durationSeconds =
+    sanitizeNonNegativeNumber(options.durationSeconds) ??
+    (canReusePreviousProgress ? previous?.durationSeconds : undefined);
+  const progressSeconds =
+    sanitizeNonNegativeNumber(options.progressSeconds) ??
+    (canReusePreviousProgress ? previous?.progressSeconds : undefined);
+  if (
+    typeof durationSeconds === 'number' &&
+    durationSeconds > 0 &&
+    typeof progressSeconds === 'number' &&
+    progressSeconds >= Math.max(durationSeconds * 0.85, durationSeconds - 120)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function markEpisodeWatched(
+  entry: LibraryMediaEntry | MediaEntry,
+  options: TrackPlaybackOptions,
+  previous: RecentlyWatchedEntry | undefined,
+  namespace: RecentlyWatchedNamespace,
+) {
+  if (entry.type !== 'tv' || !options.episode || !shouldMarkEpisodeWatched(options, previous)) {
+    return;
+  }
+
+  const episodeStorageKey = buildEpisodeStorageKey(options.season, options.episode);
+  if (!episodeStorageKey) {
+    return;
+  }
+
+  const watchedEpisodesMap = getWatchedEpisodesMap(namespace);
+  const mediaStorageKey = buildMediaStorageKey(entry);
+  const existingEpisodes = watchedEpisodesMap[mediaStorageKey] ?? [];
+
+  if (existingEpisodes.includes(episodeStorageKey)) {
+    return;
+  }
+
+  watchedEpisodesMap[mediaStorageKey] = [...existingEpisodes, episodeStorageKey];
+  writeWatchedEpisodesMap(namespace, watchedEpisodesMap);
 }
 
 function compactEntry(
@@ -294,9 +472,23 @@ export function trackRecentlyWatched(
     // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
   }
   writeSessionCookie(namespace, nextEntries);
+  markEpisodeWatched(entry, options, previousEntry, namespace);
   setCachedRawValue(namespace, rawValue);
   setCachedEntries(namespace, nextEntries);
   window.dispatchEvent(new Event(keys.eventName));
+}
+
+export function getRecentlyWatchedEntry(
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'id' | 'provider' | 'type'>,
+  namespace: RecentlyWatchedNamespace = 'papiflix',
+) {
+  if (!isBrowser()) return null;
+
+  return (
+    getRecentlyWatchedSnapshot(namespace).find((candidate) => {
+      return candidate.type === entry.type && candidate.id === entry.id && candidate.provider === entry.provider;
+    }) ?? null
+  );
 }
 
 export function getRecentlyWatchedProgress(
@@ -352,6 +544,17 @@ export function useRecentlyWatched(namespace: RecentlyWatchedNamespace = 'papifl
     (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange),
     () => getRecentlyWatchedSnapshot(namespace),
     getServerRecentlyWatchedSnapshot,
+  );
+}
+
+export function useWatchedEpisodes(
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'id' | 'provider' | 'type'> | null,
+  namespace: RecentlyWatchedNamespace = 'papiflix',
+) {
+  return useSyncExternalStore(
+    (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange),
+    () => getWatchedEpisodeSnapshot(entry, namespace),
+    () => EMPTY_WATCHED_EPISODES,
   );
 }
 

@@ -62,6 +62,46 @@ function getProgressDisplay(entry: LibraryMediaEntry) {
   };
 }
 
+function formatNextEpisodeArrival(entry: LibraryMediaEntry): string | null {
+  if (
+    entry.type !== 'tv' ||
+    typeof entry.nextEpisodeAt !== 'number' ||
+    !Number.isFinite(entry.nextEpisodeAt) ||
+    typeof entry.nextEpisodeNumber !== 'number' ||
+    !Number.isFinite(entry.nextEpisodeNumber)
+  ) {
+    return null;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const secondsUntil = entry.nextEpisodeAt - nowSeconds;
+  if (secondsUntil <= 0) {
+    return null;
+  }
+
+  const daySeconds = 24 * 60 * 60;
+  const hourSeconds = 60 * 60;
+  const minuteSeconds = 60;
+
+  let arrivalLabel = '';
+  if (secondsUntil < hourSeconds) {
+    arrivalLabel = `in ${Math.max(1, Math.ceil(secondsUntil / minuteSeconds))}m`;
+  } else if (secondsUntil < daySeconds) {
+    arrivalLabel = `in ${Math.max(1, Math.ceil(secondsUntil / hourSeconds))}h`;
+  } else if (secondsUntil < daySeconds * 2) {
+    arrivalLabel = 'tomorrow';
+  } else if (secondsUntil < daySeconds * 7) {
+    arrivalLabel = `in ${Math.max(1, Math.ceil(secondsUntil / daySeconds))}d`;
+  } else {
+    arrivalLabel = new Intl.DateTimeFormat(undefined, {
+      day: 'numeric',
+      month: 'short',
+    }).format(new Date(entry.nextEpisodeAt * 1000));
+  }
+
+  return `Next ep ${entry.nextEpisodeNumber} ${arrivalLabel}`;
+}
+
 function PosterCard({
   entry,
   onRemove,
@@ -73,6 +113,7 @@ function PosterCard({
 }) {
   const progress = getProgressDisplay(entry);
   const isRecentlyWatched = Boolean(onRemove);
+  const nextEpisodeArrival = formatNextEpisodeArrival(entry);
 
   return (
     <div
@@ -135,6 +176,12 @@ function PosterCard({
               </span>
             </div>
           </div>
+
+          {nextEpisodeArrival ? (
+            <div className="absolute left-2 top-2 z-10 rounded-md bg-emerald-500/85 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-lg backdrop-blur-sm">
+              {nextEpisodeArrival}
+            </div>
+          ) : null}
 
           {progress ? (
             <>

@@ -2,7 +2,6 @@ import 'server-only';
 
 import {
   fetchAniZipMappings,
-  getAniZipEpisodeCount,
   getAniZipEpisodeTitle,
   listAniZipEpisodes,
   type AniZipEpisode,
@@ -152,17 +151,169 @@ function getReleaseYear(media: AnilistMedia): number | undefined {
   return media.seasonYear ?? media.startDate?.year ?? undefined;
 }
 
+function getStartDateTimestamp(media: AnilistMedia): number | null {
+  const year = media.startDate?.year;
+  if (typeof year !== 'number' || !Number.isFinite(year)) {
+    return null;
+  }
+
+  const month = media.startDate?.month;
+  const day = media.startDate?.day;
+  return Date.UTC(year, Math.max(0, (month ?? 1) - 1), day ?? 1);
+}
+
+function getAniZipEpisodeAirTimestamp(episode: AniZipEpisode | undefined): number | null {
+  const airDate = cleanText(episode?.airDate);
+  if (!airDate) {
+    return null;
+  }
+
+  const parsedAirDate = Date.parse(`${airDate}T00:00:00Z`);
+  return Number.isFinite(parsedAirDate) ? parsedAirDate : null;
+}
+
+function isAniZipEpisodeReleased(episode: AniZipEpisode): boolean {
+  const parsedAirDate = getAniZipEpisodeAirTimestamp(episode);
+  if (parsedAirDate === null) {
+    return true;
+  }
+
+  return parsedAirDate <= Date.now();
+}
+
+function isAniZipEpisodeScheduled(episode: AniZipEpisode): boolean {
+  const parsedAirDate = getAniZipEpisodeAirTimestamp(episode);
+  return parsedAirDate !== null && parsedAirDate > Date.now();
+}
+
+function getUpcomingEpisodeBoundary(media: AnilistMedia): number | null {
+  const nextEpisodeNumber = media.nextAiringEpisode?.episode;
+  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
+
+  if (
+    typeof nextEpisodeNumber !== 'number' ||
+    !Number.isFinite(nextEpisodeNumber) ||
+    typeof nextEpisodeAt !== 'number' ||
+    !Number.isFinite(nextEpisodeAt) ||
+    nextEpisodeAt * 1000 <= Date.now()
+  ) {
+    return null;
+  }
+
+  return nextEpisodeNumber;
+}
+
+function getReleasedAniZipEpisodeCount(
+  mappings?: AniZipMappingsResponse | null,
+  upcomingEpisodeBoundary?: number | null,
+): number {
+  return listAniZipEpisodes(mappings)
+    .filter((episode) => {
+      if (typeof episode.episodeNumber === 'number' && upcomingEpisodeBoundary && episode.episodeNumber >= upcomingEpisodeBoundary) {
+        return false;
+      }
+
+      return isAniZipEpisodeReleased(episode);
+    })
+    .length;
+}
+
+function getVisibleAniZipEpisodeCount(mappings?: AniZipMappingsResponse | null): number {
+  return listAniZipEpisodes(mappings)
+    .filter((episode) => isAniZipEpisodeReleased(episode) || isAniZipEpisodeScheduled(episode))
+    .reduce((highestEpisodeNumber, episode) => {
+      return typeof episode.episodeNumber === 'number' ? Math.max(highestEpisodeNumber, episode.episodeNumber) : highestEpisodeNumber;
+    }, 0);
+}
+
+function isReleasedAnime(media: AnilistMedia): boolean {
+  if (media.status === 'NOT_YET_RELEASED') {
+    return false;
+  }
+
+  const nextEpisodeNumber = media.nextAiringEpisode?.episode;
+  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
+  if (
+    typeof nextEpisodeNumber === 'number' &&
+    nextEpisodeNumber <= 1 &&
+    typeof nextEpisodeAt === 'number' &&
+    nextEpisodeAt * 1000 > Date.now()
+  ) {
+    return false;
+  }
+
+  const startDateTimestamp = getStartDateTimestamp(media);
+  if (startDateTimestamp !== null && startDateTimestamp > Date.now()) {
+    return false;
+  }
+
+  return true;
+}
+
+function getReleasedEpisodeCount(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): number {
+  if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
+    return isReleasedAnime(media) ? 1 : 0;
+  }
+
+  const upcomingEpisodeBoundary = getUpcomingEpisodeBoundary(media);
+  const aniZipEpisodeCount = getReleasedAniZipEpisodeCount(mappings, upcomingEpisodeBoundary);
+
+  if (media.status === 'RELEASING') {
+    if (typeof upcomingEpisodeBoundary === 'number') {
+      return Math.max(upcomingEpisodeBoundary - 1, 0);
+    }
+
+    if (aniZipEpisodeCount > 0) {
+      return aniZipEpisodeCount;
+    }
+
+    return isReleasedAnime(media) ? 1 : 0;
+  }
+
+  return Math.max(media.episodes ?? 0, aniZipEpisodeCount, isReleasedAnime(media) ? 1 : 0);
+}
+
+function getVisibleEpisodeCount(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): number {
+  if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
+    return isReleasedAnime(media) ? 1 : 0;
+  }
+
+  return Math.max(
+    getReleasedEpisodeCount(media, mappings),
+    getVisibleAniZipEpisodeCount(mappings),
+    media.nextAiringEpisode?.episode ?? 0,
+  );
+}
+
+function getNextEpisodeInfo(media: AnilistMedia): Pick<TvMediaEntry, 'nextEpisodeAt' | 'nextEpisodeNumber'> {
+  if (mapAnilistFormatToMediaType(media.format ?? undefined) !== 'tv' || !isReleasedAnime(media)) {
+    return {};
+  }
+
+  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
+  const nextEpisodeNumber = media.nextAiringEpisode?.episode;
+  if (
+    typeof nextEpisodeAt !== 'number' ||
+    !Number.isFinite(nextEpisodeAt) ||
+    nextEpisodeAt * 1000 <= Date.now() ||
+    typeof nextEpisodeNumber !== 'number' ||
+    !Number.isFinite(nextEpisodeNumber)
+  ) {
+    return {};
+  }
+
+  return {
+    nextEpisodeAt,
+    nextEpisodeNumber,
+  };
+}
+
 function getEpisodeCount(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): number {
   if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
     return 1;
   }
 
-  return Math.max(
-    media.episodes ?? 0,
-    media.nextAiringEpisode?.episode ? Math.max(media.nextAiringEpisode.episode - 1, 1) : 0,
-    getAniZipEpisodeCount(mappings),
-    1,
-  );
+  return Math.max(getReleasedEpisodeCount(media, mappings), 1);
 }
 
 function getFallbackEpisodeName(episodeNumber: number): string {
@@ -172,14 +323,19 @@ function getFallbackEpisodeName(episodeNumber: number): string {
 function mapAniZipEpisode(
   episode: AniZipEpisode | undefined,
   episodeNumber: number,
+  isReleased: boolean,
+  scheduledAt: number | undefined,
   fallbackStillUrl?: string,
 ) {
   return {
     airDate: cleanText(episode?.airDate) || undefined,
     episodeNumber,
+    fallbackStillUrl,
+    isReleased,
     name: getAniZipEpisodeTitle(episode) || getFallbackEpisodeName(episodeNumber),
     overview: cleanSynopsis(episode?.overview),
     runtime: typeof episode?.runtime === 'number' && Number.isFinite(episode.runtime) ? episode.runtime : undefined,
+    scheduledAt,
     seasonNumber: 1,
     stillUrl: cleanText(episode?.image) || fallbackStillUrl,
   };
@@ -200,17 +356,38 @@ function buildSeasonDetails(media: AnilistMedia, mappings?: AniZipMappingsRespon
     }
   });
 
-  const episodeCount = getEpisodeCount(media, mappings);
+  const releasedEpisodeCount = getReleasedEpisodeCount(media, mappings);
+  const episodeCount = Math.max(releasedEpisodeCount, getVisibleEpisodeCount(media, mappings));
+  const nextAiringEpisodeNumber = media.nextAiringEpisode?.episode;
+  const nextAiringTimestamp =
+    typeof media.nextAiringEpisode?.airingAt === 'number' ? media.nextAiringEpisode.airingAt * 1000 : undefined;
+  const upcomingEpisodeBoundary = getUpcomingEpisodeBoundary(media);
 
   return {
     episodeCount,
     episodes: Array.from({ length: episodeCount }, (_, index) => {
       const episodeNumber = index + 1;
-      return mapAniZipEpisode(episodeMap.get(episodeNumber), episodeNumber, fallbackStillUrl);
+      const mappedEpisode = episodeMap.get(episodeNumber);
+      const mappedScheduledAt = getAniZipEpisodeAirTimestamp(mappedEpisode);
+      const isReleased =
+        typeof upcomingEpisodeBoundary === 'number'
+          ? episodeNumber < upcomingEpisodeBoundary
+          : mappedEpisode != null
+            ? isAniZipEpisodeReleased(mappedEpisode)
+            : episodeNumber <= releasedEpisodeCount;
+      const scheduledAt =
+        typeof mappedScheduledAt === 'number'
+          ? Math.floor(mappedScheduledAt / 1000)
+          : episodeNumber === nextAiringEpisodeNumber && nextAiringTimestamp
+            ? Math.floor(nextAiringTimestamp / 1000)
+            : undefined;
+
+      return mapAniZipEpisode(mappedEpisode, episodeNumber, isReleased, scheduledAt, fallbackStillUrl);
     }),
     name: 'Episodes',
     overview: cleanSynopsis(media.description),
     posterUrl: getPosterUrl(media),
+    releasedEpisodeCount,
     seasonNumber: 1,
   };
 }
@@ -238,6 +415,7 @@ function createMovieEntry(media: AnilistMedia): MovieMediaEntry {
 
 function createTvEntry(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): TvMediaEntry {
   const episodeCount = getEpisodeCount(media, mappings);
+  const nextEpisodeInfo = getNextEpisodeInfo(media);
 
   return {
     aliases: getAliases(media),
@@ -262,6 +440,7 @@ function createTvEntry(media: AnilistMedia, mappings?: AniZipMappingsResponse | 
     totalEpisodes: episodeCount,
     type: 'tv',
     year: getReleaseYear(media),
+    ...nextEpisodeInfo,
   };
 }
 
@@ -300,7 +479,9 @@ function createSection(id: string, title: string, description: string, entries: 
 }
 
 function mapBrowseEntries(media: AnilistMedia[]): LibraryMediaEntry[] {
-  return media.map((entry) => toLibraryMediaEntry(createAnimeEntry(entry)));
+  return media
+    .filter(isReleasedAnime)
+    .map((entry) => toLibraryMediaEntry(createAnimeEntry(entry)));
 }
 
 function mapCast(details: AnilistMediaDetails): MediaCastMember[] {
@@ -352,6 +533,7 @@ function mapRecommendations(details: AnilistMediaDetails): LibraryMediaEntry[] {
 
   return dedupeEntries(
     [...recommendationEntries, ...relationEntries]
+      .filter(isReleasedAnime)
       .filter((entry) => String(entry.id) !== String(details.id))
       .map((entry) => toLibraryMediaEntry(createAnimeEntry(entry))),
     18,
@@ -371,6 +553,10 @@ export async function lookupAnimeMediaEntry(id: string): Promise<AnimeLookupResu
 
   if (!media) {
     return createLookupFailure(`AniList anime ${id} was not found.`, 'not-found', 404);
+  }
+
+  if (!isReleasedAnime(media)) {
+    return createLookupFailure(`AniList anime ${id} has not released yet.`, 'not-found', 404);
   }
 
   return {
@@ -412,6 +598,7 @@ export async function searchAnimeLibrary(query: string, type?: MediaType): Promi
 
   const entries = dedupeEntries(
     results
+      .filter(isReleasedAnime)
       .map((entry) => toLibraryMediaEntry(createAnimeEntry(entry)))
       .filter((entry) => !type || entry.type === type),
     24,

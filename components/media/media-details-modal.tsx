@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react
 import { ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
+import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
 import {
@@ -23,6 +24,7 @@ interface MediaDetailsModalProps {
   onClose: () => void;
   onSelectEntry: (entry: LibraryMediaEntry) => void;
   preferredAnimeLanguage?: PlaybackLanguage;
+  recentlyWatched?: RecentlyWatchedEntry[];
 }
 
 interface DetailsResponse {
@@ -68,6 +70,18 @@ function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boo
         </div>
       ))}
     </div>
+  );
+}
+
+function findResumeEntry(entry: LibraryMediaEntry | null, recentlyWatched: RecentlyWatchedEntry[] | undefined) {
+  if (!entry) {
+    return null;
+  }
+
+  return (
+    recentlyWatched?.find((candidate) => {
+      return candidate.type === entry.type && candidate.id === entry.id && candidate.provider === entry.provider;
+    }) ?? null
   );
 }
 
@@ -274,6 +288,7 @@ export function MediaDetailsModal({
   onClose,
   onSelectEntry,
   preferredAnimeLanguage,
+  recentlyWatched,
 }: MediaDetailsModalProps) {
   const [details, setDetails] = useState<MediaDetailsPayload | null>(null);
   const [error, setError] = useState<DetailsErrorState | null>(null);
@@ -371,17 +386,25 @@ export function MediaDetailsModal({
   const trailers = activeDetails?.trailers ?? [];
   const backdropUrl = displayEntry?.backdropUrl ?? entry?.backdropUrl;
   const posterUrl = displayEntry?.posterUrl ?? entry?.posterUrl;
-  const resumeEntry = entry as ResumeMediaEntry | null;
+  const resumeEntry = findResumeEntry(displayEntry ?? entry, recentlyWatched) as ResumeMediaEntry | null;
   const primaryTrailer = trailers[0];
   const playHref = displayEntry
     ? buildWatchHref(displayEntry, {
         basePath: experience.watchBasePath,
         episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
-        language: preferredAnimeLanguage,
+        language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
         progress: resumeEntry?.progressSeconds,
         season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
       })
     : '#';
+  const playLabel =
+    resumeEntry?.type === 'tv' && resumeEntry.episode
+      ? resumeEntry.season
+        ? `Continue S${resumeEntry.season} E${resumeEntry.episode}`
+        : `Continue E${resumeEntry.episode}`
+      : resumeEntry?.progressSeconds
+        ? 'Continue'
+        : 'Play';
 
   return (
     <AnimatePresence>
@@ -448,7 +471,7 @@ export function MediaDetailsModal({
                       className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-zinc-200"
                     >
                       <Play className="h-4 w-4 fill-current" />
-                      Play
+                      {playLabel}
                     </Link>
                     {primaryTrailer ? (
                       <button

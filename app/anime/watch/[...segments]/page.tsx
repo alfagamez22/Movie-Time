@@ -170,7 +170,7 @@ async function resolveCanonicalState(
     };
   }
 
-  const episodeLimit = lookup.seasonDetails?.episodeCount ?? lookup.entry.episodeCount ?? 1;
+  const episodeLimit = lookup.seasonDetails?.releasedEpisodeCount ?? lookup.entry.episodeCount ?? 1;
   const parsedEpisode = Math.min(Math.max(1, Number.parseInt(episode, 10) || 1), episodeLimit);
   const parsedLanguage = (parsePlaybackLanguage(language) ?? lookup.entry.defaultLanguage ?? 'sub') as 'dub' | 'sub';
   const initialPlayback = {

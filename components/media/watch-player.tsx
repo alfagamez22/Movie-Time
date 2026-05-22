@@ -23,6 +23,7 @@ import {
 import {
   requestHomeScrollRestore,
   trackRecentlyWatched,
+  useWatchedEpisodes,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import {
@@ -147,6 +148,10 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
   };
 }
 
+function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
+  return `${season}:${episodeNumber}`;
+}
+
 function LoadingOverlay({
   isAnime,
   isLoading,
@@ -190,6 +195,42 @@ function LoadingOverlay({
   );
 }
 
+function EpisodeStillImage({
+  alt,
+  fallbackSrc,
+  priority,
+  src,
+}: {
+  alt: string;
+  fallbackSrc?: string;
+  priority: boolean;
+  src?: string;
+}) {
+  const [useFallback, setUseFallback] = useState(false);
+  const resolvedSrc = useFallback ? fallbackSrc : src || fallbackSrc;
+
+  if (!resolvedSrc) {
+    return <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />;
+  }
+
+  return (
+    <Image
+      key={`${src ?? 'none'}:${fallbackSrc ?? 'none'}`}
+      src={resolvedSrc}
+      alt={alt}
+      fill
+      sizes="112px"
+      className="object-cover"
+      priority={priority}
+      onError={() => {
+        if (!useFallback && fallbackSrc && fallbackSrc !== resolvedSrc) {
+          setUseFallback(true);
+        }
+      }}
+    />
+  );
+}
+
 export function WatchPlayer({
   entry,
   experience,
@@ -199,6 +240,7 @@ export function WatchPlayer({
   const router = useRouter();
   const isAnime = isAnimeProvider(entry.provider);
   const isSeries = isTvEntry(entry);
+  const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
 
   const [season, setSeason] = useState(initialPlayback.season);
   const [episode, setEpisode] = useState(initialPlayback.episode);
@@ -233,10 +275,11 @@ export function WatchPlayer({
     : [];
 
   const seasonEpisodeCards: EpisodePreview[] = (activeSeasonDetails?.episodes ?? []).length > 0
-    ? activeSeasonDetails?.episodes ?? []
-    : episodeOptions.map((episodeNumber) => ({
+      ? activeSeasonDetails?.episodes ?? []
+      : episodeOptions.map((episodeNumber) => ({
         airDate: undefined,
         episodeNumber: Number.parseInt(episodeNumber, 10),
+        fallbackStillUrl: isAnime ? entry.backdropUrl ?? entry.posterUrl : undefined,
         name: `Episode ${episodeNumber.padStart(2, '0')}`,
         overview: '',
         runtime: undefined,
@@ -509,6 +552,7 @@ export function WatchPlayer({
             onLanguageChange={handleAnimeLanguageChange}
             safeEpisode={safeEpisode}
             safeEpisodeLimit={safeEpisodeLimit}
+            watchedEpisodeKeys={watchedEpisodeKeys}
           />
         ) : (
           <EpisodeSidebar
@@ -518,6 +562,7 @@ export function WatchPlayer({
             seasonOptions={seasonOptions}
             seasonEpisodeCards={seasonEpisodeCards}
             seasonDetailsError={seasonDetailsError}
+            watchedEpisodeKeys={watchedEpisodeKeys}
             onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
             onEpisodeChange={handleEpisodeChange}
           />
@@ -536,6 +581,7 @@ interface EpisodeSidebarProps {
   seasonDetailsError: string | null;
   seasonEpisodeCards: EpisodePreview[];
   seasonOptions: string[];
+  watchedEpisodeKeys: Set<string>;
 }
 
 function EpisodeSidebar({
@@ -545,6 +591,7 @@ function EpisodeSidebar({
   seasonOptions,
   seasonEpisodeCards,
   seasonDetailsError,
+  watchedEpisodeKeys,
   onSeasonChange,
   onEpisodeChange,
 }: EpisodeSidebarProps) {
@@ -567,7 +614,13 @@ function EpisodeSidebar({
         <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
       </div>
 
-      <EpisodeCardList cards={seasonEpisodeCards} onEpisodeChange={onEpisodeChange} safeEpisode={safeEpisode} />
+      <EpisodeCardList
+        cards={seasonEpisodeCards}
+        onEpisodeChange={onEpisodeChange}
+        safeEpisode={safeEpisode}
+        safeSeason={safeSeason}
+        watchedEpisodeKeys={watchedEpisodeKeys}
+      />
 
       {seasonDetailsError ? (
         <div className="m-3 shrink-0 rounded-lg border border-amber-400/20 bg-amber-400/5 p-2 text-xs text-amber-200">
@@ -585,6 +638,7 @@ function AnimeEpisodeSidebar({
   onLanguageChange,
   safeEpisode,
   safeEpisodeLimit,
+  watchedEpisodeKeys,
 }: {
   episodeCards: EpisodePreview[];
   language: 'dub' | 'sub';
@@ -592,11 +646,18 @@ function AnimeEpisodeSidebar({
   onLanguageChange: (language: 'dub' | 'sub') => void;
   safeEpisode: string;
   safeEpisodeLimit: number;
+  watchedEpisodeKeys: Set<string>;
 }) {
   const [selectedGroupStart, setSelectedGroupStart] = useState(() => {
     const episodeNumber = Number.parseInt(safeEpisode, 10);
     return Math.floor((Math.max(episodeNumber, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) * ANIME_EPISODE_GROUP_SIZE + 1;
   });
+  const [selectedRangeEpisode, setSelectedRangeEpisode] = useState(safeEpisode);
+  const defaultGroupStart =
+    Math.floor((Math.max(Number.parseInt(safeEpisode, 10) || 1, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) *
+      ANIME_EPISODE_GROUP_SIZE +
+    1;
+  const activeGroupStart = selectedRangeEpisode === safeEpisode ? selectedGroupStart : defaultGroupStart;
 
   const episodeGroups = Array.from({ length: Math.ceil(safeEpisodeLimit / ANIME_EPISODE_GROUP_SIZE) }, (_, index) => {
     const startEpisode = index * ANIME_EPISODE_GROUP_SIZE + 1;
@@ -613,8 +674,8 @@ function AnimeEpisodeSidebar({
     episodeGroups.length > 1
       ? episodeCards.filter(
           (episode) =>
-            episode.episodeNumber >= selectedGroupStart &&
-            episode.episodeNumber < selectedGroupStart + ANIME_EPISODE_GROUP_SIZE,
+            episode.episodeNumber >= activeGroupStart &&
+            episode.episodeNumber < activeGroupStart + ANIME_EPISODE_GROUP_SIZE,
         )
       : episodeCards;
 
@@ -646,8 +707,11 @@ function AnimeEpisodeSidebar({
             </label>
             <select
               id="anime-episode-group"
-              value={String(selectedGroupStart)}
-              onChange={(event) => setSelectedGroupStart(Number.parseInt(event.target.value, 10))}
+              value={String(activeGroupStart)}
+              onChange={(event) => {
+                setSelectedRangeEpisode(safeEpisode);
+                setSelectedGroupStart(Number.parseInt(event.target.value, 10));
+              }}
               className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/20"
               aria-label="Select episode range"
             >
@@ -662,10 +726,12 @@ function AnimeEpisodeSidebar({
       </div>
 
       <EpisodeCardList
-        key={selectedGroupStart}
+        key={activeGroupStart}
         cards={visibleEpisodeCards}
         onEpisodeChange={onEpisodeChange}
         safeEpisode={safeEpisode}
+        safeSeason="1"
+        watchedEpisodeKeys={watchedEpisodeKeys}
       />
     </div>
   );
@@ -675,16 +741,21 @@ function EpisodeCardList({
   cards,
   onEpisodeChange,
   safeEpisode,
+  safeSeason,
+  watchedEpisodeKeys,
 }: {
   cards: EpisodePreview[];
   onEpisodeChange: (episode: string) => void;
   safeEpisode: string;
+  safeSeason: string;
+  watchedEpisodeKeys: Set<string>;
 }) {
   return (
     <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
       {cards.map((episode) => {
         const episodeNumber = String(episode.episodeNumber);
         const isActive = episodeNumber === safeEpisode;
+        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(safeSeason, episodeNumber));
 
         return (
           <button
@@ -692,7 +763,7 @@ function EpisodeCardList({
             type="button"
             onClick={() => onEpisodeChange(episodeNumber)}
             className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
-              isActive ? 'bg-white/[0.08]' : 'hover:bg-white/[0.05]'
+              isActive ? 'bg-white/[0.08]' : isWatched ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]' : 'hover:bg-white/[0.05]'
             }`}
           >
             <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
@@ -703,11 +774,12 @@ function EpisodeCardList({
                   </div>
                 </div>
               ) : null}
-              {episode.stillUrl ? (
-                <Image src={episode.stillUrl} alt="" fill sizes="112px" className="object-cover" priority={isActive} />
-              ) : (
-                <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />
-              )}
+              <EpisodeStillImage
+                alt=""
+                fallbackSrc={episode.fallbackStillUrl}
+                priority={isActive}
+                src={episode.stillUrl}
+              />
             </div>
             <div className="min-w-0 flex-1 py-0.5">
               <p className="mb-0.5 text-[11px] text-zinc-400">
@@ -715,6 +787,11 @@ function EpisodeCardList({
                 {episode.runtime != null ? ` · ${episode.runtime}m` : ''}
               </p>
               <p className="line-clamp-1 text-xs font-medium text-white">{episode.name}</p>
+              {isWatched && !isActive ? (
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                  Watched
+                </p>
+              ) : null}
               {episode.overview ? (
                 <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">{episode.overview}</p>
               ) : null}

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
+import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import { getMediaKindLabel, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
 
@@ -12,10 +13,19 @@ interface HeroBannerProps {
   items: LibraryMediaEntry[];
   onInfoSelect?: (entry: LibraryMediaEntry) => void;
   preferredAnimeLanguage?: PlaybackLanguage;
+  recentlyWatched?: RecentlyWatchedEntry[];
   watchBasePath?: string;
 }
 
-export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, watchBasePath }: HeroBannerProps) {
+function findResumeEntry(entry: LibraryMediaEntry, recentlyWatched: RecentlyWatchedEntry[] | undefined) {
+  return (
+    recentlyWatched?.find((candidate) => {
+      return candidate.type === entry.type && candidate.id === entry.id && candidate.provider === entry.provider;
+    }) ?? null
+  );
+}
+
+export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, recentlyWatched, watchBasePath }: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const count = items.length;
 
@@ -31,7 +41,23 @@ export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, watchB
   if (count === 0) return null;
 
   const active = items[activeIndex];
+  const resumeEntry = findResumeEntry(active, recentlyWatched);
   const heroImageUrl = active.backdropUrl ?? active.posterUrl;
+  const playHref = buildWatchHref(active, {
+    basePath: watchBasePath,
+    episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
+    language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
+    progress: resumeEntry?.progressSeconds,
+    season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
+  });
+  const playLabel =
+    resumeEntry?.type === 'tv' && resumeEntry.episode
+      ? resumeEntry.season
+        ? `Continue S${resumeEntry.season} E${resumeEntry.episode}`
+        : `Continue E${resumeEntry.episode}`
+      : resumeEntry?.progressSeconds
+        ? 'Continue'
+        : 'Play';
 
   const go = (index: number) => {
     setActiveIndex(((index % count) + count) % count);
@@ -99,14 +125,11 @@ export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, watchB
 
               <div className="flex flex-wrap gap-3 pt-1">
                 <Link
-                  href={buildWatchHref(active, {
-                    basePath: watchBasePath,
-                    language: preferredAnimeLanguage,
-                  })}
+                  href={playHref}
                   className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2.5 text-sm font-bold text-black transition-all hover:bg-zinc-200 active:scale-95"
                 >
                   <Play className="h-4 w-4 fill-current" />
-                  Play
+                  {playLabel}
                 </Link>
                 {onInfoSelect ? (
                   <button
@@ -119,10 +142,7 @@ export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, watchB
                   </button>
                 ) : (
                   <Link
-                    href={buildWatchHref(active, {
-                      basePath: watchBasePath,
-                      language: preferredAnimeLanguage,
-                    })}
+                    href={playHref}
                     className="inline-flex items-center gap-2 rounded-md bg-zinc-700/60 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-zinc-600/70 active:scale-95"
                   >
                     <Info className="h-4 w-4" />
