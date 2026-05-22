@@ -56,8 +56,27 @@ export const metadata: Metadata = {
   },
   manifest: '/manifest.webmanifest',
   metadataBase: new URL(appConfig.siteUrl),
+  openGraph: {
+    description: appConfig.description,
+    images: [
+      {
+        alt: `${appConfig.name} banner`,
+        url: '/icons/papiflixbannerimage.png',
+      },
+    ],
+    siteName: appConfig.name,
+    title: appConfig.name,
+    type: 'website',
+    url: appConfig.siteUrl,
+  },
   other: {
     'mobile-web-app-capable': 'yes',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    description: appConfig.description,
+    images: ['/icons/papiflixbannerimage.png'],
+    title: appConfig.name,
   },
 };
 
