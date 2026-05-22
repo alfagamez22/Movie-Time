@@ -4,7 +4,7 @@ import Hls from 'hls.js';
 import Image from 'next/image';
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Settings, SkipForward } from 'lucide-react';
+import { ArrowLeft, Download, Settings, SkipForward } from 'lucide-react';
 
 import { useAnimeLanguagePreference, useAnimeServerPreference } from '@/lib/hooks/use-player-preference';
 import {
@@ -890,6 +890,33 @@ export function AnimeWatchPlayer({
               </div>
             ) : null}
           </div>
+        ) : null}
+
+        {resolvedSourceUrl ? (
+          <button
+            type="button"
+            onClick={() => {
+              const a = document.createElement('a');
+              a.href = resolvedSourceUrl;
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
+              if (resolvedSourceType === 'mp4') {
+                a.download = `${entry.title} EP${String(currentEpisode).padStart(2, '0')}.mp4`;
+              }
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }}
+            aria-label="Download video"
+            title="Download video"
+            className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] z-40 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white backdrop-blur-sm transition-all hover:bg-black/70 hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+              showQualityControl
+                ? 'top-[calc(env(safe-area-inset-top)+3.5rem)]'
+                : 'top-[calc(env(safe-area-inset-top)+0.75rem)]'
+            } ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          >
+            <Download className="h-4 w-4" />
+          </button>
         ) : null}
 
         <video

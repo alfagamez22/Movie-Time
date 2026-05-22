@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download } from 'lucide-react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
@@ -501,6 +501,17 @@ export function WatchPlayer({
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
+
+        <a
+          href={embedUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Download video"
+          title="Open stream in new tab to download"
+          className={`absolute left-[calc(env(safe-area-inset-left)+4.5rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        >
+          <Download className="h-5 w-5" />
+        </a>
 
         <div
           className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
