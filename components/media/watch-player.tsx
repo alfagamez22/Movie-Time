@@ -148,6 +148,27 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
   };
 }
 
+function isEpisodeNavigationEvent(data: unknown): boolean {
+  const parsed = parseMessageData(data);
+  if (!isRecord(parsed)) return false;
+
+  const nestedRecords = [parsed.data, parsed.payload, parsed.detail].filter(isRecord);
+  const records = [parsed, ...nestedRecords];
+  const eventName = readEventName(records);
+
+  if (/^(next|nextepisode|next_episode|autonext|auto_next|ended|complete|finished|end)$/.test(eventName)) {
+    return true;
+  }
+
+  for (const record of records) {
+    if (record.nextEpisode === true || record.next === true || record.autoNext === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
   return `${season}:${episodeNumber}`;
 }
@@ -257,6 +278,8 @@ export function WatchPlayer({
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const vidsrcElapsedRef = useRef(0);
+  const selfInitiatedLoadRef = useRef(true);
+  const lastEmbedNavTimeRef = useRef(0);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -338,6 +361,19 @@ export function WatchPlayer({
       setIsPlayerLoading(false);
       setShowPlayerFallback(false);
 
+      if (isSeries && isEpisodeNavigationEvent(event.data)) {
+        const now = Date.now();
+        if (now - lastEmbedNavTimeRef.current > 2000) {
+          lastEmbedNavTimeRef.current = now;
+          const currentEp = Number.parseInt(safeEpisode, 10);
+          if (currentEp < safeEpisodeLimit) {
+            selfInitiatedLoadRef.current = true;
+            handleEpisodeChange(String(currentEp + 1));
+          }
+        }
+        return;
+      }
+
       const progress = extractPlayerProgress(event.data);
       if (!progress) return;
 
@@ -361,7 +397,7 @@ export function WatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
+  }, [effectiveLanguage, embedUrl, entry, experience.id, handleEpisodeChange, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeEpisodeLimit, safeSeason]);
 
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
@@ -429,6 +465,7 @@ export function WatchPlayer({
         return;
       }
 
+      selfInitiatedLoadRef.current = true;
       setIsPlayerLoading(true);
       setShowPlayerFallback(false);
       setSeason(newSeason);
@@ -451,6 +488,7 @@ export function WatchPlayer({
   );
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
+    selfInitiatedLoadRef.current = true;
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
     setEpisode(newEpisode);
@@ -544,6 +582,19 @@ export function WatchPlayer({
             setShowPlayerFallback(true);
           }}
           onLoad={() => {
+            if (!selfInitiatedLoadRef.current && isSeries) {
+              const now = Date.now();
+              if (now - lastEmbedNavTimeRef.current > 2000) {
+                lastEmbedNavTimeRef.current = now;
+                const currentEp = Number.parseInt(safeEpisode, 10);
+                if (currentEp < safeEpisodeLimit) {
+                  selfInitiatedLoadRef.current = true;
+                  handleEpisodeChange(String(currentEp + 1));
+                  return;
+                }
+              }
+            }
+            selfInitiatedLoadRef.current = false;
             hasIframeLoadedRef.current = true;
             setIsPlayerLoading(false);
             setShowPlayerFallback(false);
