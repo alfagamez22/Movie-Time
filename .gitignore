@@ -5,3 +5,6 @@ coverage/
 *.log
 .env*
 !.env.example
+.github/workflows/
+.playwright-cli/
+.playwright-cli/*
