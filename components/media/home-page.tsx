@@ -22,7 +22,7 @@ interface HomePageProps {
 
 function getFeaturedItems(sections: LibrarySection[]): LibraryMediaEntry[] {
   return (sections[0]?.entries ?? [])
-    .filter((entry) => Boolean(entry.backdropUrl))
+    .filter((entry) => Boolean(entry.backdropUrl ?? entry.posterUrl))
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
     .slice(0, 6);
 }

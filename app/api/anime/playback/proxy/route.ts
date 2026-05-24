@@ -1,6 +1,9 @@
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl'];
 const RANGE_HEADER = 'range';
 
+const ANIWAVE_CDN_ORIGIN = process.env.ANIWAVE_CDN_ORIGIN?.trim() || 'https://megaplay.buzz';
+const ANITAKU_CDN_ORIGIN = process.env.ANITAKU_CDN_ORIGIN?.trim() || 'https://anitaku.to';
+
 type ProxyProfile = 'aniwave-media' | 'anitaku-media' | 'subtitle';
 
 const PROFILE_HEADERS: Record<
@@ -13,18 +16,18 @@ const PROFILE_HEADERS: Record<
 > = {
   'anitaku-media': {
     accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,video/*,*/*;q=0.8',
-    origin: 'https://anitaku.to',
-    referer: 'https://anitaku.to/',
+    origin: ANITAKU_CDN_ORIGIN,
+    referer: `${ANITAKU_CDN_ORIGIN}/`,
   },
   'aniwave-media': {
     accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,video/*,*/*;q=0.8',
-    origin: 'https://megaplay.buzz',
-    referer: 'https://megaplay.buzz/',
+    origin: ANIWAVE_CDN_ORIGIN,
+    referer: `${ANIWAVE_CDN_ORIGIN}/`,
   },
   subtitle: {
     accept: 'text/vtt,text/plain,*/*;q=0.8',
-    origin: 'https://megaplay.buzz',
-    referer: 'https://megaplay.buzz/',
+    origin: ANIWAVE_CDN_ORIGIN,
+    referer: `${ANIWAVE_CDN_ORIGIN}/`,
   },
 };
 

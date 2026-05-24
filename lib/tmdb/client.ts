@@ -877,6 +877,10 @@ interface TmdbVideosResponse {
   results: TmdbVideoResult[];
 }
 
+const YOUTUBE_EMBED_BASE_URL = process.env.YOUTUBE_EMBED_BASE_URL?.trim() || 'https://www.youtube.com/embed';
+const YOUTUBE_THUMBNAIL_BASE_URL = process.env.YOUTUBE_THUMBNAIL_BASE_URL?.trim() || 'https://img.youtube.com/vi';
+const YOUTUBE_WATCH_BASE_URL = process.env.YOUTUBE_WATCH_BASE_URL?.trim() || 'https://www.youtube.com/watch';
+
 const VIDEO_TYPE_ORDER = ['Trailer', 'Teaser', 'Clip', 'Featurette', 'Behind the Scenes', 'Bloopers'];
 
 async function fetchTmdbTrailers(tmdbId: string, type: MediaType): Promise<MediaTrailer[]> {
@@ -897,10 +901,10 @@ async function fetchTmdbTrailers(tmdbId: string, type: MediaType): Promise<Media
       return (b.official ? 1 : 0) - (a.official ? 1 : 0);
     })
     .map((v) => ({
-      embedUrl: `https://www.youtube.com/embed/${v.key}?autoplay=1`,
-      thumbnailUrl: `https://img.youtube.com/vi/${v.key}/hqdefault.jpg`,
+      embedUrl: `${YOUTUBE_EMBED_BASE_URL}/${v.key}?autoplay=1`,
+      thumbnailUrl: `${YOUTUBE_THUMBNAIL_BASE_URL}/${v.key}/hqdefault.jpg`,
       title: v.name,
-      url: `https://www.youtube.com/watch?v=${v.key}`,
+      url: `${YOUTUBE_WATCH_BASE_URL}?v=${v.key}`,
       youtubeId: v.key,
     }));
 }
