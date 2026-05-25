@@ -224,6 +224,11 @@ function EpisodeStillImage({
   src?: string;
 }) {
   const [useFallback, setUseFallback] = useState(false);
+
+  useEffect(() => {
+    setUseFallback(false);
+  }, [src]);
+
   const resolvedSrc = useFallback ? fallbackSrc : src || fallbackSrc;
 
   if (!resolvedSrc) {
@@ -232,7 +237,6 @@ function EpisodeStillImage({
 
   return (
     <Image
-      key={`${src ?? 'none'}:${fallbackSrc ?? 'none'}`}
       src={resolvedSrc}
       alt={alt}
       fill

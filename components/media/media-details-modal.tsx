@@ -44,6 +44,8 @@ interface DetailsErrorState {
 }
 
 function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boolean }) {
+  const [failedProfiles, setFailedProfiles] = useState<Set<string>>(new Set());
+
   if (isLoading) {
     return <p className="text-sm text-zinc-500">Loading cast...</p>;
   }
@@ -57,8 +59,21 @@ function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boo
       {cast.map((member) => (
         <div key={`${member.id ?? member.name}-${member.character ?? 'cast'}`} className="min-w-0">
           <div className="relative mb-2 aspect-[2/3] overflow-hidden rounded-md bg-zinc-900">
-            {member.profileUrl ? (
-              <Image src={member.profileUrl} alt={member.name} fill sizes="120px" className="object-cover" />
+            {member.profileUrl && !failedProfiles.has(member.profileUrl) ? (
+              <Image
+                src={member.profileUrl}
+                alt={member.name}
+                fill
+                sizes="120px"
+                className="object-cover"
+                onError={() =>
+                  setFailedProfiles((prev) => {
+                    const next = new Set(prev);
+                    next.add(member.profileUrl!);
+                    return next;
+                  })
+                }
+              />
             ) : (
               <div className="flex h-full items-center justify-center px-2 text-center text-xs font-semibold text-zinc-600">
                 {member.name}
@@ -106,6 +121,8 @@ function TrailerList({
   onSelectTrailer: (trailer: MediaTrailer) => void;
   trailers: MediaTrailer[];
 }) {
+  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set());
+
   if (isLoading) {
     return <p className="text-sm text-zinc-500">Loading trailers...</p>;
   }
@@ -124,13 +141,20 @@ function TrailerList({
           className="group block overflow-hidden rounded-lg border border-white/10 bg-white/[0.035] transition hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
         >
           <div className="relative aspect-video bg-zinc-900">
-            {trailer.thumbnailUrl ? (
+            {trailer.thumbnailUrl && !failedThumbnails.has(trailer.thumbnailUrl) ? (
               <Image
                 src={trailer.thumbnailUrl}
                 alt={trailer.title}
                 fill
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 320px"
                 className="object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                onError={() =>
+                  setFailedThumbnails((prev) => {
+                    const next = new Set(prev);
+                    next.add(trailer.thumbnailUrl!);
+                    return next;
+                  })
+                }
               />
             ) : (
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(229,9,20,0.35),_transparent_55%),linear-gradient(180deg,_rgba(255,255,255,0.08),_rgba(255,255,255,0.02))]" />
