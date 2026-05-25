@@ -1,0 +1,13 @@
+# Copy this file to local.properties and keep the real file untracked.
+#
+# Android Studio usually adds sdk.dir automatically. For command-line builds,
+# point it to your installed Android SDK when needed.
+# sdk.dir=C\:\\Users\\harve\\AppData\\Local\\Android\\Sdk
+#
+# Use the emulator loopback URL while running the local Next.js dev server:
+PWA_URL=http://10.0.2.2:3000
+#
+# For release builds, replace PWA_URL with the deployed HTTPS site:
+# PWA_URL=https://your-papiflix-domain.example
+#
+# PAPIFLIX_BASE_URL is also accepted as a fallback.

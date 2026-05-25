@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">PapiFlix</string>
+    <string name="offline_title">PapiFlix is offline</string>
+    <string name="offline_body">Reconnect, then try again.</string>
+    <string name="retry">Retry</string>
+</resources>

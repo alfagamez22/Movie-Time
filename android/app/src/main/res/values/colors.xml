@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="papiflix_background">#050505</color>
+    <color name="papiflix_surface">#161616</color>
+    <color name="papiflix_red">#E50914</color>
+    <color name="ic_launcher_background">#050505</color>
+</resources>

@@ -8,3 +8,8 @@ coverage/
 .github/workflows/
 .playwright-cli/
 .playwright-cli/*
+android/.gradle/
+android/.idea/
+android/**/build/
+android/local.properties
+android/captures/
