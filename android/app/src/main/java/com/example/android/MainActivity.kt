@@ -57,7 +57,18 @@ class MainActivity : ComponentActivity() {
         configureWebView()
         configureBackNavigation()
 
-        webView.loadUrl(pwaUrl)
+        webView.loadUrl(getInitialUrl())
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+
+        val uri = intent.data ?: return
+        if (::webView.isInitialized && PapiFlixUrlPolicy.shouldLoadIntentUriInApp(uri, pwaUrl)) {
+            setOfflineVisible(false)
+            webView.loadUrl(uri.toString())
+        }
     }
 
     override fun onDestroy() {
@@ -75,6 +86,15 @@ class MainActivity : ComponentActivity() {
     private fun normalizedPwaUrl(): String {
         val candidate = BuildConfig.PWA_URL.trim()
         return candidate.ifEmpty { "http://10.0.2.2:3000" }
+    }
+
+    private fun getInitialUrl(): String {
+        val launchUri = intent?.data
+        if (launchUri != null && PapiFlixUrlPolicy.shouldLoadIntentUriInApp(launchUri, pwaUrl)) {
+            return launchUri.toString()
+        }
+
+        return pwaUrl
     }
 
     private fun configureWindow() {
@@ -336,23 +356,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun shouldKeepInApp(uri: Uri): Boolean {
-        val appUri = Uri.parse(pwaUrl)
-        return uri.isHttpUri() &&
-            uri.scheme.equals(appUri.scheme, ignoreCase = true) &&
-            uri.host == appUri.host &&
-            uri.effectivePort() == appUri.effectivePort()
+        return PapiFlixUrlPolicy.shouldKeepInApp(uri, pwaUrl)
     }
-
-    private fun Uri.isHttpUri(): Boolean =
-        scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
-
-    private fun Uri.effectivePort(): Int =
-        when {
-            port != -1 -> port
-            scheme.equals("https", ignoreCase = true) -> 443
-            scheme.equals("http", ignoreCase = true) -> 80
-            else -> -1
-        }
 
     private fun openExternal(uri: Uri): Boolean {
         return try {

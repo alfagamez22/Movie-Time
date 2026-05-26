@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.net.URI
 
 plugins {
     alias(libs.plugins.android.application)
@@ -30,6 +31,9 @@ val pwaUrl = readConfigValue(
 val escapedPwaUrl = pwaUrl
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")
+val pwaUri = runCatching { URI(pwaUrl) }.getOrNull()
+val pwaUrlScheme = pwaUri?.scheme?.takeIf { it.isNotBlank() } ?: "https"
+val pwaUrlHost = pwaUri?.host?.takeIf { it.isNotBlank() } ?: "papiflix.vercel.app"
 
 android {
     namespace = "com.papiflix.app"
@@ -48,6 +52,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "PWA_URL", "\"$escapedPwaUrl\"")
+        manifestPlaceholders["pwaUrlScheme"] = pwaUrlScheme
+        manifestPlaceholders["pwaUrlHost"] = pwaUrlHost
     }
 
     buildTypes {

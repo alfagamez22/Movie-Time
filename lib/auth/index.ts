@@ -2,10 +2,14 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+import Google from 'next-auth/providers/google';
 
 import { prisma } from '@/lib/db';
 
 import { authConfig } from './config';
+import { getGoogleOAuthCredentials } from './oauth';
+
+const googleCredentials = getGoogleOAuthCredentials();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -30,5 +34,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return { id: user.id, email: user.email, name: user.name, image: user.image };
       },
     }),
+    ...(googleCredentials
+      ? [
+          Google({
+            ...googleCredentials,
+            allowDangerousEmailAccountLinking: true,
+          }),
+        ]
+      : []),
   ],
 });

@@ -19,3 +19,13 @@ From PowerShell, this also builds a debug APK:
 ```
 
 The app supports WebView storage, service workers, Android back navigation, external-link handoff, fullscreen video, and an offline retry screen.
+
+## Google sign-in callback
+
+The Android shell registers an app link for:
+
+```text
+<PWA_URL>/api/auth/callback/google
+```
+
+This lets a browser-based Google OAuth flow return to the WebView when `PWA_URL` points at the deployed HTTPS app. To make Android open the app automatically instead of showing a chooser, publish a matching `assetlinks.json` for `com.papiflix.app` on the deployed domain.

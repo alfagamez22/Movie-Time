@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { getProviders, signIn } from 'next-auth/react';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -27,7 +27,9 @@ export function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [googleAvailable, setGoogleAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,6 +42,26 @@ export function AuthModal({
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    void getProviders()
+      .then((providers) => {
+        if (mounted) {
+          setGoogleAvailable(Boolean(providers?.google));
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setGoogleAvailable(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const switchTab = useCallback((next: Tab) => {
     setTab(next);
@@ -117,6 +139,20 @@ export function AuthModal({
     },
     [email, password, syncClientHistoryToDb, onSuccess, onClose],
   );
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setError('');
+    setGoogleLoading(true);
+
+    try {
+      await signIn('google', {
+        callbackUrl: window.location.href,
+      });
+    } catch {
+      setGoogleLoading(false);
+      setError('Google sign in could not start. Please try again.');
+    }
+  }, []);
 
   const handleRegister = useCallback(
     async (e: React.FormEvent) => {
@@ -201,6 +237,25 @@ export function AuthModal({
             </button>
           ))}
         </div>
+
+        {googleAvailable ? (
+          <div className="mb-5">
+            <button
+              type="button"
+              onClick={() => void handleGoogleSignIn()}
+              disabled={loading || googleLoading}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-white px-3 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-50"
+            >
+              <span className="text-base font-black text-[#1a73e8]">G</span>
+              {googleLoading ? 'Opening Google...' : 'Continue with Google'}
+            </button>
+            <div className="mt-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-white/10" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">or</span>
+              <span className="h-px flex-1 bg-white/10" />
+            </div>
+          </div>
+        ) : null}
 
         <AnimatePresence mode="wait">
           <motion.form
