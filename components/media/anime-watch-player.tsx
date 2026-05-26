@@ -145,13 +145,10 @@ function EpisodeStillImage({
   priority: boolean;
   src?: string;
 }) {
-  const [useFallback, setUseFallback] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
-  useEffect(() => {
-    setUseFallback(false);
-  }, [src]);
-
-  const resolvedSrc = useFallback ? fallbackSrc : src || fallbackSrc;
+  const shouldUseFallback = Boolean(src && failedSrc === src);
+  const resolvedSrc = shouldUseFallback ? fallbackSrc : src || fallbackSrc;
 
   if (!resolvedSrc) {
     return <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />;
@@ -166,8 +163,8 @@ function EpisodeStillImage({
       className="object-cover"
       priority={priority}
       onError={() => {
-        if (!useFallback && fallbackSrc && fallbackSrc !== resolvedSrc) {
-          setUseFallback(true);
+        if (src && !shouldUseFallback && fallbackSrc && fallbackSrc !== resolvedSrc) {
+          setFailedSrc(src);
         }
       }}
     />

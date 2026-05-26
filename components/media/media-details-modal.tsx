@@ -17,6 +17,7 @@ import {
   type MediaTrailer,
   type PlaybackLanguage,
 } from '@/lib/media/types';
+import { BookmarkButton } from './bookmark-button';
 
 interface MediaDetailsModalProps {
   entry: LibraryMediaEntry | null;
@@ -506,6 +507,9 @@ export function MediaDetailsModal({
                         <Play className="h-4 w-4 fill-current" />
                         Watch Trailer
                       </button>
+                    ) : null}
+                    {displayEntry ? (
+                      <BookmarkButton entry={displayEntry} experience={experience} />
                     ) : null}
                   </div>
                   {activeError ? <p className="mt-4 text-sm text-amber-300">{activeError}</p> : null}

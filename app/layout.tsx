@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { SessionProvider } from 'next-auth/react';
 
 import { PwaServiceWorker } from '@/components/media/pwa-service-worker';
 import { appConfig } from '@/lib/config';
@@ -92,7 +93,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        {children}
+        <SessionProvider>
+          {children}
+        </SessionProvider>
         <PwaServiceWorker />
       </body>
     </html>

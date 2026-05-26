@@ -10,6 +10,8 @@ import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
+import { AuthModal } from '@/components/auth/auth-modal';
+import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
 import { MediaDetailsModal } from './media-details-modal';
@@ -113,6 +115,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [searchResults, setSearchResults] = useState<LibraryMediaEntry[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const [navScrolled, setNavScrolled] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const { language } = useAnimeLanguagePreference();
   const recentlyWatched = useRecentlyWatched(experience.id);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -249,6 +252,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             ))}
           </nav>
           <PreferenceSwitcher experience={experience} />
+          <UserMenu onSignInClick={() => setAuthOpen(true)} />
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -366,6 +370,12 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-600 md:px-12">
         {experience.footerText}
       </footer>
+
+      <AnimatePresence>
+        {authOpen ? (
+          <AuthModal onClose={() => setAuthOpen(false)} />
+        ) : null}
+      </AnimatePresence>
     </main>
   );
 }

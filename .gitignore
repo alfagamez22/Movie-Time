@@ -13,3 +13,10 @@ android/.idea/
 android/**/build/
 android/local.properties
 android/captures/
+
+/lib/generated/prisma
+
+# SQLite dev database
+*.db
+*.db-shm
+*.db-wal

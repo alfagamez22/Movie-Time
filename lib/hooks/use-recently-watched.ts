@@ -476,6 +476,13 @@ export function trackRecentlyWatched(
   setCachedRawValue(namespace, rawValue);
   setCachedEntries(namespace, nextEntries);
   window.dispatchEvent(new Event(keys.eventName));
+
+  // Fire-and-forget sync to DB for authenticated users.
+  fetch('/api/watch-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entry: nextEntry, experience: namespace }),
+  }).catch(() => {});
 }
 
 export function getRecentlyWatchedEntry(

@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   images: {
+    // Vercel's hosted image optimizer can fail once quota is exhausted, which
+    // breaks posters, trailer thumbnails, and episode stills that work directly.
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
