@@ -13,7 +13,7 @@ const googleCredentials = getGoogleOAuthCredentials();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma as Parameters<typeof PrismaAdapter>[0]),
   providers: [
     Credentials({
       credentials: {
