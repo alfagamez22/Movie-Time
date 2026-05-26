@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import type { BookmarkStatus } from '@/lib/media/user-actions';
 
-export type BookmarkStatus = 'favorite' | 'watched' | 'plan_to_watch';
+export type { BookmarkStatus } from '@/lib/media/user-actions';
 
 export interface BookmarkRecord {
   id: string;

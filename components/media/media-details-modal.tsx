@@ -17,13 +17,16 @@ import {
   type MediaTrailer,
   type PlaybackLanguage,
 } from '@/lib/media/types';
+import type { AuthPromptReason } from '@/lib/media/user-actions';
 import { BookmarkButton } from './bookmark-button';
+import { MediaComments } from './media-comments';
 
 interface MediaDetailsModalProps {
   entry: LibraryMediaEntry | null;
   experience: MediaExperienceConfig;
   onClose: () => void;
   onSelectEntry: (entry: LibraryMediaEntry) => void;
+  onSignInRequired?: (reason: AuthPromptReason) => void;
   preferredAnimeLanguage?: PlaybackLanguage;
   recentlyWatched?: RecentlyWatchedEntry[];
 }
@@ -312,6 +315,7 @@ export function MediaDetailsModal({
   experience,
   onClose,
   onSelectEntry,
+  onSignInRequired,
   preferredAnimeLanguage,
   recentlyWatched,
 }: MediaDetailsModalProps) {
@@ -509,7 +513,11 @@ export function MediaDetailsModal({
                       </button>
                     ) : null}
                     {displayEntry ? (
-                      <BookmarkButton entry={displayEntry} experience={experience} />
+                      <BookmarkButton
+                        entry={displayEntry}
+                        experience={experience}
+                        onSignInRequired={() => onSignInRequired?.('bookmark')}
+                      />
                     ) : null}
                   </div>
                   {activeError ? <p className="mt-4 text-sm text-amber-300">{activeError}</p> : null}
@@ -527,6 +535,14 @@ export function MediaDetailsModal({
                 <h3 className="mb-3 text-base font-bold">Trailers</h3>
                 <TrailerList isLoading={isLoading} onSelectTrailer={openTrailer} trailers={trailers} />
               </section>
+
+              {displayEntry ? (
+                <MediaComments
+                  entry={displayEntry}
+                  experience={experience}
+                  onSignInRequired={() => onSignInRequired?.('comment')}
+                />
+              ) : null}
 
               <section>
                 <h3 className="mb-3 text-base font-bold">

@@ -5,15 +5,24 @@ import { signIn } from 'next-auth/react';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
-interface AuthModalProps {
-  onClose: () => void;
-  onSuccess?: () => void;
-}
-
 type Tab = 'signin' | 'register';
 
-export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
-  const [tab, setTab] = useState<Tab>('signin');
+interface AuthModalProps {
+  description?: string;
+  initialTab?: Tab;
+  onClose: () => void;
+  onSuccess?: () => void;
+  title?: string;
+}
+
+export function AuthModal({
+  description,
+  initialTab = 'signin',
+  onClose,
+  onSuccess,
+  title = 'Sign in to PapiFlix',
+}: AuthModalProps) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -172,6 +181,11 @@ export function AuthModal({ onClose, onSuccess }: AuthModalProps) {
         >
           <X className="h-4 w-4" />
         </button>
+
+        <div className="mb-5 pr-6">
+          <h2 className="text-xl font-black tracking-tight text-white">{title}</h2>
+          {description ? <p className="mt-2 text-sm leading-relaxed text-zinc-400">{description}</p> : null}
+        </div>
 
         <div className="mb-6 flex rounded-lg border border-white/10 bg-white/5 p-0.5">
           {(['signin', 'register'] as Tab[]).map((t) => (

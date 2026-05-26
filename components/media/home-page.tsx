@@ -10,6 +10,7 @@ import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
+import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
@@ -116,6 +117,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const [navScrolled, setNavScrolled] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>('default');
   const { language } = useAnimeLanguagePreference();
   const recentlyWatched = useRecentlyWatched(experience.id);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -137,6 +139,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   const closeDetails = useCallback(() => {
     setSelectedEntry(null);
+  }, []);
+
+  const openAuthModal = useCallback((reason: AuthPromptReason = 'default') => {
+    setAuthPromptReason(reason);
+    setAuthOpen(true);
   }, []);
 
   const selectDetailsEntry = useCallback((entry: LibraryMediaEntry) => {
@@ -224,6 +231,8 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   }, [deferredQuery, experience.searchEndpoint]);
 
   const featuredItems = getFeaturedItems(sections);
+  const authPromptCopy = getAuthPromptCopy(authPromptReason);
+
   return (
     <main className="min-h-screen bg-[#050505] text-white">
       <header
@@ -252,7 +261,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             ))}
           </nav>
           <PreferenceSwitcher experience={experience} />
-          <UserMenu onSignInClick={() => setAuthOpen(true)} />
+          <UserMenu onSignInClick={() => openAuthModal('default')} />
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -363,6 +372,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         experience={experience}
         onClose={closeDetails}
         onSelectEntry={selectDetailsEntry}
+        onSignInRequired={openAuthModal}
         preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
         recentlyWatched={recentlyWatched}
       />
@@ -373,7 +383,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
       <AnimatePresence>
         {authOpen ? (
-          <AuthModal onClose={() => setAuthOpen(false)} />
+          <AuthModal
+            description={authPromptCopy.description}
+            onClose={() => setAuthOpen(false)}
+            title={authPromptCopy.title}
+          />
         ) : null}
       </AnimatePresence>
     </main>

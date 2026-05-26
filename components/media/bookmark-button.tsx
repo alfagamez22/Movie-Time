@@ -2,24 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { Bookmark, BookmarkCheck, ChevronDown } from 'lucide-react';
+import { Bookmark, BookmarkCheck, Check, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { LibraryMediaEntry } from '@/lib/media/types';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useBookmarks, type BookmarkStatus } from '@/lib/hooks/use-bookmarks';
+import { BOOKMARK_STATUSES, BOOKMARK_STATUS_LABELS } from '@/lib/media/user-actions';
 
 interface BookmarkButtonProps {
   entry: LibraryMediaEntry;
   experience: MediaExperienceConfig;
   onSignInRequired?: () => void;
 }
-
-const STATUS_LABELS: Record<BookmarkStatus, string> = {
-  favorite: 'Favorite',
-  watched: 'Watched',
-  plan_to_watch: 'Plan to Watch',
-};
 
 export function BookmarkButton({ entry, experience, onSignInRequired }: BookmarkButtonProps) {
   const { data: session } = useSession();
@@ -41,45 +36,76 @@ export function BookmarkButton({ entry, experience, onSignInRequired }: Bookmark
     return () => document.removeEventListener('pointerdown', onPointer);
   }, [dropdownOpen]);
 
+  const requireSignIn = useCallback(() => {
+    setDropdownOpen(false);
+    onSignInRequired?.();
+  }, [onSignInRequired]);
+
+  const addEntryBookmark = useCallback(
+    async (status: BookmarkStatus) => {
+      setPendingAction(true);
+      try {
+        await addBookmark({
+          mediaId: entry.id,
+          mediaType: entry.type,
+          mediaProvider: entry.provider,
+          experience: experience.id,
+          title: entry.title,
+          posterUrl: entry.posterUrl,
+          backdropUrl: entry.backdropUrl,
+          synopsis: entry.synopsis?.slice(0, 180),
+          rating: entry.rating,
+          year: entry.year,
+          anilistId: entry.anilistId,
+          malId: entry.malId,
+          animeFormat: entry.animeFormat,
+          status,
+        });
+      } finally {
+        setPendingAction(false);
+      }
+    },
+    [addBookmark, entry, experience.id],
+  );
+
   const handleMainClick = useCallback(async () => {
     if (!session?.user) {
-      onSignInRequired?.();
+      requireSignIn();
       return;
     }
+
     if (existing) {
       setDropdownOpen((v) => !v);
       return;
     }
-    setPendingAction(true);
-    try {
-      await addBookmark({
-        mediaId: entry.id,
-        mediaType: entry.type,
-        mediaProvider: entry.provider,
-        experience: experience.id,
-        title: entry.title,
-        posterUrl: entry.posterUrl,
-        backdropUrl: entry.backdropUrl,
-        synopsis: entry.synopsis?.slice(0, 180),
-        rating: entry.rating,
-        year: entry.year,
-        anilistId: entry.anilistId,
-        malId: entry.malId,
-        animeFormat: entry.animeFormat,
-        status: 'favorite',
-      });
-    } finally {
-      setPendingAction(false);
+
+    await addEntryBookmark('favorite');
+  }, [session?.user, existing, requireSignIn, addEntryBookmark]);
+
+  const handleDropdownClick = useCallback(() => {
+    if (!session?.user) {
+      requireSignIn();
+      return;
     }
-  }, [session?.user, existing, addBookmark, entry, experience.id, onSignInRequired]);
+    setDropdownOpen((v) => !v);
+  }, [session?.user, requireSignIn]);
 
   const handleStatusChange = useCallback(
     async (status: BookmarkStatus) => {
-      if (!existing) return;
+      if (!session?.user) {
+        requireSignIn();
+        return;
+      }
+
       setDropdownOpen(false);
-      await updateStatus(existing.id, status);
+      if (existing) {
+        await updateStatus(existing.id, status);
+        return;
+      }
+
+      await addEntryBookmark(status);
     },
-    [existing, updateStatus],
+    [session?.user, existing, updateStatus, addEntryBookmark, requireSignIn],
   );
 
   const handleRemove = useCallback(async () => {
@@ -90,31 +116,40 @@ export function BookmarkButton({ entry, experience, onSignInRequired }: Bookmark
 
   const isBookmarked = Boolean(existing);
   const currentStatus = existing?.status as BookmarkStatus | undefined;
+  const mainLabel = isBookmarked ? BOOKMARK_STATUS_LABELS[currentStatus ?? 'favorite'] : 'Bookmark';
+  const actionTone = isBookmarked
+    ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+    : 'border-white/15 bg-white/5 text-white hover:border-white/25 hover:bg-white/10';
 
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative inline-flex">
       <button
         type="button"
         onClick={handleMainClick}
         disabled={pendingAction}
-        aria-label={isBookmarked ? `Bookmarked as ${STATUS_LABELS[currentStatus ?? 'favorite']}` : 'Add to bookmarks'}
-        className={`inline-flex items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-50 ${
-          isBookmarked
-            ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-            : 'border-white/15 bg-white/5 text-white hover:border-white/25 hover:bg-white/10'
-        }`}
+        aria-label={isBookmarked ? `Bookmarked as ${mainLabel}` : 'Add to bookmarks'}
+        className={`inline-flex items-center gap-2 rounded-l-md border border-r-0 px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-50 ${actionTone}`}
       >
         {isBookmarked ? (
           <BookmarkCheck className="h-4 w-4 shrink-0" />
         ) : (
           <Bookmark className="h-4 w-4 shrink-0" />
         )}
-        {isBookmarked ? STATUS_LABELS[currentStatus ?? 'favorite'] : 'Bookmark'}
-        {isBookmarked ? <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" /> : null}
+        {mainLabel}
+      </button>
+      <button
+        type="button"
+        onClick={handleDropdownClick}
+        disabled={pendingAction}
+        aria-label="Choose bookmark status"
+        aria-expanded={dropdownOpen}
+        className={`inline-flex items-center justify-center rounded-r-md border px-2.5 py-2.5 transition-colors disabled:opacity-50 ${actionTone}`}
+      >
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 opacity-80 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>
-        {dropdownOpen && existing ? (
+        {dropdownOpen && session?.user ? (
           <motion.div
             initial={{ opacity: 0, y: -4, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -122,7 +157,7 @@ export function BookmarkButton({ entry, experience, onSignInRequired }: Bookmark
             transition={{ duration: 0.1 }}
             className="absolute left-0 top-full z-20 mt-1.5 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
           >
-            {(['favorite', 'watched', 'plan_to_watch'] as BookmarkStatus[]).map((status) => (
+            {BOOKMARK_STATUSES.map((status) => (
               <button
                 key={status}
                 type="button"
@@ -131,19 +166,21 @@ export function BookmarkButton({ entry, experience, onSignInRequired }: Bookmark
                   currentStatus === status ? 'text-amber-400' : 'text-zinc-300'
                 }`}
               >
-                {STATUS_LABELS[status]}
-                {currentStatus === status ? <span className="ml-auto text-amber-400">✓</span> : null}
+                {BOOKMARK_STATUS_LABELS[status]}
+                {currentStatus === status ? <Check className="ml-auto h-4 w-4 text-amber-400" /> : null}
               </button>
             ))}
-            <div className="border-t border-white/8">
-              <button
-                type="button"
-                onClick={() => void handleRemove()}
-                className="flex w-full items-center px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/10"
-              >
-                Remove bookmark
-              </button>
-            </div>
+            {existing ? (
+              <div className="border-t border-white/8">
+                <button
+                  type="button"
+                  onClick={() => void handleRemove()}
+                  className="flex w-full items-center px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+                >
+                  Remove bookmark
+                </button>
+              </div>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
