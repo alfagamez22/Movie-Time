@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var previousSystemUiVisibility = 0
     private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    private var showingOffline = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -243,6 +244,7 @@ class MainActivity : ComponentActivity() {
             background = createButtonBackground()
             setOnClickListener {
                 setOfflineVisible(false)
+                webView.stopLoading()
                 webView.loadUrl(pwaUrl)
             }
         }
@@ -272,9 +274,18 @@ class MainActivity : ComponentActivity() {
         }
 
     private fun setOfflineVisible(visible: Boolean) {
+        showingOffline = visible
         offlineView.visibility = if (visible) View.VISIBLE else View.GONE
-        webView.visibility = if (visible) View.INVISIBLE else View.VISIBLE
+        webView.visibility = if (visible) View.GONE else View.VISIBLE
         progressBar.visibility = View.GONE
+    }
+
+    private fun showOfflineError(view: WebView) {
+        view.stopLoading()
+        setOfflineVisible(true)
+        if (!view.url.equals(BLANK_PAGE_URL, ignoreCase = true)) {
+            view.loadUrl(BLANK_PAGE_URL)
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -389,6 +400,11 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            if (showingOffline && url.equals(BLANK_PAGE_URL, ignoreCase = true)) {
+                progressBar.visibility = View.GONE
+                return
+            }
+
             setOfflineVisible(false)
             progressBar.visibility = View.VISIBLE
             progressBar.progress = 10
@@ -405,7 +421,7 @@ class MainActivity : ComponentActivity() {
             error: WebResourceError,
         ) {
             if (request.isForMainFrame) {
-                setOfflineVisible(true)
+                showOfflineError(view)
             }
         }
 
@@ -416,7 +432,7 @@ class MainActivity : ComponentActivity() {
             description: String,
             failingUrl: String,
         ) {
-            setOfflineVisible(true)
+            showOfflineError(view)
         }
 
         override fun onReceivedHttpError(
@@ -425,13 +441,18 @@ class MainActivity : ComponentActivity() {
             errorResponse: WebResourceResponse,
         ) {
             if (request.isForMainFrame && errorResponse.statusCode >= 500) {
-                setOfflineVisible(true)
+                showOfflineError(view)
             }
         }
     }
 
     private inner class PapiFlixChromeClient : WebChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) {
+            if (showingOffline) {
+                progressBar.visibility = View.GONE
+                return
+            }
+
             progressBar.progress = newProgress
             progressBar.visibility = if (newProgress >= 100) View.GONE else View.VISIBLE
         }
@@ -451,5 +472,6 @@ class MainActivity : ComponentActivity() {
     private companion object {
         val BACKGROUND_COLOR: Int = Color.rgb(5, 5, 5)
         val ACCENT_COLOR: Int = Color.rgb(229, 9, 20)
+        const val BLANK_PAGE_URL: String = "about:blank"
     }
 }
