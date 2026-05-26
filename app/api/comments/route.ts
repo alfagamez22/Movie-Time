@@ -66,7 +66,7 @@ export async function GET(request: Request) {
   });
 
   return NextResponse.json({
-    comments: comments.map((comment) => serializeComment(comment, session?.user?.id)),
+    comments: comments.map((comment: CommentWithUser) => serializeComment(comment, session?.user?.id)),
   });
 }
 
