@@ -40,7 +40,7 @@ export function UserMenu({ onSignInClick }: UserMenuProps) {
       <button
         type="button"
         onClick={onSignInClick}
-        className="flex items-center gap-1.5 rounded-full bg-netflix-red px-4 py-2 text-xs font-semibold text-white shadow-md transition-all hover:brightness-110 active:scale-95"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-netflix-red px-3 text-[11px] font-semibold leading-none text-white shadow-md transition-all hover:brightness-110 active:scale-95 sm:px-4 sm:text-xs"
       >
         <User className="h-3.5 w-3.5 shrink-0" />
         Sign In

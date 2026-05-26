@@ -240,10 +240,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
         }`}
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:px-12">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 md:px-12">
           <Link
             href={experience.homeHref}
-            className="h-12 w-36 shrink-0 select-none bg-no-repeat sm:h-14 sm:w-44"
+            className="h-10 w-28 shrink-0 select-none bg-no-repeat sm:h-12 sm:w-36 md:h-14 md:w-44"
             aria-label={`${experience.brandName} home`}
             style={{
               backgroundImage: `url('${experience.brandBannerSrc}')`,
@@ -260,16 +260,18 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
               </Link>
             ))}
           </nav>
-          <PreferenceSwitcher experience={experience} />
-          <UserMenu onSignInClick={() => openAuthModal('default')} />
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Open search"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
-          >
-            <Search className="h-5 w-5" />
-          </button>
+          <div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+            <PreferenceSwitcher experience={experience} />
+            <UserMenu onSignInClick={() => openAuthModal('default')} />
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Open search"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </header>
 
