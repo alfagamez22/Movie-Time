@@ -1,6 +1,5 @@
 package com.example.android
 
-import android.net.Uri
 import com.papiflix.app.PapiFlixUrlPolicy
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,13 +12,13 @@ class PapiFlixUrlPolicyTest {
 
         assertTrue(
             PapiFlixUrlPolicy.shouldKeepInApp(
-                Uri.parse("https://papiflix.vercel.app/watch/fight-club-550"),
+                "https://papiflix.vercel.app/watch/fight-club-550",
                 pwaUrl,
             ),
         )
         assertFalse(
             PapiFlixUrlPolicy.shouldKeepInApp(
-                Uri.parse("https://accounts.google.com/o/oauth2/v2/auth"),
+                "https://accounts.google.com/o/oauth2/v2/auth",
                 pwaUrl,
             ),
         )
@@ -29,13 +28,13 @@ class PapiFlixUrlPolicyTest {
     fun acceptsGoogleOAuthCallbackForTheConfiguredPwaOrigin() {
         assertTrue(
             PapiFlixUrlPolicy.shouldLoadIntentUriInApp(
-                Uri.parse("https://papiflix.vercel.app/api/auth/callback/google?code=abc"),
+                "https://papiflix.vercel.app/api/auth/callback/google?code=abc",
                 "https://papiflix.vercel.app",
             ),
         )
         assertFalse(
             PapiFlixUrlPolicy.shouldLoadIntentUriInApp(
-                Uri.parse("https://evil.example/api/auth/callback/google?code=abc"),
+                "https://evil.example/api/auth/callback/google?code=abc",
                 "https://papiflix.vercel.app",
             ),
         )

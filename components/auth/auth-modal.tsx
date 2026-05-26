@@ -28,6 +28,7 @@ export function AuthModal({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [googleAvailable, setGoogleAvailable] = useState(false);
+  const [providersResolved, setProvidersResolved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -50,11 +51,13 @@ export function AuthModal({
       .then((providers) => {
         if (mounted) {
           setGoogleAvailable(Boolean(providers?.google));
+          setProvidersResolved(true);
         }
       })
       .catch(() => {
         if (mounted) {
           setGoogleAvailable(false);
+          setProvidersResolved(true);
         }
       });
 
@@ -255,6 +258,10 @@ export function AuthModal({
               <span className="h-px flex-1 bg-white/10" />
             </div>
           </div>
+        ) : providersResolved ? (
+          <p className="mb-5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs leading-relaxed text-zinc-400">
+            Google sign-in is unavailable on this deployment. Check the PapiFlix Google OAuth credentials and make sure the redirect URI ends with /api/auth/callback/google.
+          </p>
         ) : null}
 
         <AnimatePresence mode="wait">

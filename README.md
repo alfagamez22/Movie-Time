@@ -47,3 +47,10 @@ infrastructure/
 - Use the root `Dockerfile` for container-based deployment.
 - Use `.github/workflows/validate.yml` as the validation gate in CI.
 - See `infrastructure/README.md` for environment variables and deployment notes.
+
+## Google sign-in
+
+- The web app already exposes Google sign-in through Auth.js and the account modal.
+- Production needs valid `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and `AUTH_SECRET` values on the deployed environment.
+- In Google Cloud Console, add the PapiFlix redirect URI as `https://<your-papiflix-domain>/api/auth/callback/google`.
+- Do not leave `AUTH_URL` pointed at `localhost` or an old domain in production. If you set it explicitly, it should match the live PapiFlix origin.

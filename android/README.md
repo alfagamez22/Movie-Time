@@ -28,4 +28,6 @@ The Android shell registers an app link for:
 <PWA_URL>/api/auth/callback/google
 ```
 
-This lets a browser-based Google OAuth flow return to the WebView when `PWA_URL` points at the deployed HTTPS app. To make Android open the app automatically instead of showing a chooser, publish a matching `assetlinks.json` for `com.papiflix.app` on the deployed domain.
+This lets a browser-based Google OAuth flow return to the WebView when `PWA_URL` points at the deployed HTTPS app. The Android shell does not include the native Google Sign-In SDK; it relies on the PapiFlix web OAuth flow and only handles the callback handoff back into the app.
+
+To make Android open the app automatically instead of showing a chooser, publish a matching `assetlinks.json` for `com.papiflix.app` on the deployed domain.
