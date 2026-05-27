@@ -6,10 +6,12 @@ import { appConfig } from '@/lib/config';
 
 import './globals.css';
 
+const socialPreviewImageUrl = new URL(appConfig.socialPreviewImage.path, appConfig.siteUrl).toString();
 const socialPreviewImage = {
   alt: appConfig.socialPreviewImage.alt,
   height: appConfig.socialPreviewImage.height,
-  url: appConfig.socialPreviewImage.path,
+  secureUrl: socialPreviewImageUrl,
+  url: socialPreviewImageUrl,
   width: appConfig.socialPreviewImage.width,
 };
 

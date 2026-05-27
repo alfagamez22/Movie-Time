@@ -35,7 +35,6 @@ function loadConfigWithEnv(env) {
 test('uses the Vercel production URL when deployed with a localhost site URL', () => {
   const config = loadConfigWithEnv({
     NEXT_PUBLIC_SITE_URL: 'http://localhost:3000',
-    VERCEL: '1',
     VERCEL_PROJECT_PRODUCTION_URL: 'papiflix.vercel.app',
   });
 
@@ -45,7 +44,6 @@ test('uses the Vercel production URL when deployed with a localhost site URL', (
 test('keeps an explicit non-local site URL on Vercel', () => {
   const config = loadConfigWithEnv({
     NEXT_PUBLIC_SITE_URL: 'https://watch.papiflix.example',
-    VERCEL: '1',
     VERCEL_PROJECT_PRODUCTION_URL: 'papiflix.vercel.app',
   });
 
@@ -60,4 +58,16 @@ test('keeps localhost for local development', () => {
   });
 
   assert.equal(config.siteUrl, 'http://localhost:3000');
+});
+
+test('uses a crawler-friendly social preview asset', () => {
+  const config = loadConfigWithEnv({});
+
+  assert.deepEqual(config.socialPreviewImage, {
+    alt: 'PapiFlix website preview',
+    height: 630,
+    path: '/icons/papiflix-social-preview-v2.jpg',
+    type: 'image/jpeg',
+    width: 1200,
+  });
 });

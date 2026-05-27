@@ -37,7 +37,7 @@ function readSiteUrl(): string {
     normalizeAbsoluteUrl(process.env.VERCEL_BRANCH_URL) ||
     normalizeAbsoluteUrl(process.env.VERCEL_URL);
 
-  if (explicitSiteUrl && (!process.env.VERCEL || !isLocalUrl(explicitSiteUrl))) {
+  if (explicitSiteUrl && !isLocalUrl(explicitSiteUrl)) {
     return explicitSiteUrl;
   }
 
@@ -51,10 +51,10 @@ function readSiteUrl(): string {
 const APP_NAME = 'PapiFlix';
 const SOCIAL_PREVIEW_IMAGE = {
   alt: `${APP_NAME} website preview`,
-  height: 1024,
-  path: '/icons/papiflixbannerimage.png',
-  type: 'image/png',
-  width: 1536,
+  height: 630,
+  path: '/icons/papiflix-social-preview-v2.jpg',
+  type: 'image/jpeg',
+  width: 1200,
 } as const;
 
 export const appConfig = {
