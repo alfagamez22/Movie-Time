@@ -10,6 +10,13 @@ function readUrlEnv(name: string, fallback: string): string {
 }
 
 const APP_NAME = 'PapiFlix';
+const SOCIAL_PREVIEW_IMAGE = {
+  alt: `${APP_NAME} website preview`,
+  height: 1024,
+  path: '/icons/papiflixbannerimage.png',
+  type: 'image/png',
+  width: 1536,
+} as const;
 
 export const appConfig = {
   aniZipApiBaseUrl: readUrlEnv('ANI_ZIP_API_BASE_URL', 'https://api.ani.zip'),
@@ -22,4 +29,5 @@ export const appConfig = {
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000',
+  socialPreviewImage: SOCIAL_PREVIEW_IMAGE,
 };

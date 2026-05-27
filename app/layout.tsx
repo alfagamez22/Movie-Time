@@ -6,13 +6,24 @@ import { appConfig } from '@/lib/config';
 
 import './globals.css';
 
+const socialPreviewImage = {
+  alt: appConfig.socialPreviewImage.alt,
+  height: appConfig.socialPreviewImage.height,
+  url: appConfig.socialPreviewImage.path,
+  width: appConfig.socialPreviewImage.width,
+};
+
 export const metadata: Metadata = {
+  alternates: {
+    canonical: appConfig.siteUrl,
+  },
   applicationName: appConfig.name,
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: appConfig.name,
   },
+  category: 'entertainment',
   title: {
     default: appConfig.name,
     template: `%s | ${appConfig.name}`,
@@ -61,10 +72,11 @@ export const metadata: Metadata = {
     description: appConfig.description,
     images: [
       {
-        alt: `${appConfig.name} banner`,
-        url: '/icons/papiflixbannerimage.png',
+        ...socialPreviewImage,
+        type: appConfig.socialPreviewImage.type,
       },
     ],
+    locale: 'en_US',
     siteName: appConfig.name,
     title: appConfig.name,
     type: 'website',
@@ -76,7 +88,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     description: appConfig.description,
-    images: ['/icons/papiflixbannerimage.png'],
+    images: [socialPreviewImage],
     title: appConfig.name,
   },
 };
