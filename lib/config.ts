@@ -9,6 +9,45 @@ function readUrlEnv(name: string, fallback: string): string {
   }
 }
 
+function normalizeAbsoluteUrl(candidate: string | undefined): string | null {
+  const trimmed = candidate?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    return new URL(withProtocol).toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function isLocalUrl(candidate: string): boolean {
+  const { hostname } = new URL(candidate);
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '[::1]';
+}
+
+function readSiteUrl(): string {
+  const explicitSiteUrl = normalizeAbsoluteUrl(process.env.NEXT_PUBLIC_SITE_URL);
+  const vercelSiteUrl =
+    normalizeAbsoluteUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    normalizeAbsoluteUrl(process.env.VERCEL_BRANCH_URL) ||
+    normalizeAbsoluteUrl(process.env.VERCEL_URL);
+
+  if (explicitSiteUrl && (!process.env.VERCEL || !isLocalUrl(explicitSiteUrl))) {
+    return explicitSiteUrl;
+  }
+
+  if (vercelSiteUrl) {
+    return vercelSiteUrl;
+  }
+
+  return explicitSiteUrl ?? 'http://localhost:3000';
+}
+
 const APP_NAME = 'PapiFlix';
 const SOCIAL_PREVIEW_IMAGE = {
   alt: `${APP_NAME} website preview`,
@@ -28,6 +67,6 @@ export const appConfig = {
   vidnestAnimeApiBaseUrl: readUrlEnv('VIDNEST_ANIME_API_BASE_URL', 'https://new.vidnest.fun'),
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'http://localhost:3000',
+  siteUrl: readSiteUrl(),
   socialPreviewImage: SOCIAL_PREVIEW_IMAGE,
 };
