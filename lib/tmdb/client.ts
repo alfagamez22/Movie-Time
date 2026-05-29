@@ -17,6 +17,7 @@ import {
 
 const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL?.trim() || 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL?.trim() || 'https://image.tmdb.org/t/p';
+const TMDB_IMAGE_PROXY_PATH = '/api/images/tmdb';
 const TMDB_PUBLIC_DB_BASE_URL = process.env.TMDB_PUBLIC_DB_BASE_URL?.trim() || 'https://db.videasy.net/3';
 const DEFAULT_TMDB_LANGUAGE = process.env.TMDB_LANGUAGE?.trim() || 'en-US';
 const VIVAMAX_COMPANY_ID = '149142';
@@ -360,7 +361,8 @@ function buildTmdbImageUrl(path: string | undefined, size: 'w300' | 'w780' = 'w7
     return undefined;
   }
 
-  return `${TMDB_IMAGE_BASE_URL}/${size}${path}`;
+  const searchParams = new URLSearchParams({ path, size });
+  return `${TMDB_IMAGE_PROXY_PATH}?${searchParams.toString()}`;
 }
 
 function createUpstreamFailure(message: string, reason: TmdbLookupFailureReason, status: number): TmdbLookupFailure {
