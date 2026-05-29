@@ -445,6 +445,7 @@ export function trackRecentlyWatched(
   entry: LibraryMediaEntry | MediaEntry,
   options: TrackPlaybackOptions = {},
   namespace: RecentlyWatchedNamespace = 'papiflix',
+  syncToServer = false,
 ) {
   if (!isBrowser()) return;
 
@@ -477,7 +478,10 @@ export function trackRecentlyWatched(
   setCachedEntries(namespace, nextEntries);
   window.dispatchEvent(new Event(keys.eventName));
 
-  // Fire-and-forget sync to DB for authenticated users.
+  if (!syncToServer) {
+    return;
+  }
+
   fetch('/api/watch-history', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

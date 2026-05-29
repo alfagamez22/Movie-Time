@@ -2,6 +2,7 @@
 
 import Hls from 'hls.js';
 import Image from 'next/image';
+import { useSession } from 'next-auth/react';
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Settings, SkipForward } from 'lucide-react';
@@ -411,10 +412,12 @@ export function AnimeWatchPlayer({
   initialPlayback,
   initialSeasonDetails = null,
 }: WatchPlayerProps) {
+  const { data: session } = useSession();
   const router = useRouter();
   const { language: storedLanguage, setLanguage: setStoredLanguage } = useAnimeLanguagePreference();
   const { server: storedServer, setServer: setStoredServer } = useAnimeServerPreference();
   const isSeries = entry.type === 'tv';
+  const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
   const episodeCards = getEpisodeCards({ entry, experience, initialPlayback, initialSeasonDetails });
   const playableEpisodeLimit = isSeries
@@ -631,6 +634,7 @@ export function AnimeWatchPlayer({
           progressSeconds: Math.floor(video.currentTime),
         },
         experience.id,
+        canSyncWatchHistory,
       );
     };
 
@@ -656,7 +660,7 @@ export function AnimeWatchPlayer({
       video.removeEventListener('pause', writeProgress);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [autoNextEnabled, currentEpisode, currentLanguage, entry, experience.id, isSeries, playableEpisodeLimit]);
+  }, [autoNextEnabled, canSyncWatchHistory, currentEpisode, currentLanguage, entry, experience.id, isSeries, playableEpisodeLimit]);
 
   useEffect(() => {
     const trackingEntry = { ...entry, defaultLanguage: currentLanguage };
@@ -666,8 +670,9 @@ export function AnimeWatchPlayer({
         episode: isSeries ? String(currentEpisode) : undefined,
       },
       experience.id,
+      canSyncWatchHistory,
     );
-  }, [currentEpisode, currentLanguage, entry, experience.id, isSeries]);
+  }, [canSyncWatchHistory, currentEpisode, currentLanguage, entry, experience.id, isSeries]);
 
   useEffect(() => {
     const href = buildWatchHref(entry, {

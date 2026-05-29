@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { AnimatePresence, motion } from 'motion/react';
-import { LogOut, User } from 'lucide-react';
+import { Bookmark, LogOut, User } from 'lucide-react';
 import Image from 'next/image';
 
 interface UserMenuProps {
@@ -111,6 +112,14 @@ export function UserMenu({ onSignInClick }: UserMenuProps) {
                 <p className="truncate text-xs text-zinc-500">{session.user.email}</p>
               </div>
             </div>
+            <Link
+              href="/bookmarks"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <Bookmark className="h-4 w-4 shrink-0" />
+              Bookmarks
+            </Link>
             <button
               type="button"
               onClick={handleSignOut}

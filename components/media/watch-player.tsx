@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, SkipForward } from 'lucide-react';
@@ -255,9 +256,11 @@ export function WatchPlayer({
   initialPlayback,
   initialSeasonDetails = null,
 }: WatchPlayerProps) {
+  const { data: session } = useSession();
   const router = useRouter();
   const isAnime = isAnimeProvider(entry.provider);
   const isSeries = isTvEntry(entry);
+  const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
 
   const [season, setSeason] = useState(initialPlayback.season);
@@ -338,8 +341,9 @@ export function WatchPlayer({
         season: !isAnime && isSeries ? safeSeason : undefined,
       },
       experience.id,
+      canSyncWatchHistory,
     );
-  }, [effectiveLanguage, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, effectiveLanguage, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
     hasIframeLoadedRef.current = false;
@@ -382,12 +386,13 @@ export function WatchPlayer({
           season: !isAnime && isSeries ? safeSeason : undefined,
         },
         experience.id,
+        canSyncWatchHistory,
       );
     };
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
 
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
@@ -405,11 +410,12 @@ export function WatchPlayer({
           season: isSeries ? safeSeason : undefined,
         },
         experience.id,
+        canSyncWatchHistory,
       );
     }, 10_000);
 
     return () => clearInterval(intervalId);
-  }, [player, isAnime, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, player, isAnime, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
     if (isAnime) return;

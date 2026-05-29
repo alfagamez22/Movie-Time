@@ -42,11 +42,11 @@ interface AddBookmarkPayload {
 
 const EMPTY_BOOKMARKS: BookmarkRecord[] = [];
 
-export function useBookmarks(experience?: string) {
+export function useBookmarks(experience?: string, initialBookmarks: BookmarkRecord[] = EMPTY_BOOKMARKS) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const fetchKey = userId ? `${userId}:${experience ?? 'all'}` : null;
-  const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>([]);
+  const [bookmarks, setBookmarks] = useState<BookmarkRecord[]>(initialBookmarks);
   const [loading, setLoading] = useState(false);
   const fetchedRef = useRef<string | null>(null);
 

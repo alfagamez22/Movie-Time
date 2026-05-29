@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -112,6 +113,8 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
 
 export function HomePage({ discoveryError, experience, sections }: HomePageProps) {
   const showPlayerSwitcher = experience.preferenceMode === 'player';
+  const { data: session } = useSession();
+  const isAuthenticated = Boolean(session?.user?.id);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LibraryMediaEntry[]>([]);
@@ -261,6 +264,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                   {link.label}
                 </Link>
               ))}
+              {isAuthenticated ? (
+                <Link href="/bookmarks" className="transition-colors hover:text-white">
+                  Bookmarks
+                </Link>
+              ) : null}
             </nav>
             <div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
               <div className={showPlayerSwitcher ? 'hidden md:block' : 'hidden'}>
@@ -366,15 +374,17 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             loop={false}
             onEntryRemove={removeRecentEntry}
             onEntrySelect={openDetails}
+            prioritizeLeadPoster
           />
         ) : null}
-        {sections.map((section) => (
+        {sections.map((section, index) => (
           <BrowseRow
             anchorId={section.id}
             key={section.id}
             title={section.title}
             entries={section.entries}
             onEntrySelect={openDetails}
+            prioritizeLeadPoster={recentlyWatched.length === 0 && index === 0}
           />
         ))}
       </div>

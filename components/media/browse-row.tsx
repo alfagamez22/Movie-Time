@@ -14,6 +14,7 @@ interface BrowseRowProps {
   loop?: boolean;
   onEntryRemove?: (entry: LibraryMediaEntry) => void;
   onEntrySelect: (entry: LibraryMediaEntry) => void;
+  prioritizeLeadPoster?: boolean;
   title: string;
 }
 
@@ -103,10 +104,12 @@ function formatNextEpisodeArrival(entry: LibraryMediaEntry): string | null {
 }
 
 function PosterCard({
+  eagerLoadPoster,
   entry,
   onRemove,
   onSelect,
 }: {
+  eagerLoadPoster?: boolean;
   entry: LibraryMediaEntry;
   onRemove?: (entry: LibraryMediaEntry) => void;
   onSelect: (entry: LibraryMediaEntry) => void;
@@ -136,6 +139,8 @@ function PosterCard({
               src={entry.posterUrl}
               alt={entry.title}
               fill
+              fetchPriority={eagerLoadPoster ? 'high' : undefined}
+              loading={eagerLoadPoster ? 'eager' : undefined}
               sizes={
                 isRecentlyWatched
                   ? '(max-width: 768px) 15rem, 18rem'
@@ -210,7 +215,7 @@ function PosterCard({
   );
 }
 
-export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEntrySelect, title }: BrowseRowProps) {
+export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEntrySelect, prioritizeLeadPoster = false, title }: BrowseRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
@@ -293,6 +298,7 @@ export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEnt
           {rowItems.map((entry, i) => (
             <PosterCard
               key={`${shouldLoop ? 'loop' : 'single'}-${i}-${entry.provider}:${entry.type}:${entry.id}`}
+              eagerLoadPoster={prioritizeLeadPoster && i % entries.length === 0}
               entry={entry}
               onRemove={onEntryRemove}
               onSelect={onEntrySelect}
