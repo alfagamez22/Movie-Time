@@ -40,10 +40,11 @@ export function UserMenu({ onSignInClick }: UserMenuProps) {
       <button
         type="button"
         onClick={onSignInClick}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-netflix-red px-3 text-[11px] font-semibold leading-none text-white shadow-md transition-all hover:brightness-110 active:scale-95 sm:px-4 sm:text-xs"
+        aria-label="Sign in"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-netflix-red px-2.5 text-[11px] font-semibold leading-none text-white shadow-md transition-all hover:brightness-110 active:scale-95 sm:px-4 sm:text-xs"
       >
         <User className="h-3.5 w-3.5 shrink-0" />
-        Sign In
+        <span className="hidden sm:inline">Sign In</span>
       </button>
     );
   }
