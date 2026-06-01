@@ -361,8 +361,8 @@ function buildTmdbImageUrl(path: string | undefined, size: 'w300' | 'w780' = 'w7
     return undefined;
   }
 
-  const searchParams = new URLSearchParams({ path, size });
-  return `${TMDB_IMAGE_PROXY_PATH}?${searchParams.toString()}`;
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  return `${TMDB_IMAGE_PROXY_PATH}/${size}/${cleanPath}`;
 }
 
 function createUpstreamFailure(message: string, reason: TmdbLookupFailureReason, status: number): TmdbLookupFailure {
