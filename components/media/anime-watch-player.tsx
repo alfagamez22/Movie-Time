@@ -42,8 +42,8 @@ const ANIME_SERVER_LABELS: Record<AnimePlaybackServer, string> = {
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 
-function buildEpisodeHistoryKey(episodeNumber: number): string {
-  return `1:${episodeNumber}`;
+function buildEpisodeHistoryKey(seasonNumber: number, episodeNumber: number): string {
+  return `${seasonNumber}:${episodeNumber}`;
 }
 
 function formatUpcomingEpisodeLabel(episode: EpisodePreview): string | null {
@@ -188,12 +188,12 @@ function EpisodeCardList({
       {cards.map((episode) => {
         const isActive = episode.episodeNumber === currentEpisode;
         const isUpcoming = episode.isReleased === false;
-        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(episode.episodeNumber));
+        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(episode.seasonNumber, episode.episodeNumber));
         const upcomingLabel = formatUpcomingEpisodeLabel(episode);
 
         return (
           <button
-            key={episode.episodeNumber}
+            key={`${episode.seasonNumber}-${episode.episodeNumber}`}
             type="button"
             disabled={isUpcoming}
             onClick={() => onEpisodeChange(episode.episodeNumber)}
@@ -253,12 +253,15 @@ function SidebarControls({
   autoNextEnabled,
   currentEpisode,
   currentLanguage,
+  currentSeason,
   currentServer,
   episodeCards,
   episodeLimit,
+  episodesBySeason,
   watchedEpisodeKeys,
   onEpisodeChange,
   onLanguageChange,
+  onSeasonChange,
   onServerChange,
   onToggleAutoNext,
   onToggleSkipIntro,
@@ -267,12 +270,15 @@ function SidebarControls({
   autoNextEnabled: boolean;
   currentEpisode: number;
   currentLanguage: 'dub' | 'sub';
+  currentSeason: number;
   currentServer: AnimePlaybackServer;
   episodeCards: EpisodePreview[];
   episodeLimit: number;
+  episodesBySeason: Record<string, number>;
   watchedEpisodeKeys: Set<string>;
   onEpisodeChange: (episode: number) => void;
   onLanguageChange: (language: 'dub' | 'sub') => void;
+  onSeasonChange: (season: number) => void;
   onServerChange: (server: AnimePlaybackServer) => void;
   onToggleAutoNext: () => void;
   onToggleSkipIntro: () => void;
@@ -317,6 +323,27 @@ function SidebarControls({
         </div>
 
         <div className="flex flex-col gap-2">
+          {/* Season selector — only visible when the entry has multiple seasons */}
+          {Object.keys(episodesBySeason).length > 1 ? (
+            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+              {Object.keys(episodesBySeason)
+                .map(Number)
+                .sort((a, b) => a - b)
+                .map((season) => (
+                  <button
+                    key={season}
+                    type="button"
+                    onClick={() => onSeasonChange(season)}
+                    className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
+                      currentSeason === season ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    S{season}
+                  </button>
+                ))}
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
             {(['sub', 'dub'] as const).map((choice) => (
               <button
@@ -427,6 +454,7 @@ export function AnimeWatchPlayer({
   const initialEpisode = Math.min(Math.max(1, Number.parseInt(initialPlayback.episode, 10) || 1), playableEpisodeLimit);
 
   const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
+  const [currentSeason, setCurrentSeason] = useState(1);
   const [currentLanguage, setCurrentLanguage] = useState<'dub' | 'sub'>(initialPlayback.language ?? storedLanguage);
   const [currentServer, setCurrentServer] = useState<AnimePlaybackServer>(initialPlayback.server ?? storedServer);
   const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? true);
@@ -557,6 +585,14 @@ export function AnimeWatchPlayer({
       hls.loadSource(sourceUrl);
       hls.attachMedia(video);
       hlsRef.current = hls;
+    } else if (resolvedSourceType === 'hls' && !video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Browser supports neither hls.js nor native HLS (e.g. older Chromium
+      // without Media Source Extensions). Surface a clear message rather than
+      // letting the video element silently fail to load.
+      setError(
+        'HLS playback is not supported in this browser. Try Chrome, Firefox, or Safari, or switch to a different server.',
+      );
+      setIsLoading(false);
     } else {
       video.src = sourceUrl;
     }
@@ -742,6 +778,19 @@ export function AnimeWatchPlayer({
     setError(null);
     setPlaybackData(null);
     setCurrentEpisode(Math.min(Math.max(1, episode), playableEpisodeLimit));
+    setResumeOverrideSeconds(0);
+  };
+
+  const handleSeasonChange = (season: number) => {
+    if (season === currentSeason) {
+      return;
+    }
+
+    setCurrentSeason(season);
+    setCurrentEpisode(1);
+    setIsLoading(true);
+    setError(null);
+    setPlaybackData(null);
     setResumeOverrideSeconds(0);
   };
 
@@ -975,12 +1024,15 @@ export function AnimeWatchPlayer({
           autoNextEnabled={autoNextEnabled}
           currentEpisode={currentEpisode}
           currentLanguage={currentLanguage}
+          currentSeason={currentSeason}
           currentServer={currentServer}
           episodeCards={episodeCards}
           episodeLimit={episodeLimit}
+          episodesBySeason={entry.type === 'tv' ? (entry.episodesBySeason ?? { '1': episodeLimit }) : { '1': 1 }}
           watchedEpisodeKeys={watchedEpisodeKeys}
           onEpisodeChange={handleEpisodeChange}
           onLanguageChange={handleLanguageChange}
+          onSeasonChange={handleSeasonChange}
           onServerChange={handleServerChange}
           onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
           onToggleSkipIntro={() => setSkipIntroEnabled((value) => !value)}

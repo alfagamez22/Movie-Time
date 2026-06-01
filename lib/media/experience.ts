@@ -38,6 +38,11 @@ export const papiflixExperience: MediaExperienceConfig = {
     { href: '/#tv-shows', label: 'TV Shows' },
     { href: '/anime', label: 'Anime' },
   ],
+  // preferenceMode: 'player' — the PapiFlix watch UI shows a player-switcher
+  // (Player 1–5). Player 5 is the StreamIMDB embed and is exclusive to the
+  // PapiFlix experience; it is intentionally absent on the /anime route because
+  // papianimeExperience sets preferenceMode: 'language' (see below), which
+  // renders a dub/sub toggle in place of the player-switcher.
   preferenceMode: 'player',
   searchEndpoint: '/api/media',
   searchPlaceholder: 'Search movies, series, or enter a numeric ID...',
@@ -60,6 +65,9 @@ export const papianimeExperience: MediaExperienceConfig = {
     { href: '/anime#anime-movies', label: 'Movies' },
     { href: '/', label: 'PapiFlix' },
   ],
+  // preferenceMode: 'language' — the PapiAnime watch UI shows a dub/sub
+  // language toggle instead of the PapiFlix player-switcher. This keeps Player
+  // 5 (StreamIMDB) off the /anime route, where it would be irrelevant.
   preferenceMode: 'language',
   searchEndpoint: '/api/anime',
   searchPlaceholder: 'Search anime titles or AniList ID...',

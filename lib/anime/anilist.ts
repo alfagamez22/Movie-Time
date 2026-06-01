@@ -2,6 +2,13 @@ import 'server-only';
 
 import { appConfig } from '@/lib/config';
 
+// Imported lazily below via a deferred require to avoid a circular-type
+// dependency at module evaluation time (episodes.ts imports AnilistMedia type
+// from this file). At runtime there is no cycle since that import is
+// type-only and erased. We use a regular import here because modern bundlers
+// and Node.js ESM handle circular type-only references correctly.
+import { isReleasedAnime } from './episodes';
+
 type CacheEntry<T> = {
   expiresAt: number;
   value: T;
@@ -124,6 +131,7 @@ interface SearchQueryResult {
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const BROWSE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — browse sections change slowly
 const responseCache = new Map<string, CacheEntry<unknown>>();
 
 const MEDIA_CARD_FRAGMENT = `
@@ -294,7 +302,7 @@ export async function searchAnilistAnime(queryText: string, perPage = 18): Promi
     search: trimmedQuery,
   });
 
-  return result.Page.media ?? [];
+  return result.Page.media?.filter(isReleasedAnime) ?? [];
 }
 
 export async function fetchAnilistBrowseBuckets(): Promise<BrowseQueryResult> {
@@ -334,8 +342,22 @@ export async function fetchAnilistBrowseBuckets(): Promise<BrowseQueryResult> {
     }
   `;
 
-  return requestAnilist<BrowseQueryResult>(query, {
+  const result = await requestAnilist<BrowseQueryResult>(query, {
     season,
     seasonYear: year,
+  }, BROWSE_CACHE_TTL_MS);
+
+  // Filter unreleased entries at the data layer so all callers get clean lists.
+  const filterBucket = (bucket: { media: AnilistMedia[] }) => ({
+    media: bucket.media.filter(isReleasedAnime),
   });
+
+  return {
+    airing: filterBucket(result.airing),
+    completed: filterBucket(result.completed),
+    movies: filterBucket(result.movies),
+    seasonal: filterBucket(result.seasonal),
+    topRated: filterBucket(result.topRated),
+    trending: filterBucket(result.trending),
+  };
 }

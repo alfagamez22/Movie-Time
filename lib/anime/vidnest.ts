@@ -11,45 +11,14 @@ import {
 } from '@/lib/media/types';
 
 import { decodeVidNestPayload } from './vidnest-crypto';
+import {
+  parseVidNestPlaybackRecord,
+  type VidNestPlaybackRecord,
+  type VidNestSourceRecord,
+  type VidNestTrackRecord,
+} from './vidnest-schema';
 
 type ProxyProfile = 'aniwave-media' | 'anitaku-media' | 'subtitle';
-
-interface VidNestTrackRecord {
-  default?: boolean | null;
-  file?: string | null;
-  kind?: string | null;
-  label?: string | null;
-  lang?: string | null;
-  srclang?: string | null;
-}
-
-interface VidNestSourceRecord {
-  file?: string | null;
-  quality?: string | null;
-  type?: string | null;
-  url?: string | null;
-}
-
-interface VidNestPlaybackRecord {
-  error?: string | null;
-  intro?: {
-    end?: number | null;
-    start?: number | null;
-  } | null;
-  metadata?: {
-    image?: string | null;
-    poster?: string | null;
-    title?: string | null;
-  } | null;
-  outro?: {
-    end?: number | null;
-    start?: number | null;
-  } | null;
-  sources?: VidNestSourceRecord[] | null;
-  status?: number | string | null;
-  success?: boolean | null;
-  tracks?: VidNestTrackRecord[] | null;
-}
 
 interface AnimePlaybackMetadata {
   posterUrl?: string;
@@ -142,6 +111,15 @@ function normalizeTracks(records: VidNestTrackRecord[] | null | undefined): Anim
 
     const label = record.label?.trim() || record.lang?.trim() || record.srclang?.trim() || `Track ${index + 1}`;
     const srclang = (record.srclang?.trim() || record.lang?.trim() || label).slice(0, 24).toLowerCase();
+
+    // Deduplicate by logical identity (label + language) rather than URL so
+    // that the same subtitle track served from multiple CDN URLs doesn't appear
+    // more than once in the track selector.
+    const dedupeKey = `${label}|${srclang}`;
+    if (tracks.has(dedupeKey)) {
+      continue;
+    }
+
     const track: AnimePlaybackTrack = {
       default: record.default === true || tracks.size === 0,
       kind: record.kind === 'subtitles' ? 'subtitles' : 'captions',
@@ -150,7 +128,7 @@ function normalizeTracks(records: VidNestTrackRecord[] | null | undefined): Anim
       srclang,
     };
 
-    tracks.set(rawUrl, track);
+    tracks.set(dedupeKey, track);
   }
 
   return Array.from(tracks.values());
@@ -273,15 +251,15 @@ async function fetchPlaybackRecord(attempt: AttemptDescriptor, anilistId: string
     return null;
   }
 
-  const decoded = decodeVidNestPayload<VidNestPlaybackRecord>(payload);
-  const normalizedHeaders = cleanHeaders((decoded as { headers?: Record<string, unknown> }).headers);
+  const rawDecoded = decodeVidNestPayload<unknown>(payload);
+  const normalizedHeaders = cleanHeaders((rawDecoded as { headers?: Record<string, unknown> }).headers);
 
   if (Object.keys(normalizedHeaders).length > 0) {
     // Keep parity with the upstream payload normalization even though the proxy
     // currently uses fixed header profiles.
   }
 
-  return decoded;
+  return parseVidNestPlaybackRecord(rawDecoded);
 }
 
 function buildAttemptMatrix(

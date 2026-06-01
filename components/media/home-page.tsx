@@ -3,11 +3,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
+import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
@@ -126,8 +127,8 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const recentlyWatched = useRecentlyWatched(experience.id);
   useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
   const inputRef = useRef<HTMLInputElement>(null);
-  const deferredQuery = useDeferredValue(query.trim());
-  const isSearchPending = query.trim() !== deferredQuery;
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const isSearchPending = query.trim() !== debouncedQuery;
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -215,10 +216,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   }, [closeSearch]);
 
   useEffect(() => {
-    if (!deferredQuery) return;
+    if (!debouncedQuery) return;
 
     const controller = new AbortController();
-    void fetch(`${experience.searchEndpoint}?q=${encodeURIComponent(deferredQuery)}`, { signal: controller.signal })
+    void fetch(`${experience.searchEndpoint}?q=${encodeURIComponent(debouncedQuery)}`, { signal: controller.signal })
       .then(async (res) => {
         const json = (await res.json().catch(() => null)) as { data?: LibraryMediaEntry[] } | null;
         if (!controller.signal.aborted) {
@@ -233,7 +234,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       });
 
     return () => controller.abort(new DOMException('Query changed', 'AbortError'));
-  }, [deferredQuery, experience.searchEndpoint]);
+  }, [debouncedQuery, experience.searchEndpoint]);
 
   const featuredItems = getFeaturedItems(sections);
   const authPromptCopy = getAuthPromptCopy(authPromptReason);
@@ -326,13 +327,13 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-12">
               <div className="mx-auto max-w-4xl">
-                {!deferredQuery ? (
+                {!debouncedQuery ? (
                   <p className="mt-10 text-center text-sm text-zinc-600">{experience.emptySearchText}</p>
                 ) : isSearchPending ? (
                   <p className="text-center text-sm text-zinc-500">Searching...</p>
                 ) : searchResults.length === 0 ? (
                   <p className="text-center text-sm text-zinc-500">
-                    No results for &ldquo;{deferredQuery}&rdquo;
+                    No results for &ldquo;{debouncedQuery}&rdquo;
                   </p>
                 ) : (
                   <div className="flex flex-col gap-3">
