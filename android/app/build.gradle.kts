@@ -33,7 +33,7 @@ val escapedPwaUrl = pwaUrl
     .replace("\"", "\\\"")
 val pwaUri = runCatching { URI(pwaUrl) }.getOrNull()
 val pwaUrlScheme = pwaUri?.scheme?.takeIf { it.isNotBlank() } ?: "https"
-val pwaUrlHost = pwaUri?.host?.takeIf { it.isNotBlank() } ?: "papiflix.vercel.app"
+val pwaUrlHost = pwaUri?.host?.takeIf { it.isNotBlank() } ?: "app.example.test"
 
 android {
     namespace = "com.papiflix.app"

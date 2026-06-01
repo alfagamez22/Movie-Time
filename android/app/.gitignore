@@ -1,1 +1,7 @@
 /build
+google-services.json
+*.env
+*.env.*
+secrets.properties
+keystore.properties
+proguard-rules.pro

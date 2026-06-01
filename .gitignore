@@ -11,8 +11,21 @@ coverage/
 android/.gradle/
 android/.idea/
 android/**/build/
-android/local.properties
 android/captures/
+
+# Android local configuration and secrets
+android/local.properties
+android/*.env
+android/**/*.env
+android/**/secrets.properties
+android/keystore.properties
+android/app/google-services.json
+
+# Netlify local cache
+.netlify/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
 
 /lib/generated/prisma
 

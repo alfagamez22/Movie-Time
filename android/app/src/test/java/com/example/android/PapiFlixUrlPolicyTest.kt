@@ -8,11 +8,11 @@ import org.junit.Test
 class PapiFlixUrlPolicyTest {
     @Test
     fun keepsSameOriginUrlsInApp() {
-        val pwaUrl = "https://papiflix.vercel.app"
+        val pwaUrl = "https://app.example.test"
 
         assertTrue(
             PapiFlixUrlPolicy.shouldKeepInApp(
-                "https://papiflix.vercel.app/watch/fight-club-550",
+                "https://app.example.test/watch/fight-club-550",
                 pwaUrl,
             ),
         )
@@ -28,14 +28,14 @@ class PapiFlixUrlPolicyTest {
     fun acceptsGoogleOAuthCallbackForTheConfiguredPwaOrigin() {
         assertTrue(
             PapiFlixUrlPolicy.shouldLoadIntentUriInApp(
-                "https://papiflix.vercel.app/api/auth/callback/google?code=abc",
-                "https://papiflix.vercel.app",
+                "https://app.example.test/api/auth/callback/google?code=abc",
+                "https://app.example.test",
             ),
         )
         assertFalse(
             PapiFlixUrlPolicy.shouldLoadIntentUriInApp(
                 "https://evil.example/api/auth/callback/google?code=abc",
-                "https://papiflix.vercel.app",
+                "https://app.example.test",
             ),
         )
     }

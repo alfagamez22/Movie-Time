@@ -13,3 +13,12 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Android local env / secrets (do not commit)
+*.env
+*.env.*
+**/secrets.properties
+keystore.properties
+app/google-services.json
+app/proguard-rules.pro
+

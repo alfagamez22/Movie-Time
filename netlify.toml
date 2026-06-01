@@ -1,0 +1,20 @@
+# Netlify configuration for the PapiFlix web app.
+#
+# Netlify's secret scanner matches the value of any environment variable that
+# was configured as a "Contains secret values" entry against repo and build
+# output files. The keys listed in SECRETS_SCAN_OMIT_KEYS are public
+# configuration (NEXT_PUBLIC_* values, public provider base URLs, OAuth
+# client ID, NextAuth host settings) and are expected to appear in source,
+# docs, and prerendered HTML.
+# Real secrets (TMDB_*, AUTH_SECRET, AUTH_GOOGLE_SECRET, DATABASE_URL) must
+# remain flagged as secret in the Netlify UI and must NEVER be added to the
+# omit list below.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  SECRETS_SCAN_OMIT_PATHS = "android/**, docs/**, .playwright-cli/**, *.md"
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_APP_NAME,NEXT_PUBLIC_APP_DESCRIPTION,NEXT_PUBLIC_SITE_URL,AUTH_GOOGLE_ID,AUTH_URL,AUTH_TRUST_HOST,VIDKING_EMBED_BASE_URL,YOUTUBE_THUMBNAIL_BASE_URL,YOUTUBE_EMBED_BASE_URL,YOUTUBE_WATCH_BASE_URL,ANITAKU_CDN_ORIGIN,ANIWAVE_CDN_ORIGIN,VIDFAST_EMBED_BASE_URL,VIDNEST_ANIME_API_BASE_URL,ANILIST_GRAPHQL_URL,ANI_ZIP_API_BASE_URL"
