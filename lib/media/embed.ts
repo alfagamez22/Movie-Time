@@ -205,3 +205,22 @@ export function buildMegaPlayEmbedUrl(entry: MediaEntry, options: PlaybackOption
 
   return url.toString();
 }
+
+export function buildStreamimdbEmbedUrl(imdbId: string, entry: MediaEntry, options: PlaybackOptions): string {
+  if (!imdbId) {
+    return '';
+  }
+
+  const base = 'https://streamimdb.ru/embed';
+  const path = isTvEntry(entry)
+    ? `${base}/tv/${imdbId}`
+    : `${base}/movie/${imdbId}`;
+
+  const url = new URL(path);
+
+  if (options.autoPlay) {
+    url.searchParams.set('autoplay', 'true');
+  }
+
+  return url.toString();
+}

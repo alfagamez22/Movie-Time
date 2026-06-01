@@ -165,3 +165,14 @@ model MediaComment {
   @@index([mediaId, mediaProvider, mediaType, createdAt])
   @@index([userId, createdAt])
 }
+
+model TmdbImdbMapping {
+  id     String @id @default(cuid())
+  tmdbId String
+  type   String
+  imdbId String
+
+  @@unique([tmdbId, type])
+  @@index([imdbId])
+  @@index([tmdbId])
+}

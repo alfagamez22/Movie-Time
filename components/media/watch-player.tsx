@@ -9,8 +9,9 @@ import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
   buildEmbedUrl,
-  buildVidFastEmbedUrl,
   buildMegaPlayEmbedUrl,
+  buildStreamimdbEmbedUrl,
+  buildVidFastEmbedUrl,
   buildVideasyEmbedUrl,
   buildVidSrcEmbedUrl,
   type PlaybackOptions,
@@ -273,6 +274,7 @@ export function WatchPlayer({
   const [animeLanguage, setAnimeLanguage] = useState(initialPlayback.language);
   const { player } = usePlayerPreference();
   const { setLanguage: setStoredAnimeLanguage } = useAnimeLanguagePreference();
+  const [streamimdbId, setStreamimdbId] = useState<string | null | undefined>(undefined);
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasIframeLoadedRef = useRef(false);
@@ -312,7 +314,7 @@ export function WatchPlayer({
     ...initialPlayback,
     episode: safeEpisode,
     language: effectiveLanguage,
-    progress: player === '4' ? null : initialPlayback.progress,
+    progress: player === '4' || player === '5' ? null : initialPlayback.progress,
     season: safeSeason,
   };
   const isVidFastPlayer = !isAnime && player === '1';
@@ -324,7 +326,9 @@ export function WatchPlayer({
         ? buildVidSrcEmbedUrl(entry, playbackOptions)
         : player === '3'
           ? buildVideasyEmbedUrl(entry, playbackOptions)
-          : buildEmbedUrl(entry, playbackOptions);
+          : player === '5' && streamimdbId
+            ? buildStreamimdbEmbedUrl(streamimdbId, entry, playbackOptions)
+            : buildEmbedUrl(entry, playbackOptions);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
@@ -344,6 +348,32 @@ export function WatchPlayer({
       canSyncWatchHistory,
     );
   }, [canSyncWatchHistory, effectiveLanguage, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
+
+  useEffect(() => {
+    if (isAnime || player !== '5') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const params = new URLSearchParams({ tmdbId: entry.id, type: entry.type });
+    fetch(`/api/streamimdb/resolve?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data: { imdbId: string | null }) => {
+        if (!cancelled) {
+          setStreamimdbId(data.imdbId);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStreamimdbId(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [player, entry.id, entry.type, isAnime]);
 
   useEffect(() => {
     hasIframeLoadedRef.current = false;
@@ -528,16 +558,18 @@ export function WatchPlayer({
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <a
-          href={embedUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Download video"
-          title="Open stream in new tab to download"
-          className={`absolute left-[calc(env(safe-area-inset-left)+4.5rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-        >
-          <Download className="h-5 w-5" />
-        </a>
+        {embedUrl ? (
+          <a
+            href={embedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Download video"
+            title="Open stream in new tab to download"
+            className={`absolute left-[calc(env(safe-area-inset-left)+4.5rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          >
+            <Download className="h-5 w-5" />
+          </a>
+        ) : null}
 
         {isSeries && Number.parseInt(safeEpisode, 10) < safeEpisodeLimit ? (
           <button
@@ -570,26 +602,34 @@ export function WatchPlayer({
           showFallback={showPlayerFallback}
         />
 
-        <iframe
-          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${safeSeason}-${safeEpisode}`}
-          ref={iframeRef}
-          src={embedUrl}
-          className="h-full w-full border-0"
-          allowFullScreen
-          allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-          onError={() => {
-            hasIframeLoadedRef.current = false;
-            setIsPlayerLoading(false);
-            setShowPlayerFallback(true);
-          }}
-          onLoad={() => {
-            hasIframeLoadedRef.current = true;
-            setIsPlayerLoading(false);
-            setShowPlayerFallback(false);
-          }}
-          referrerPolicy="strict-origin-when-cross-origin"
-          title={`Watch ${entry.title}`}
-        />
+        {player === '5' && !embedUrl ? (
+          <div className="flex h-full w-full items-center justify-center bg-black">
+            <p className="text-center text-sm text-zinc-400">
+              {streamimdbId === undefined ? 'Resolving source…' : 'Player 5 is unavailable for this title.'}
+            </p>
+          </div>
+        ) : (
+          <iframe
+            key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${safeSeason}-${safeEpisode}`}
+            ref={iframeRef}
+            src={embedUrl}
+            className="h-full w-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            onError={() => {
+              hasIframeLoadedRef.current = false;
+              setIsPlayerLoading(false);
+              setShowPlayerFallback(true);
+            }}
+            onLoad={() => {
+              hasIframeLoadedRef.current = true;
+              setIsPlayerLoading(false);
+              setShowPlayerFallback(false);
+            }}
+            referrerPolicy="strict-origin-when-cross-origin"
+            title={`Watch ${entry.title}`}
+          />
+        )}
       </div>
 
       {isSeries ? (

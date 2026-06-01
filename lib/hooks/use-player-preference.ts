@@ -2,11 +2,11 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-export type PlayerChoice = '1' | '2' | '3' | '4';
+export type PlayerChoice = '1' | '2' | '3' | '4' | '5';
 export type AnimeLanguageChoice = 'dub' | 'sub';
 export type AnimeServerChoice = 'aniwave' | 'anitaku';
 
-const PLAYER_STORAGE_VERSION = '2';
+const PLAYER_STORAGE_VERSION = '3';
 const PLAYER_STORAGE_VERSION_KEY = 'papiflix-player-version';
 
 export const PLAYER_LABELS: Record<PlayerChoice, string> = {
@@ -14,6 +14,7 @@ export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '2': 'VidSrc',
   '3': 'Videasy',
   '4': 'Vidking',
+  '5': 'Player 5',
 };
 
 export const ANIME_LANGUAGE_LABELS: Record<AnimeLanguageChoice, string> = {
@@ -30,7 +31,7 @@ interface ChoiceStore<T extends string> {
 }
 
 function normalizePlayerChoice(value: string | null): PlayerChoice {
-  return value === '2' ? '2' : value === '3' ? '3' : value === '4' ? '4' : '1';
+  return value === '2' ? '2' : value === '3' ? '3' : value === '4' ? '4' : value === '5' ? '5' : '1';
 }
 
 function migratePlayerChoice(value: string | null, version: string | null): PlayerChoice {
@@ -38,7 +39,7 @@ function migratePlayerChoice(value: string | null, version: string | null): Play
     return normalizePlayerChoice(value);
   }
 
-  return value === '1' ? '2' : value === '2' ? '3' : value === '3' ? '4' : '1';
+  return value === '1' ? '2' : value === '2' ? '3' : value === '3' ? '4' : value === '4' ? '5' : '1';
 }
 
 const playerStore: ChoiceStore<PlayerChoice> = {
