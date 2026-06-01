@@ -47,6 +47,22 @@ function buildEpisodeHistoryKey(seasonNumber: number, episodeNumber: number): st
   return `${seasonNumber}:${episodeNumber}`;
 }
 
+/**
+ * Normalize a URL search string for comparison, stripping transient params
+ * (e.g. `progress`) and sorting remaining keys alphabetically.
+ */
+function normalizeWatchSearch(searchString: string): string {
+  if (!searchString || searchString === '?') return '';
+  const params = new URLSearchParams(searchString.startsWith('?') ? searchString.slice(1) : searchString);
+  const pairs: string[] = [];
+  for (const [key, value] of params) {
+    if (key === 'progress') continue;
+    pairs.push(`${key}=${value}`);
+  }
+  pairs.sort((a, b) => a.localeCompare(b));
+  return pairs.length > 0 ? `?${pairs.join('&')}` : '';
+}
+
 function formatUpcomingEpisodeLabel(episode: EpisodePreview): string | null {
   if (episode.isReleased !== false) {
     return null;
@@ -779,7 +795,12 @@ export function AnimeWatchPlayer({
       skipIntro: skipIntroEnabled,
     });
 
-    if (`${window.location.pathname}${window.location.search}` === href) {
+    const currentSearch = normalizeWatchSearch(window.location.search);
+    const canonicalSearch = normalizeWatchSearch(href.includes('?') ? href.slice(href.indexOf('?')) : '');
+    const currentPath = window.location.pathname;
+    const canonicalPath = href.includes('?') ? href.slice(0, href.indexOf('?')) : href;
+
+    if (`${currentPath}${currentSearch}` === `${canonicalPath}${canonicalSearch}`) {
       return;
     }
 

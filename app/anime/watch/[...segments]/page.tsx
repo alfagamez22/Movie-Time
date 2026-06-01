@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { WatchPlayer } from '@/components/media/watch-player';
+import { AnimeWatchPlayer } from '@/components/media/anime-watch-player';
 import { lookupAnimeMediaEntry } from '@/lib/anime/client';
 import { isAnimePlayerId, type AnimePlayerId } from '@/lib/anime/player-metadata';
 import { resolveAnimeMediaEntry } from '@/lib/anime/resolve';
@@ -291,7 +291,7 @@ export default async function AnimeWatchPage(props: AnimeWatchPageProps) {
     }
 
     return (
-      <WatchPlayer
+      <AnimeWatchPlayer
         entry={canonicalState.lookup.entry}
         animePlayer={canonicalState.initialPlayback.player}
         experience={papianimeExperience}

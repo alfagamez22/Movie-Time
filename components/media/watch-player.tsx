@@ -17,7 +17,6 @@ import {
   type PlaybackOptions,
 } from '@/lib/media/embed';
 import {
-  ANIME_LANGUAGE_LABELS,
   useAnimeLanguagePreference,
   usePlayerPreference,
   type AnimeLanguageChoice,
@@ -637,18 +636,6 @@ export function WatchPlayer({
       </div>
 
       {isSeries ? (
-        isAnime ? (
-          <AnimeEpisodeSidebar
-            key={entry.id}
-            episodeCards={seasonEpisodeCards}
-            language={effectiveLanguage}
-            onEpisodeChange={handleEpisodeChange}
-            onLanguageChange={handleAnimeLanguageChange}
-            safeEpisode={safeEpisode}
-            safeEpisodeLimit={safeEpisodeLimit}
-            watchedEpisodeKeys={watchedEpisodeKeys}
-          />
-        ) : (
           <EpisodeSidebar
             safeSeason={safeSeason}
             safeEpisode={safeEpisode}
@@ -660,7 +647,6 @@ export function WatchPlayer({
             onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
             onEpisodeChange={handleEpisodeChange}
           />
-        )
       ) : null}
     </div>
   );
@@ -721,112 +707,6 @@ function EpisodeSidebar({
           {seasonDetailsError}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function AnimeEpisodeSidebar({
-  episodeCards,
-  language,
-  onEpisodeChange,
-  onLanguageChange,
-  safeEpisode,
-  safeEpisodeLimit,
-  watchedEpisodeKeys,
-}: {
-  episodeCards: EpisodePreview[];
-  language: 'dub' | 'sub';
-  onEpisodeChange: (episode: string) => void;
-  onLanguageChange: (language: 'dub' | 'sub') => void;
-  safeEpisode: string;
-  safeEpisodeLimit: number;
-  watchedEpisodeKeys: Set<string>;
-}) {
-  const [selectedGroupStart, setSelectedGroupStart] = useState(() => {
-    const episodeNumber = Number.parseInt(safeEpisode, 10);
-    return Math.floor((Math.max(episodeNumber, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) * ANIME_EPISODE_GROUP_SIZE + 1;
-  });
-  const [selectedRangeEpisode, setSelectedRangeEpisode] = useState(safeEpisode);
-  const defaultGroupStart =
-    Math.floor((Math.max(Number.parseInt(safeEpisode, 10) || 1, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) *
-      ANIME_EPISODE_GROUP_SIZE +
-    1;
-  const activeGroupStart = selectedRangeEpisode === safeEpisode ? selectedGroupStart : defaultGroupStart;
-
-  const episodeGroups = Array.from({ length: Math.ceil(safeEpisodeLimit / ANIME_EPISODE_GROUP_SIZE) }, (_, index) => {
-    const startEpisode = index * ANIME_EPISODE_GROUP_SIZE + 1;
-    const endEpisode = Math.min(safeEpisodeLimit, startEpisode + ANIME_EPISODE_GROUP_SIZE - 1);
-
-    return {
-      endEpisode,
-      label: `${startEpisode}-${endEpisode}`,
-      value: String(startEpisode),
-    };
-  });
-
-  const visibleEpisodeCards =
-    episodeGroups.length > 1
-      ? episodeCards.filter(
-          (episode) =>
-            episode.episodeNumber >= activeGroupStart &&
-            episode.episodeNumber < activeGroupStart + ANIME_EPISODE_GROUP_SIZE,
-        )
-      : episodeCards;
-
-  return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#101014] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
-      <div className="space-y-3 border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-white">Episode List</span>
-          <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
-        </div>
-        <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-          {(['sub', 'dub'] as const).map((choice) => (
-            <button
-              key={choice}
-              type="button"
-              onClick={() => onLanguageChange(choice)}
-              className={`rounded-full px-3 py-1 font-medium transition-colors ${
-                language === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              {ANIME_LANGUAGE_LABELS[choice]}
-            </button>
-          ))}
-        </div>
-        {episodeGroups.length > 1 ? (
-          <div className="space-y-1">
-            <label htmlFor="anime-episode-group" className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
-              Episode Range
-            </label>
-            <select
-              id="anime-episode-group"
-              value={String(activeGroupStart)}
-              onChange={(event) => {
-                setSelectedRangeEpisode(safeEpisode);
-                setSelectedGroupStart(Number.parseInt(event.target.value, 10));
-              }}
-              className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/20"
-              aria-label="Select episode range"
-            >
-              {episodeGroups.map((group) => (
-                <option key={group.value} value={group.value} className="bg-[#111] text-white">
-                  Episodes {group.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-      </div>
-
-      <EpisodeCardList
-        key={activeGroupStart}
-        cards={visibleEpisodeCards}
-        onEpisodeChange={onEpisodeChange}
-        safeEpisode={safeEpisode}
-        safeSeason="1"
-        watchedEpisodeKeys={watchedEpisodeKeys}
-      />
     </div>
   );
 }
