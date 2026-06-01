@@ -1,4 +1,5 @@
 import type { PlaybackOptions } from '@/lib/media/embed';
+import type { AnimePlayerId } from '@/lib/anime/player-metadata';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import type { MediaEntry, SeasonDetails } from '@/lib/media/types';
 
@@ -7,4 +8,5 @@ export interface WatchPlayerProps {
   experience: MediaExperienceConfig;
   initialPlayback: PlaybackOptions;
   initialSeasonDetails?: SeasonDetails | null;
+  animePlayer?: AnimePlayerId;
 }

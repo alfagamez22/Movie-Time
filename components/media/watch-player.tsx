@@ -254,6 +254,7 @@ function EpisodeStillImage({
 export function WatchPlayer({
   entry,
   experience,
+  animePlayer,
   initialPlayback,
   initialSeasonDetails = null,
 }: WatchPlayerProps) {
@@ -455,6 +456,7 @@ export function WatchPlayer({
       basePath: experience.watchBasePath,
       color: initialPlayback.color,
       episode: safeEpisode,
+      player: animePlayer,
       progress: null,
       season: safeSeason,
     });
@@ -467,6 +469,7 @@ export function WatchPlayer({
     experience.watchBasePath,
     initialPlayback.autoPlay,
     initialPlayback.color,
+    animePlayer,
     isAnime,
     router,
     safeEpisode,
@@ -535,6 +538,7 @@ export function WatchPlayer({
     return (
       <AnimeWatchPlayer
         entry={entry}
+        animePlayer={animePlayer}
         experience={experience}
         initialPlayback={initialPlayback}
         initialSeasonDetails={initialSeasonDetails}

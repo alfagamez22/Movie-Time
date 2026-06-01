@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { isAnimePlayerId, searchAnimeForPlayer, type AnimePlayerId } from '@/lib/anime/player-config';
-import { searchAnimeLibrary, getAnimeLibrarySections } from '@/lib/anime/client';
+import { browseAnimeForPlayer, isAnimePlayerId, searchAnimeForPlayer, type AnimePlayerId } from '@/lib/anime/player-config';
 import type { LibraryMediaEntry, MediaType } from '@/lib/media/types';
 
 function parseMediaType(value: string | null): MediaType | undefined {
@@ -60,36 +59,32 @@ export async function GET(request: Request) {
     });
   }
 
-  // Browse mode — delegate to the AniList client for the default P1/P2/P3
-  // (P4/P5 fetch their own sections in the server-rendered home page).
-  const sections = await getAnimeLibrarySections();
-  if (!sections.ok) {
+  const library = await browseAnimeForPlayer(playerId);
+  if (library.error && library.data.length === 0) {
     return NextResponse.json(
       {
         data: [],
-        error: sections.message,
+        error: library.error,
         filters: { player: playerId, query: null, type: type ?? null },
         mode: 'browse',
         player: playerId,
-        source: null,
+        source: library.source,
         total: 0,
+        totalResults: 0,
       },
       { status: 200 },
     );
   }
 
-  const browseEntries = dedupeEntries(
-    sections.sections
-      .flatMap((section) => section.entries)
-      .filter((entry) => !type || entry.type === type),
-  ).slice(0, 42);
+  const browseEntries = dedupeEntries(library.data.filter((entry) => !type || entry.type === type)).slice(0, 42);
 
   return NextResponse.json({
     data: browseEntries,
     filters: { player: playerId, query: null, type: type ?? null },
     mode: 'browse',
     player: playerId,
-    source: 'anilist',
+    source: library.source,
     total: browseEntries.length,
+    totalResults: browseEntries.length,
   });
 }

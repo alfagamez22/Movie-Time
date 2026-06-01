@@ -91,6 +91,40 @@ test('searchJikanAnime returns [] for an empty query', async () => {
   assert.deepEqual(entries, []);
 });
 
+test('searchJikanAnime omits the unsupported type filter', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = null;
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return { ok: true, status: 200, json: async () => ({ data: [] }) };
+  };
+
+  try {
+    await searchJikanAnime('Cowboy Bebop');
+    assert.ok(requestedUrl);
+    assert.equal(new URL(requestedUrl).searchParams.get('type'), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('fetchJikanTopAnime omits the unsupported type filter', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = null;
+  globalThis.fetch = async (url) => {
+    requestedUrl = String(url);
+    return { ok: true, status: 200, json: async () => ({ data: [] }) };
+  };
+
+  try {
+    await fetchJikanTopAnime();
+    assert.ok(requestedUrl);
+    assert.equal(new URL(requestedUrl).searchParams.get('type'), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('searchJikanAnime returns [] when fetch fails', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) });

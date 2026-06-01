@@ -11,8 +11,8 @@ import { cleanText } from '@/lib/anime/episodes';
 // pipeline (which is AniList-driven) can resolve the same title regardless of
 // which catalog the user browsed in. There is no static lookup table — we
 // score AniList search results by title similarity and pick the strongest
-// candidate. Caching the lookup once per (catalogId, sourceId) pair keeps the
-// hot path off AniList search.
+// candidate. Caching the lookup once per normalized title/year keeps the hot
+// path off AniList search.
 
 export interface ResolvedStreamingId {
   anilistId: string;
@@ -31,7 +31,6 @@ const resolverCache = new Map<string, CacheEntry>();
 export interface ResolveAnilistIdOptions {
   externalTitle: string;
   externalYear?: number;
-  fallbackId?: string;
   revalidateSeconds?: number;
 }
 
@@ -91,7 +90,6 @@ export async function resolveAnilistIdByTitle(
   const cacheKey = [
     normalizeForMatching(options.externalTitle),
     options.externalYear ?? '',
-    options.fallbackId ?? '',
   ].join('::');
   const cached = resolverCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -102,11 +100,8 @@ export async function resolveAnilistIdByTitle(
   const revalidateSeconds = options.revalidateSeconds ?? 3600;
 
   if (candidate.length === 0) {
-    const fallback = options.fallbackId
-      ? { anilistId: options.fallbackId, confidence: 0, matchedTitle: options.externalTitle }
-      : null;
-    resolverCache.set(cacheKey, { expiresAt: Date.now() + RESOLVER_TTL_MS, value: fallback });
-    return fallback;
+    resolverCache.set(cacheKey, { expiresAt: Date.now() + RESOLVER_TTL_MS, value: null });
+    return null;
   }
 
   const targetStripped = stripSeasonSuffix(normalizedTitle);
@@ -146,9 +141,7 @@ export async function resolveAnilistIdByTitle(
         confidence: best.confidence,
         matchedTitle: best.matchedTitle,
       }
-    : options.fallbackId
-      ? { anilistId: options.fallbackId, confidence: 0, matchedTitle: options.externalTitle }
-      : null;
+    : null;
 
   resolverCache.set(cacheKey, { expiresAt: Date.now() + RESOLVER_TTL_MS, value: result });
   // Reference revalidateSeconds to keep the signature aligned with other

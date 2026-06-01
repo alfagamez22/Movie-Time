@@ -32,7 +32,6 @@ async function resolveExternalIdToAnilistId(
   const resolved = await resolveAnilistIdByTitle({
     externalTitle: record.title,
     externalYear: record.year,
-    fallbackId: externalId.replace(/^(kitsu-|mal-)/, ''),
   });
 
   return resolved?.anilistId ?? null;

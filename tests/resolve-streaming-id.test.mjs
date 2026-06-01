@@ -71,22 +71,12 @@ test('returns null for an empty external title', async () => {
   assert.equal(result, null);
 });
 
-test('returns fallbackId when AniList search returns nothing', async () => {
+test('returns null when AniList search returns nothing', async () => {
   clearResolvedStreamingIdCache();
   anilistStub._nextResults = [];
   const result = await resolveAnilistIdByTitle({
     externalTitle: 'Mystery Anime',
-    fallbackId: '42',
   });
-  assert.ok(result);
-  assert.equal(result.anilistId, '42');
-  assert.equal(result.confidence, 0);
-});
-
-test('returns null when no results and no fallback', async () => {
-  clearResolvedStreamingIdCache();
-  anilistStub._nextResults = [];
-  const result = await resolveAnilistIdByTitle({ externalTitle: 'No Match' });
   assert.equal(result, null);
 });
 
@@ -126,7 +116,7 @@ test('matches the strongest candidate by title similarity', async () => {
   assert.ok(result.confidence >= 0.55, `Expected confidence >= 0.55, got ${result.confidence}`);
 });
 
-test('falls back to fallbackId when the best match is below confidence threshold', async () => {
+test('returns null when the best match is below confidence threshold', async () => {
   clearResolvedStreamingIdCache();
   anilistStub._nextResults = [
     {
@@ -145,10 +135,8 @@ test('falls back to fallbackId when the best match is below confidence threshold
   const result = await resolveAnilistIdByTitle({
     externalTitle: 'Cowboy Bebop',
     externalYear: 1998,
-    fallbackId: '9999',
   });
-  assert.ok(result);
-  assert.equal(result.anilistId, '9999');
+  assert.equal(result, null);
 });
 
 test('caches the resolution for 24 hours (second call skips AniList)', async () => {

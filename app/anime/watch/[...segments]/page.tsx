@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { WatchPlayer } from '@/components/media/watch-player';
 import { lookupAnimeMediaEntry } from '@/lib/anime/client';
+import { isAnimePlayerId, type AnimePlayerId } from '@/lib/anime/player-metadata';
 import { resolveAnimeMediaEntry } from '@/lib/anime/resolve';
 import { resolvePlaybackOptions } from '@/lib/media/embed';
 import { papianimeExperience } from '@/lib/media/experience';
@@ -35,6 +36,10 @@ function parseProgressParam(value: string | undefined): number | null {
 
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function parseAnimePlayerParam(value: string | undefined): AnimePlayerId {
+  return isAnimePlayerId(value) ? value : 'p1';
 }
 
 function serializeSearchParams(searchParams: URLSearchParams): string {
@@ -111,6 +116,7 @@ type CanonicalState =
         language: 'dub' | 'sub';
         progress: number | null;
         season: string;
+        player: AnimePlayerId;
         server?: 'aniwave' | 'anitaku';
         skipIntro: boolean;
       };
@@ -126,6 +132,7 @@ async function resolveLegacyState(props: AnimeWatchPageProps, slug: string): Pro
   const searchParams = await props.searchParams;
   const identifier = decodeURIComponent(slug);
   const preferredId = getFirstParam(searchParams.id)?.trim();
+  const player = parseAnimePlayerParam(getFirstParam(searchParams.player));
   const resolvedEntry = await resolveAnimeMediaEntry(identifier, preferredId);
 
   if (!resolvedEntry) {
@@ -135,7 +142,14 @@ async function resolveLegacyState(props: AnimeWatchPageProps, slug: string): Pro
     };
   }
 
-  const initialPlayback = resolvePlaybackOptions(resolvedEntry.entry, searchParams);
+  const resolvedServer =
+    player === 'p2'
+      ? undefined
+      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? (player === 'p3' ? 'anitaku' : undefined);
+  const initialPlayback = {
+    ...resolvePlaybackOptions(resolvedEntry.entry, searchParams),
+    server: resolvedServer,
+  };
   const canonicalHref = buildWatchHref(resolvedEntry.entry, {
     autoNext: initialPlayback.autoNext,
     autoPlay: initialPlayback.autoPlay,
@@ -143,6 +157,7 @@ async function resolveLegacyState(props: AnimeWatchPageProps, slug: string): Pro
     episode: initialPlayback.episode,
     language: initialPlayback.language,
     progress: initialPlayback.progress,
+    player,
     server: initialPlayback.server,
     skipIntro: initialPlayback.skipIntro,
   });
@@ -162,6 +177,7 @@ async function resolveCanonicalState(
 ): Promise<CanonicalState> {
   const searchParams = await props.searchParams;
   const lookup = await lookupAnimeMediaEntry(anilistId);
+  const player = parseAnimePlayerParam(getFirstParam(searchParams.player));
 
   if (!lookup.ok) {
     return {
@@ -173,6 +189,10 @@ async function resolveCanonicalState(
   const episodeLimit = lookup.seasonDetails?.releasedEpisodeCount ?? lookup.entry.episodeCount ?? 1;
   const parsedEpisode = Math.min(Math.max(1, Number.parseInt(episode, 10) || 1), episodeLimit);
   const parsedLanguage = (parsePlaybackLanguage(language) ?? lookup.entry.defaultLanguage ?? 'sub') as 'dub' | 'sub';
+  const resolvedServer =
+    player === 'p2'
+      ? undefined
+      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? (player === 'p3' ? 'anitaku' : undefined);
   const initialPlayback = {
     autoNext: parseBooleanParam(getFirstParam(searchParams.autonext), true),
     autoPlay: parseBooleanParam(getFirstParam(searchParams.autoPlay), true),
@@ -181,7 +201,8 @@ async function resolveCanonicalState(
     language: parsedLanguage,
     progress: parseProgressParam(getFirstParam(searchParams.progress)),
     season: '1',
-    server: parseAnimePlaybackServer(getFirstParam(searchParams.server)),
+    player,
+    server: resolvedServer,
     skipIntro: parseBooleanParam(getFirstParam(searchParams.skipintro), false),
   };
   const canonicalHref = buildWatchHref(lookup.entry, {
@@ -191,6 +212,7 @@ async function resolveCanonicalState(
     episode: initialPlayback.episode,
     language: initialPlayback.language,
     progress: initialPlayback.progress,
+    player,
     server: initialPlayback.server,
     skipIntro: initialPlayback.skipIntro,
   });
@@ -271,6 +293,7 @@ export default async function AnimeWatchPage(props: AnimeWatchPageProps) {
     return (
       <WatchPlayer
         entry={canonicalState.lookup.entry}
+        animePlayer={canonicalState.initialPlayback.player}
         experience={papianimeExperience}
         initialPlayback={canonicalState.initialPlayback}
         initialSeasonDetails={canonicalState.lookup.seasonDetails}

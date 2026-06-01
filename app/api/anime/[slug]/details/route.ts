@@ -26,6 +26,7 @@ export async function GET(request: Request, context: AnimeDetailsRouteContext) {
   return NextResponse.json({
     data: details.data,
     matchedBy: resolvedEntry.matchedBy,
+    requestedKey: `anilist:${resolvedEntry.entry.type}:${preferredId ?? resolvedEntry.entry.id}`,
     source: 'live',
   });
 }

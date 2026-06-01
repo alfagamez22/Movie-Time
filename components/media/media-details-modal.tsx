@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
+import type { AnimePlayerId } from '@/lib/anime/player-metadata';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
 import {
@@ -27,6 +28,7 @@ interface MediaDetailsModalProps {
   onClose: () => void;
   onSelectEntry: (entry: LibraryMediaEntry) => void;
   onSignInRequired?: (reason: AuthPromptReason) => void;
+  preferredAnimePlayer?: AnimePlayerId;
   preferredAnimeLanguage?: PlaybackLanguage;
   recentlyWatched?: RecentlyWatchedEntry[];
 }
@@ -34,6 +36,7 @@ interface MediaDetailsModalProps {
 interface DetailsResponse {
   data?: MediaDetailsPayload;
   error?: string;
+  requestedKey?: string;
 }
 
 interface ResumeMediaEntry extends LibraryMediaEntry {
@@ -316,10 +319,12 @@ export function MediaDetailsModal({
   onClose,
   onSelectEntry,
   onSignInRequired,
+  preferredAnimePlayer,
   preferredAnimeLanguage,
   recentlyWatched,
 }: MediaDetailsModalProps) {
   const [details, setDetails] = useState<MediaDetailsPayload | null>(null);
+  const [requestedDetailsKey, setRequestedDetailsKey] = useState<string | null>(null);
   const [error, setError] = useState<DetailsErrorState | null>(null);
   const [activeTrailer, setActiveTrailer] = useState<MediaTrailer | null>(null);
 
@@ -348,6 +353,7 @@ export function MediaDetailsModal({
         }
 
         setDetails(json.data);
+        setRequestedDetailsKey(json.requestedKey ?? requestKey);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -406,7 +412,7 @@ export function MediaDetailsModal({
 
   const selectedKey = entry ? `${entry.provider}:${entry.type}:${entry.id}` : null;
   const detailsKey = details ? `${details.entry.provider}:${details.entry.type}:${details.entry.id}` : null;
-  const activeDetails = selectedKey === detailsKey ? details : null;
+  const activeDetails = details && (selectedKey === detailsKey || selectedKey === requestedDetailsKey) ? details : null;
   const activeError = error?.key === selectedKey ? error.message : null;
   const isLoading = Boolean(entry && !activeDetails && !activeError);
   const displayEntry = activeDetails?.entry ?? entry;
@@ -422,6 +428,7 @@ export function MediaDetailsModal({
         basePath: experience.watchBasePath,
         episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
         language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
+        player: preferredAnimePlayer,
         progress: resumeEntry?.progressSeconds,
         season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
       })

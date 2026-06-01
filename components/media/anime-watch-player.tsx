@@ -7,6 +7,7 @@ import { startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Settings, SkipForward } from 'lucide-react';
 
+import { buildMegaPlayEmbedUrl } from '@/lib/media/embed';
 import { useAnimeLanguagePreference, useAnimeServerPreference } from '@/lib/hooks/use-player-preference';
 import {
   getRecentlyWatchedProgress,
@@ -276,6 +277,8 @@ function SidebarControls({
   onToggleAutoNext,
   onToggleSkipIntro,
   skipIntroEnabled,
+  showPlaybackToggles = true,
+  showServerSelection = true,
 }: {
   autoNextEnabled: boolean;
   currentEpisode: number;
@@ -292,6 +295,8 @@ function SidebarControls({
   onServerChange: (server: AnimePlaybackServer) => void;
   onToggleAutoNext: () => void;
   onToggleSkipIntro: () => void;
+  showPlaybackToggles?: boolean;
+  showServerSelection?: boolean;
   skipIntroEnabled: boolean;
 }) {
   const defaultGroupStart =
@@ -369,41 +374,45 @@ function SidebarControls({
             ))}
           </div>
 
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-            {(['aniwave', 'anitaku'] as const).map((server) => (
+          {showServerSelection ? (
+            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+              {(['aniwave', 'anitaku'] as const).map((server) => (
+                <button
+                  key={server}
+                  type="button"
+                  onClick={() => onServerChange(server)}
+                  className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
+                    currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {ANIME_SERVER_LABELS[server]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {showPlaybackToggles ? (
+            <div className="grid grid-cols-2 gap-2">
               <button
-                key={server}
                 type="button"
-                onClick={() => onServerChange(server)}
-                className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                  currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                onClick={onToggleAutoNext}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+                  autoNextEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
                 }`}
               >
-                {ANIME_SERVER_LABELS[server]}
+                Auto Next {autoNextEnabled ? 'On' : 'Off'}
               </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={onToggleAutoNext}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-                autoNextEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
-              }`}
-            >
-              Auto Next {autoNextEnabled ? 'On' : 'Off'}
-            </button>
-            <button
-              type="button"
-              onClick={onToggleSkipIntro}
-              className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-                skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
-              }`}
-            >
-              Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={onToggleSkipIntro}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+                  skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
+                }`}
+              >
+                Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {episodeGroups.length > 1 ? (
@@ -445,6 +454,7 @@ function SidebarControls({
 
 export function AnimeWatchPlayer({
   entry,
+  animePlayer,
   experience,
   initialPlayback,
   initialSeasonDetails = null,
@@ -453,6 +463,7 @@ export function AnimeWatchPlayer({
   const router = useRouter();
   const { language: storedLanguage, setLanguage: setStoredLanguage } = useAnimeLanguagePreference();
   const { server: storedServer, setServer: setStoredServer } = useAnimeServerPreference();
+  const isEmbedPlayer = animePlayer === 'p2';
   const isSeries = entry.type === 'tv';
   const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
@@ -466,7 +477,9 @@ export function AnimeWatchPlayer({
   const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
   const [currentSeason, setCurrentSeason] = useState(1);
   const [currentLanguage, setCurrentLanguage] = useState<'dub' | 'sub'>(initialPlayback.language ?? storedLanguage);
-  const [currentServer, setCurrentServer] = useState<AnimePlaybackServer>(initialPlayback.server ?? storedServer);
+  const [currentServer, setCurrentServer] = useState<AnimePlaybackServer>(
+    initialPlayback.server ?? (isEmbedPlayer ? 'aniwave' : storedServer),
+  );
   const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? true);
   const [skipIntroEnabled, setSkipIntroEnabled] = useState(initialPlayback.skipIntro ?? false);
   const [playbackData, setPlaybackData] = useState<AnimePlaybackPayload | null>(null);
@@ -487,7 +500,11 @@ export function AnimeWatchPlayer({
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSeekRef = useRef<number | null>(null);
   const shouldResumePlaybackRef = useRef(false);
-  const requestedRef = useRef({ episode: initialEpisode, language: initialPlayback.language, server: initialPlayback.server ?? storedServer });
+  const requestedRef = useRef({
+    episode: initialEpisode,
+    language: initialPlayback.language,
+    server: initialPlayback.server ?? (isEmbedPlayer ? 'aniwave' : storedServer),
+  });
 
   const savedProgress =
     initialPlayback.progress == null
@@ -502,13 +519,29 @@ export function AnimeWatchPlayer({
         )
       : null;
   const resumeStartSeconds = resumeOverrideSeconds ?? savedProgress?.progressSeconds ?? 0;
+  const playbackOptions = {
+    autoNext: autoNextEnabled,
+    autoPlay: initialPlayback.autoPlay,
+    color: initialPlayback.color,
+    episode: String(currentEpisode),
+    language: currentLanguage,
+    progress: initialPlayback.progress,
+    season: String(currentSeason),
+    server: currentServer,
+    skipIntro: skipIntroEnabled,
+  };
   const manualQualityOptions = playbackData?.qualityOptions ?? [];
   const activeManualQuality =
     manualQualityOptions.find((candidate) => candidate.src === (selectedQualitySrc ?? playbackData?.src)) ?? null;
-  const resolvedSourceUrl = selectedQualitySrc ?? playbackData?.src;
-  const resolvedSourceType = activeManualQuality?.sourceType ?? playbackData?.sourceType;
+  const embedUrl = buildMegaPlayEmbedUrl(entry, playbackOptions);
+  const resolvedSourceUrl = isEmbedPlayer ? undefined : selectedQualitySrc ?? playbackData?.src;
+  const resolvedSourceType = isEmbedPlayer ? undefined : activeManualQuality?.sourceType ?? playbackData?.sourceType;
 
   useEffect(() => {
+    if (isEmbedPlayer) {
+      return;
+    }
+
     requestedRef.current = {
       episode: currentEpisode,
       language: currentLanguage,
@@ -560,7 +593,20 @@ export function AnimeWatchPlayer({
       });
 
     return () => controller.abort(new DOMException('Playback request changed', 'AbortError'));
-  }, [currentEpisode, currentLanguage, currentServer, entry.id]);
+  }, [currentEpisode, currentLanguage, currentServer, entry.id, isEmbedPlayer]);
+
+  useEffect(() => {
+    if (!isEmbedPlayer || !isLoading) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setError('The embedded player did not finish loading.');
+      setIsLoading(false);
+    }, 12000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [embedUrl, isEmbedPlayer, isLoading]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -727,8 +773,9 @@ export function AnimeWatchPlayer({
       basePath: experience.watchBasePath,
       episode: currentEpisode,
       language: currentLanguage,
+      player: animePlayer,
       progress: null,
-      server: currentServer,
+      server: isEmbedPlayer ? undefined : currentServer,
       skipIntro: skipIntroEnabled,
     });
 
@@ -737,7 +784,7 @@ export function AnimeWatchPlayer({
     }
 
     startTransition(() => router.replace(href, { scroll: false }));
-  }, [autoNextEnabled, currentEpisode, currentLanguage, currentServer, entry, experience.watchBasePath, initialPlayback.autoPlay, router, skipIntroEnabled]);
+  }, [autoNextEnabled, currentEpisode, currentLanguage, currentServer, entry, experience.watchBasePath, initialPlayback.autoPlay, animePlayer, isEmbedPlayer, router, skipIntroEnabled]);
 
   useEffect(() => {
     return () => {
@@ -878,10 +925,11 @@ export function AnimeWatchPlayer({
   }, [showQualityMenu]);
 
   const showSkipButton =
+    !isEmbedPlayer &&
     Boolean(playbackData?.intro) &&
     playheadSeconds >= (playbackData?.intro?.startTime ?? Number.MAX_SAFE_INTEGER) &&
     playheadSeconds < (playbackData?.intro?.endTime ?? -1);
-  const showQualityControl = qualityLevels.length > 1 || manualQualityOptions.length > 1;
+  const showQualityControl = !isEmbedPlayer && (qualityLevels.length > 1 || manualQualityOptions.length > 1);
   const qualityButtonLabel =
     manualQualityOptions.length > 1
       ? activeManualQuality?.label ?? 'Quality'
@@ -915,7 +963,7 @@ export function AnimeWatchPlayer({
           </span>
         </div>
 
-        <LoadingState error={error} isLoading={isLoading} vidnestEmbedUrl={`https://vidnest.fun/anime/${encodeURIComponent(entry.id)}/${currentEpisode}/${currentLanguage}`} />
+        <LoadingState error={error} isLoading={isLoading} vidnestEmbedUrl={embedUrl} />
 
         {showSkipButton ? (
           <button
@@ -989,7 +1037,7 @@ export function AnimeWatchPlayer({
           </div>
         ) : null}
 
-        {resolvedSourceUrl ? (
+        {!isEmbedPlayer && resolvedSourceUrl ? (
           <button
             type="button"
             onClick={handleDownloadVideo}
@@ -1005,28 +1053,48 @@ export function AnimeWatchPlayer({
           </button>
         ) : null}
 
-        <video
-          key={`${entry.id}-${currentEpisode}-${currentLanguage}-${currentServer}`}
-          ref={videoRef}
-          controls
-          autoPlay={initialPlayback.autoPlay !== false}
-          poster={playbackData?.posterUrl ?? entry.posterUrl}
-          className="h-full w-full bg-black"
-          playsInline
-          preload="metadata"
-          crossOrigin="anonymous"
-        >
-          {playbackData?.tracks.map((track, index) => (
-            <track
-              key={`${index}-${track.srclang}-${track.label}`}
-              default={track.default}
-              kind={track.kind}
-              label={track.label}
-              src={track.src}
-              srcLang={track.srclang}
-            />
-          ))}
-        </video>
+        {isEmbedPlayer ? (
+          <iframe
+            key={`${entry.id}-${currentEpisode}-${currentLanguage}-${currentServer}`}
+            src={embedUrl}
+            title={`Watch ${entry.title}`}
+            className="h-full w-full border-0 bg-black"
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            onLoad={() => {
+              setIsLoading(false);
+              setError(null);
+            }}
+            onError={() => {
+              setIsLoading(false);
+              setError('The embedded player could not be loaded.');
+            }}
+          />
+        ) : (
+          <video
+            key={`${entry.id}-${currentEpisode}-${currentLanguage}-${currentServer}`}
+            ref={videoRef}
+            controls
+            autoPlay={initialPlayback.autoPlay !== false}
+            poster={playbackData?.posterUrl ?? entry.posterUrl}
+            className="h-full w-full bg-black"
+            playsInline
+            preload="metadata"
+            crossOrigin="anonymous"
+          >
+            {playbackData?.tracks.map((track, index) => (
+              <track
+                key={`${index}-${track.srclang}-${track.label}`}
+                default={track.default}
+                kind={track.kind}
+                label={track.label}
+                src={track.src}
+                srcLang={track.srclang}
+              />
+            ))}
+          </video>
+        )}
       </div>
 
       {isSeries ? (
@@ -1046,6 +1114,8 @@ export function AnimeWatchPlayer({
           onServerChange={handleServerChange}
           onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
           onToggleSkipIntro={() => setSkipIntroEnabled((value) => !value)}
+          showPlaybackToggles={!isEmbedPlayer}
+          showServerSelection={!isEmbedPlayer}
           skipIntroEnabled={skipIntroEnabled}
         />
       ) : (
@@ -1064,29 +1134,33 @@ export function AnimeWatchPlayer({
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-            {(['aniwave', 'anitaku'] as const).map((server) => (
+          {isEmbedPlayer ? null : (
+            <>
+              <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
+                {(['aniwave', 'anitaku'] as const).map((server) => (
+                  <button
+                    key={server}
+                    type="button"
+                    onClick={() => handleServerChange(server)}
+                    className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
+                      currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {ANIME_SERVER_LABELS[server]}
+                  </button>
+                ))}
+              </div>
               <button
-                key={server}
                 type="button"
-                onClick={() => handleServerChange(server)}
-                className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                  currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                onClick={() => setSkipIntroEnabled((value) => !value)}
+                className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+                  skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
                 }`}
               >
-                {ANIME_SERVER_LABELS[server]}
+                Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
               </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => setSkipIntroEnabled((value) => !value)}
-            className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-              skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
-            }`}
-          >
-            Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
-          </button>
+            </>
+          )}
         </div>
       )}
     </div>

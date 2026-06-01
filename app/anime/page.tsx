@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+
 import { HomePage } from '@/components/media/home-page';
 import { browseAnimeForPlayer, isAnimePlayerId, type AnimePlayerId } from '@/lib/anime/player-config';
 import { papianimeExperience } from '@/lib/media/experience';
@@ -15,10 +17,12 @@ export default async function AnimePage(props: AnimePageProps) {
   const library = await browseAnimeForPlayer(playerId);
 
   return (
-    <HomePage
-      discoveryError={library.error ?? null}
-      experience={papianimeExperience}
-      sections={library.sections}
-    />
+    <Suspense fallback={null}>
+      <HomePage
+        discoveryError={library.error ?? null}
+        experience={papianimeExperience}
+        sections={library.sections}
+      />
+    </Suspense>
   );
 }

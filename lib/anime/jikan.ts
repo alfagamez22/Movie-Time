@@ -267,7 +267,6 @@ export async function searchJikanAnime(
     order_by: 'members',
     q: trimmedQuery,
     sort: 'desc',
-    type: 'tv,movie,ova,special,ona',
   });
   const url = `${baseUrl}/anime?${params.toString()}`;
 
@@ -292,7 +291,6 @@ export async function fetchJikanTopAnime(options: JikanBrowseOptions = {}): Prom
   const limit = Math.min(Math.max(options.limit ?? 18, 1), 25);
   const params = new URLSearchParams({
     limit: String(limit),
-    type: 'tv,movie,ova,special,ona',
   });
   const url = `${baseUrl}/top/anime?${params.toString()}`;
 

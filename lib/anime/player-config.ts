@@ -118,7 +118,6 @@ const kitsuAdapter: AnimePlayerCatalogAdapter = {
     const resolved = await resolveAnilistIdByTitle({
       externalTitle,
       externalYear,
-      fallbackId: externalId,
     });
 
     if (!resolved) {
@@ -152,7 +151,6 @@ const jikanAdapter: AnimePlayerCatalogAdapter = {
     const resolved = await resolveAnilistIdByTitle({
       externalTitle: malEntry.title,
       externalYear: malEntry.year,
-      fallbackId: malId,
     });
 
     if (!resolved) {

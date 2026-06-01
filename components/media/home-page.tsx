@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Info, Search, X } from 'lucide-react';
@@ -122,21 +122,20 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
   );
 }
 
-function readAnimePlayerFromUrl(): { player: string | null } {
-  if (typeof window === 'undefined') {
-    return { player: null };
-  }
-  return { player: new URL(window.location.href).searchParams.get('player') };
-}
-
-function AnimePlayerSwitcher({ experience, sections }: { experience: MediaExperienceConfig; sections: LibrarySection[] }) {
+function AnimePlayerSwitcher({
+  currentPlayer,
+  experience,
+}: {
+  currentPlayer: AnimePlayerId;
+  experience: MediaExperienceConfig;
+}) {
   const router = useRouter();
-  const { player: storedPlayer, setPlayer } = useAnimePlayerPreference();
+  const { setPlayer } = useAnimePlayerPreference();
   const [, startTransition] = useTransition();
 
   const handleSelect = useCallback(
     (playerId: AnimePlayerId) => {
-      if (playerId === storedPlayer) return;
+      if (playerId === currentPlayer) return;
       // Update the local preference store first so the pill switches colors
       // immediately; then navigate so the server re-renders with the new
       // catalog data.
@@ -146,14 +145,14 @@ function AnimePlayerSwitcher({ experience, sections }: { experience: MediaExperi
         router.push(url, { scroll: false });
       });
     },
-    [storedPlayer, setPlayer, experience.homeHref, router],
+    [currentPlayer, setPlayer, experience.homeHref, router],
   );
 
   if (experience.id !== 'papianime') {
     return null;
   }
 
-  const activePlayer = storedPlayer;
+  const activePlayer = currentPlayer;
   const playerIds: AnimePlayerId[] = ['p1', 'p2', 'p3', 'p4', 'p5'];
 
   return (
@@ -192,17 +191,13 @@ function AnimePlayerSwitcher({ experience, sections }: { experience: MediaExperi
           );
         })}
       </div>
-      {sections.length === 0 ? (
-        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
-          Showing browse results for {ANIME_PLAYERS[activePlayer]?.label ?? 'PapiAnime'}
-        </p>
-      ) : null}
     </div>
   );
 }
 
 export function HomePage({ discoveryError, experience, sections }: HomePageProps) {
   const showPlayerSwitcher = experience.preferenceMode === 'player';
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -218,6 +213,8 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
   const isSearchPending = query.trim() !== debouncedQuery;
+  const currentPlayerParam = searchParams.get('player');
+  const currentAnimePlayer: AnimePlayerId = isAnimePlayerId(currentPlayerParam) ? currentPlayerParam : 'p1';
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -310,10 +307,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
     const controller = new AbortController();
     const params = new URLSearchParams({ q: debouncedQuery });
     if (experience.id === 'papianime') {
-      const { player: storedAnimePlayer } = readAnimePlayerFromUrl();
-      if (isAnimePlayerId(storedAnimePlayer)) {
-        params.set('player', storedAnimePlayer);
-      }
+      params.set('player', currentAnimePlayer);
     }
 
     void fetch(`${experience.searchEndpoint}?${params.toString()}`, { signal: controller.signal })
@@ -331,7 +325,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       });
 
     return () => controller.abort(new DOMException('Query changed', 'AbortError'));
-  }, [debouncedQuery, experience.searchEndpoint, experience.id]);
+  }, [currentAnimePlayer, debouncedQuery, experience.searchEndpoint, experience.id]);
 
   const featuredItems = getFeaturedItems(sections);
   const authPromptCopy = getAuthPromptCopy(authPromptReason);
@@ -340,7 +334,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
     <main className="min-h-screen bg-[#050505] text-white">
       {experience.id === 'papianime' ? (
         <div className="px-3 pb-3 pt-[calc(env(safe-area-inset-top)+5.5rem)] sm:px-6 md:px-12 md:pt-[calc(env(safe-area-inset-top)+5rem)]">
-          <AnimePlayerSwitcher experience={experience} sections={sections} />
+          <AnimePlayerSwitcher currentPlayer={currentAnimePlayer} experience={experience} />
         </div>
       ) : null}
       <header
@@ -454,6 +448,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         <HeroBanner
           items={featuredItems}
           onInfoSelect={openDetails}
+          preferredAnimePlayer={experience.id === 'papianime' ? currentAnimePlayer : undefined}
           preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
           recentlyWatched={recentlyWatched}
           watchBasePath={experience.watchBasePath}
@@ -499,6 +494,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         onClose={closeDetails}
         onSelectEntry={selectDetailsEntry}
         onSignInRequired={openAuthModal}
+        preferredAnimePlayer={experience.id === 'papianime' ? currentAnimePlayer : undefined}
         preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
         recentlyWatched={recentlyWatched}
       />

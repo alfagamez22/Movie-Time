@@ -8,10 +8,12 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import { getMediaKindLabel, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
+import type { AnimePlayerId } from '@/lib/anime/player-metadata';
 
 interface HeroBannerProps {
   items: LibraryMediaEntry[];
   onInfoSelect?: (entry: LibraryMediaEntry) => void;
+  preferredAnimePlayer?: AnimePlayerId;
   preferredAnimeLanguage?: PlaybackLanguage;
   recentlyWatched?: RecentlyWatchedEntry[];
   watchBasePath?: string;
@@ -25,7 +27,14 @@ function findResumeEntry(entry: LibraryMediaEntry, recentlyWatched: RecentlyWatc
   );
 }
 
-export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, recentlyWatched, watchBasePath }: HeroBannerProps) {
+export function HeroBanner({
+  items,
+  onInfoSelect,
+  preferredAnimePlayer,
+  preferredAnimeLanguage,
+  recentlyWatched,
+  watchBasePath,
+}: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const count = items.length;
 
@@ -47,6 +56,7 @@ export function HeroBanner({ items, onInfoSelect, preferredAnimeLanguage, recent
     basePath: watchBasePath,
     episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
     language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
+    player: preferredAnimePlayer,
     progress: resumeEntry?.progressSeconds,
     season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
   });
