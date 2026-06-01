@@ -21,8 +21,9 @@ model User {
   bookmarks     Bookmark[]
   comments      MediaComment[]
   watchHistory  WatchHistory[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  watchProgress WatchProgress[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 }
 
 model Account {
@@ -115,6 +116,37 @@ model WatchHistory {
 
   @@unique([userId, mediaId, mediaProvider, mediaType])
   @@index([userId, experience])
+}
+
+model WatchProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  mediaId         String
+  mediaType       String
+  mediaProvider   String
+  experience      String
+  season          String   @default("")
+  episode         String   @default("")
+  title           String
+  posterUrl       String?
+  backdropUrl     String?
+  rating          Float?
+  year            Int?
+  progressSeconds Int      @default(0)
+  progressPercent Int      @default(0)
+  durationSeconds Int?
+  completed       Boolean  @default(false)
+  anilistId       String?
+  malId           String?
+  animeFormat     String?
+  defaultLanguage String?
+  watchedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId, mediaProvider, mediaType, season, episode])
+  @@index([userId, experience])
+  @@index([userId, mediaId, mediaProvider, mediaType])
 }
 
 model MediaComment {

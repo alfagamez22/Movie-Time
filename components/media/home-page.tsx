@@ -9,7 +9,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
-import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched } from '@/lib/hooks/use-recently-watched';
+import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
 import { AuthModal } from '@/components/auth/auth-modal';
@@ -124,6 +124,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>('default');
   const { language } = useAnimeLanguagePreference();
   const recentlyWatched = useRecentlyWatched(experience.id);
+  useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
   const inputRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query.trim());
   const isSearchPending = query.trim() !== deferredQuery;
@@ -156,7 +157,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   const removeRecentEntry = useCallback(
     (entry: LibraryMediaEntry) => {
-      removeRecentlyWatched(entry, experience.id);
+      removeRecentlyWatched(entry, experience.id, isAuthenticated);
       if (
         selectedEntry?.type === entry.type &&
         selectedEntry.id === entry.id &&
@@ -165,7 +166,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         setSelectedEntry(null);
       }
     },
-    [experience.id, selectedEntry],
+    [experience.id, isAuthenticated, selectedEntry],
   );
 
   useEffect(() => {

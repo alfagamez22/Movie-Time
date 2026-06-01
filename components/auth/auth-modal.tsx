@@ -5,6 +5,8 @@ import { getProviders, signIn } from 'next-auth/react';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
+import { useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
+
 type Tab = 'signin' | 'register';
 
 interface AuthModalProps {
@@ -32,6 +34,8 @@ export function AuthModal({
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  const papiflixSync = useWatchHistorySync('papiflix', { pollIntervalMs: 60_000 });
+  const papianimeSync = useWatchHistorySync('papianime', { pollIntervalMs: 60_000 });
 
   useEffect(() => {
     const id = setTimeout(() => emailRef.current?.focus(), 60);
@@ -76,43 +80,12 @@ export function AuthModal({
 
   const syncClientHistoryToDb = useCallback(async () => {
     try {
-      const papiflixRaw =
-        (sessionStorage.getItem('papiflix-recently-watched-v1') ||
-        document.cookie
-          .split('; ')
-          .find((c) => c.startsWith('papiflix_recently_watched_v1='))
-          ?.split('=')
-          .slice(1)
-          .join('=')) ?? '';
-
-      const papiAnimeRaw =
-        (sessionStorage.getItem('papianime-recently-watched-v1') ||
-        document.cookie
-          .split('; ')
-          .find((c) => c.startsWith('papianime_recently_watched_v1='))
-          ?.split('=')
-          .slice(1)
-          .join('=')) ?? '';
-
-      const papiflixEntries = JSON.parse(decodeURIComponent(papiflixRaw) || '[]') as unknown[];
-      const papiAnimeEntries = JSON.parse(decodeURIComponent(papiAnimeRaw) || '[]') as unknown[];
-
-      const entries = [
-        ...papiflixEntries.map((e) => ({ ...(e as object), experience: 'papiflix' })),
-        ...papiAnimeEntries.map((e) => ({ ...(e as object), experience: 'papianime' })),
-      ];
-
-      if (entries.length > 0) {
-        await fetch('/api/watch-history/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries }),
-        });
-      }
+      await papiflixSync.pushLocalToServer();
+      await papianimeSync.pushLocalToServer();
     } catch {
       // Non-critical sync; ignore failures.
     }
-  }, []);
+  }, [papianimeSync, papiflixSync]);
 
   const handleSignIn = useCallback(
     async (e: React.FormEvent) => {

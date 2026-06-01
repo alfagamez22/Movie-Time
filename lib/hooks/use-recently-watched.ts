@@ -1,22 +1,37 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useSession } from 'next-auth/react';
 
 import type { LibraryMediaEntry, MediaEntry, MediaExperience } from '@/lib/media/types';
+import {
+  MAX_RECENTLY_WATCHED,
+  buildEpisodeKey,
+  mergeRecentlyWatched,
+  serverEntryToClient,
+  watchedEpisodesFromProgress,
+  type RecentlyWatchedEntry,
+  type RecentlyWatchedNamespace,
+  type ServerWatchHistoryEntry,
+  type ServerWatchProgressEntry,
+} from '@/lib/hooks/recently-watched-merge';
 
-const MAX_RECENTLY_WATCHED = 12;
 const MAX_COOKIE_LENGTH = 3800;
 const EMPTY_RECENTLY_WATCHED: RecentlyWatchedEntry[] = [];
 const EMPTY_WATCHED_EPISODES = new Set<string>();
 
-export interface RecentlyWatchedEntry extends LibraryMediaEntry {
-  durationSeconds?: number;
-  episode?: string;
-  progressPercent?: number;
-  progressSeconds?: number;
-  season?: string;
-  watchedAt: number;
-}
+export type {
+  RecentlyWatchedEntry,
+  ServerWatchHistoryEntry,
+  ServerWatchProgressEntry,
+  RecentlyWatchedNamespace,
+} from '@/lib/hooks/recently-watched-merge';
+export {
+  buildEpisodeKey,
+  mergeRecentlyWatched,
+  serverEntryToClient,
+  watchedEpisodesFromProgress,
+} from '@/lib/hooks/recently-watched-merge';
 
 interface TrackPlaybackOptions {
   durationSeconds?: number;
@@ -35,12 +50,11 @@ interface NamespaceKeys {
   watchedEpisodesStorageKey: string;
 }
 
-type RecentlyWatchedNamespace = MediaExperience;
-
 const rawValueCache = new Map<RecentlyWatchedNamespace, string>();
 const entryCache = new Map<RecentlyWatchedNamespace, RecentlyWatchedEntry[]>();
 const watchedEpisodesRawValueCache = new Map<RecentlyWatchedNamespace, string>();
 const watchedEpisodesSetCache = new Map<RecentlyWatchedNamespace, Map<string, Set<string>>>();
+const serverHydratedNamespace = new Set<RecentlyWatchedNamespace>();
 
 function getNamespacePrefix(namespace: RecentlyWatchedNamespace): string {
   return namespace === 'papianime' ? 'papianime' : 'papiflix';
@@ -95,6 +109,10 @@ function isBrowser() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
+function buildEpisodeStorageKey(season: string | undefined, episode: string | undefined): string | null {
+  return buildEpisodeKey(season, episode);
+}
+
 function normalizeEntry(value: unknown): RecentlyWatchedEntry | null {
   if (!value || typeof value !== 'object') return null;
 
@@ -108,28 +126,28 @@ function normalizeEntry(value: unknown): RecentlyWatchedEntry | null {
     return null;
   }
 
-    return {
-      animeFormat: typeof entry.animeFormat === 'string' ? entry.animeFormat : undefined,
-      anilistId: typeof entry.anilistId === 'string' ? entry.anilistId : undefined,
-      backdropUrl: typeof entry.backdropUrl === 'string' ? entry.backdropUrl : undefined,
-      defaultLanguage: entry.defaultLanguage === 'dub' ? 'dub' : entry.defaultLanguage === 'sub' ? 'sub' : undefined,
-      durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
-      episode: typeof entry.episode === 'string' ? entry.episode : undefined,
-      episodeCount: typeof entry.episodeCount === 'number' ? entry.episodeCount : undefined,
-      episodeEmbedIds:
-        entry.episodeEmbedIds && typeof entry.episodeEmbedIds === 'object'
-          ? Object.fromEntries(
-              Object.entries(entry.episodeEmbedIds).filter((candidate): candidate is [string, string] => {
-                return typeof candidate[0] === 'string' && typeof candidate[1] === 'string';
-              }),
-            )
-          : undefined,
-      id: entry.id,
-      malId: typeof entry.malId === 'string' ? entry.malId : undefined,
-      posterUrl: typeof entry.posterUrl === 'string' ? entry.posterUrl : undefined,
+  return {
+    animeFormat: typeof entry.animeFormat === 'string' ? entry.animeFormat : undefined,
+    anilistId: typeof entry.anilistId === 'string' ? entry.anilistId : undefined,
+    backdropUrl: typeof entry.backdropUrl === 'string' ? entry.backdropUrl : undefined,
+    defaultLanguage: entry.defaultLanguage === 'dub' ? 'dub' : entry.defaultLanguage === 'sub' ? 'sub' : undefined,
+    durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
+    episode: typeof entry.episode === 'string' ? entry.episode : undefined,
+    episodeCount: typeof entry.episodeCount === 'number' ? entry.episodeCount : undefined,
+    episodeEmbedIds:
+      entry.episodeEmbedIds && typeof entry.episodeEmbedIds === 'object'
+        ? Object.fromEntries(
+            Object.entries(entry.episodeEmbedIds).filter((candidate): candidate is [string, string] => {
+              return typeof candidate[0] === 'string' && typeof candidate[1] === 'string';
+            }),
+          )
+        : undefined,
+    id: entry.id,
+    malId: typeof entry.malId === 'string' ? entry.malId : undefined,
+    posterUrl: typeof entry.posterUrl === 'string' ? entry.posterUrl : undefined,
     progressPercent: typeof entry.progressPercent === 'number' ? entry.progressPercent : undefined,
     progressSeconds: typeof entry.progressSeconds === 'number' ? entry.progressSeconds : undefined,
-      provider: entry.provider === 'anilist' ? 'anilist' : entry.provider === 'anikoto' ? 'anikoto' : 'tmdb',
+    provider: entry.provider === 'anilist' ? 'anilist' : entry.provider === 'anikoto' ? 'anikoto' : 'tmdb',
     rating: typeof entry.rating === 'number' ? entry.rating : undefined,
     season: typeof entry.season === 'string' ? entry.season : undefined,
     synopsis: typeof entry.synopsis === 'string' ? entry.synopsis : '',
@@ -261,14 +279,6 @@ function readRawWatchedEpisodes(namespace: RecentlyWatchedNamespace): string {
 
 function buildMediaStorageKey(entry: Pick<LibraryMediaEntry | MediaEntry, 'id' | 'provider' | 'type'>): string {
   return `${entry.provider}:${entry.type}:${entry.id}`;
-}
-
-function buildEpisodeStorageKey(season: string | undefined, episode: string | undefined): string | null {
-  if (!episode) {
-    return null;
-  }
-
-  return `${season ?? '1'}:${episode}`;
 }
 
 function parseWatchedEpisodesMap(rawValue: string): Record<string, string[]> {
@@ -410,19 +420,19 @@ function compactEntry(
   const canCarryProgress =
     entry.type === 'movie' || (previous?.season === options.season && previous?.episode === options.episode);
 
-    return {
-      animeFormat: entry.animeFormat,
-      anilistId: entry.anilistId,
-      backdropUrl: entry.backdropUrl,
-      defaultLanguage: entry.defaultLanguage,
+  return {
+    animeFormat: entry.animeFormat,
+    anilistId: entry.anilistId,
+    backdropUrl: entry.backdropUrl,
+    defaultLanguage: entry.defaultLanguage,
     durationSeconds:
       sanitizeNonNegativeNumber(options.durationSeconds) ??
       (canCarryProgress ? previous?.durationSeconds : undefined),
-      episode: options.episode,
-      episodeCount: entry.episodeCount,
-      episodeEmbedIds: entry.episodeEmbedIds,
-      id: entry.id,
-      malId: entry.malId,
+    episode: options.episode,
+    episodeCount: entry.episodeCount,
+    episodeEmbedIds: entry.episodeEmbedIds,
+    id: entry.id,
+    malId: entry.malId,
     posterUrl: entry.posterUrl,
     progressPercent:
       sanitizePercent(options.progressPercent) ?? (canCarryProgress ? previous?.progressPercent : undefined),
@@ -530,6 +540,7 @@ export function getRecentlyWatchedProgress(
 export function removeRecentlyWatched(
   entry: Pick<LibraryMediaEntry, 'id' | 'provider' | 'type'>,
   namespace: RecentlyWatchedNamespace = 'papiflix',
+  syncToServer = false,
 ) {
   if (!isBrowser()) return;
 
@@ -548,6 +559,20 @@ export function removeRecentlyWatched(
   setCachedRawValue(namespace, rawValue);
   setCachedEntries(namespace, nextEntries);
   window.dispatchEvent(new Event(keys.eventName));
+
+  if (!syncToServer) {
+    return;
+  }
+
+  fetch('/api/watch-history/delete', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mediaId: entry.id,
+      mediaProvider: entry.provider,
+      mediaType: entry.type,
+    }),
+  }).catch(() => {});
 }
 
 export function useRecentlyWatched(namespace: RecentlyWatchedNamespace = 'papiflix') {
@@ -566,6 +591,152 @@ export function useWatchedEpisodes(
     (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange),
     () => getWatchedEpisodeSnapshot(entry, namespace),
     () => EMPTY_WATCHED_EPISODES,
+  );
+}
+
+export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papiflix', options: { pollIntervalMs?: number } = {}) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? null;
+  const fetchKey = userId ? `${userId}:${namespace}` : null;
+  const fetchedRef = useRef<string | null>(null);
+  const lastSyncedRef = useRef<number>(0);
+  const inFlightRef = useRef<boolean>(false);
+
+  const pushLocalToServer = useCallback(async () => {
+    if (!userId || !isBrowser()) return;
+    const localEntries = getRecentlyWatchedSnapshot(namespace);
+    if (localEntries.length === 0) return;
+    try {
+      await fetch('/api/watch-history/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entries: localEntries.map((entry) => ({ ...entry, experience: namespace })),
+        }),
+      });
+    } catch {
+      // Network blip - non-critical.
+    }
+  }, [namespace, userId]);
+
+  const fetchServer = useCallback(async () => {
+    if (!userId) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      const [historyResponse, progressResponse] = await Promise.all([
+        fetch(`/api/watch-history?experience=${encodeURIComponent(namespace)}`),
+        fetch(`/api/watch-history/progress?experience=${encodeURIComponent(namespace)}`),
+      ]);
+
+      if (!historyResponse.ok) {
+        return;
+      }
+
+      const historyJson = (await historyResponse.json().catch(() => ({}))) as {
+        entries?: ServerWatchHistoryEntry[];
+      };
+      const progressJson = (progressResponse.ok
+        ? ((await progressResponse.json().catch(() => ({}))) as { progress?: ServerWatchProgressEntry[] })
+        : { progress: [] });
+
+      const serverEntries = (historyJson.entries ?? [])
+        .map(serverEntryToClient)
+        .filter((entry): entry is RecentlyWatchedEntry => Boolean(entry));
+      const localEntries = getRecentlyWatchedSnapshot(namespace);
+      const merged = mergeRecentlyWatched({ localEntries, preferServer: true, serverEntries });
+
+      const keys = getNamespaceKeys(namespace);
+      const rawValue = JSON.stringify(merged);
+      try {
+        sessionStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
+      } catch {
+        // Storage may be full - keep in-memory cache consistent.
+      }
+      writeSessionCookie(namespace, merged);
+      setCachedRawValue(namespace, rawValue);
+      setCachedEntries(namespace, merged);
+
+      const progressMap = watchedEpisodesFromProgress(progressJson.progress ?? []);
+      const cachedSets = new Map<string, Set<string>>();
+      Object.entries(parseWatchedEpisodesMap(readRawWatchedEpisodes(namespace))).forEach(([mediaKey, episodes]) => {
+        const fromServer = progressMap.get(mediaKey);
+        if (fromServer) {
+          const mergedSet = new Set<string>([...episodes, ...fromServer]);
+          cachedSets.set(mediaKey, mergedSet);
+        } else {
+          cachedSets.set(mediaKey, new Set<string>(episodes));
+        }
+      });
+      progressMap.forEach((serverSet, mediaKey) => {
+        if (!cachedSets.has(mediaKey)) {
+          cachedSets.set(mediaKey, new Set<string>(serverSet));
+        }
+      });
+      const watchedEpisodesMap: Record<string, string[]> = {};
+      cachedSets.forEach((episodes, mediaKey) => {
+        watchedEpisodesMap[mediaKey] = Array.from(episodes);
+      });
+      writeWatchedEpisodesMap(namespace, watchedEpisodesMap);
+
+      serverHydratedNamespace.add(namespace);
+      lastSyncedRef.current = Date.now();
+      window.dispatchEvent(new Event(keys.eventName));
+    } finally {
+      inFlightRef.current = false;
+    }
+  }, [namespace, userId]);
+
+  useEffect(() => {
+    if (!fetchKey) {
+      fetchedRef.current = null;
+      serverHydratedNamespace.delete(namespace);
+      return;
+    }
+    if (fetchedRef.current !== fetchKey) {
+      fetchedRef.current = fetchKey;
+      void (async () => {
+        await pushLocalToServer();
+        await fetchServer();
+      })();
+    }
+  }, [fetchKey, fetchServer, namespace, pushLocalToServer]);
+
+  useEffect(() => {
+    if (!userId || !isBrowser()) return;
+    const onFocus = () => {
+      void fetchServer();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchServer();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    const intervalMs = options.pollIntervalMs ?? 0;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (intervalMs > 0) {
+      interval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          void fetchServer();
+        }
+      }, intervalMs);
+    }
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (interval) clearInterval(interval);
+    };
+  }, [fetchServer, options.pollIntervalMs, userId]);
+
+  return useMemo(
+    () => ({
+      hydrated: serverHydratedNamespace.has(namespace),
+      pushLocalToServer,
+      refetch: fetchServer,
+    }),
+    [fetchServer, namespace, pushLocalToServer],
   );
 }
 
