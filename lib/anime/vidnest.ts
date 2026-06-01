@@ -18,7 +18,7 @@ import {
   type VidNestTrackRecord,
 } from './vidnest-schema';
 
-type ProxyProfile = 'aniwave-media' | 'anitaku-media' | 'subtitle';
+type ProxyProfile = 'aniwave-media' | 'subtitle';
 
 interface AnimePlaybackMetadata {
   posterUrl?: string;
@@ -69,12 +69,8 @@ function cleanUrl(value: string | null | undefined): string {
   return value?.trim().replace(/\s+/g, '') ?? '';
 }
 
-function buildEndpoint(server: AnimePlaybackServer, anilistId: string, episode: number, language: PlaybackLanguage) {
-  if (server === 'anitaku') {
-    return new URL(`/animepahe/${encodeURIComponent(anilistId)}/${episode}/${language}`, appConfig.vidnestAnimeApiBaseUrl);
-  }
-
-  return new URL(`/hianime/anime/${encodeURIComponent(anilistId)}/${episode}/${language}`, appConfig.vidnestAnimeApiBaseUrl);
+function buildEndpoint(anilistId: string, episode: number, language: PlaybackLanguage) {
+  return new URL(`/anime/${encodeURIComponent(anilistId)}/${episode}/${language}`, appConfig.vidnestAnimeApiBaseUrl);
 }
 
 function buildProxyUrl(url: string, profile: ProxyProfile): string {
@@ -205,7 +201,7 @@ function normalizePlaybackRecord(
   const sourceType = sourceUrl.toLowerCase().includes('.m3u8') || source?.type?.toLowerCase().includes('hls')
     ? 'hls'
     : 'mp4';
-  const sourceProfile: ProxyProfile = server === 'anitaku' ? 'anitaku-media' : 'aniwave-media';
+  const sourceProfile: ProxyProfile = 'aniwave-media';
   const qualityOptions = normalizeQualityOptions(record.sources, sourceProfile);
 
   return {
@@ -223,7 +219,7 @@ function normalizePlaybackRecord(
 }
 
 async function fetchPlaybackRecord(attempt: AttemptDescriptor, anilistId: string, episode: number): Promise<VidNestPlaybackRecord> {
-  const endpoint = buildEndpoint(attempt.server, anilistId, episode, attempt.language);
+  const endpoint = buildEndpoint(anilistId, episode, attempt.language);
   const response = await fetch(endpoint, {
     headers: {
       Accept: 'application/json',
@@ -273,15 +269,11 @@ function buildAttemptMatrix(
   preferredServer: AnimePlaybackServer | undefined,
   preferredLanguage: PlaybackLanguage,
 ): AttemptDescriptor[] {
-  const primaryServer = preferredServer ?? 'aniwave';
-  const secondaryServer: AnimePlaybackServer = primaryServer === 'aniwave' ? 'anitaku' : 'aniwave';
   const alternateLanguage: PlaybackLanguage = preferredLanguage === 'dub' ? 'sub' : 'dub';
 
   return [
-    { language: preferredLanguage, server: primaryServer },
-    { language: preferredLanguage, server: secondaryServer },
-    { language: alternateLanguage, server: primaryServer },
-    { language: alternateLanguage, server: secondaryServer },
+    { language: preferredLanguage, server: 'aniwave' },
+    { language: alternateLanguage, server: 'aniwave' },
   ];
 }
 

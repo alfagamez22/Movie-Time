@@ -40,7 +40,7 @@ export async function GET(request: Request, context: AnimePlaybackRouteContext) 
         posterUrl: lookup.entry.posterUrl,
         title: lookup.entry.title,
       },
-      preferredServer: preferredServer === 'anitaku' ? 'anitaku' : preferredServer === 'aniwave' ? 'aniwave' : undefined,
+      preferredServer: preferredServer === 'aniwave' ? 'aniwave' : undefined,
     });
 
     return NextResponse.json({ data });

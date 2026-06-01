@@ -89,11 +89,7 @@ export function buildWatchHref(entry: RouteEntry, options: WatchHrefOptions = {}
 }
 
 export function parseAnimePlaybackServer(value: string | null | undefined): AnimePlaybackServer | undefined {
-  if (value === 'aniwave' || value === 'anitaku') {
-    return value;
-  }
-
-  return undefined;
+  return value === 'aniwave' ? 'aniwave' : undefined;
 }
 
 export function parseMediaType(value: string | null | undefined): MediaType | undefined {

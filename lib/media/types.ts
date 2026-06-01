@@ -3,7 +3,7 @@ export type BrowseMediaType = MediaType | 'all';
 export type MediaProvider = 'tmdb' | 'anilist' | 'anikoto';
 export type MediaExperience = 'papiflix' | 'papianime';
 export type PlaybackLanguage = 'sub' | 'dub';
-export type AnimePlaybackServer = 'aniwave' | 'anitaku';
+export type AnimePlaybackServer = 'aniwave';
 export type AnimeFormat = 'TV' | 'TV_SHORT' | 'MOVIE' | 'SPECIAL' | 'OVA' | 'ONA' | 'MUSIC';
 
 export interface PlaybackMarker {

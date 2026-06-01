@@ -4,7 +4,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 
 export type PlayerChoice = '1' | '2' | '3' | '4' | '5';
 export type AnimeLanguageChoice = 'dub' | 'sub';
-export type AnimeServerChoice = 'aniwave' | 'anitaku';
+export type AnimeServerChoice = 'aniwave';
 
 const PLAYER_STORAGE_VERSION = '3';
 const PLAYER_STORAGE_VERSION_KEY = 'papiflix-player-version';
@@ -62,7 +62,7 @@ const animeServerStore: ChoiceStore<AnimeServerChoice> = {
   changeEvent: 'papianime-server-change',
   defaultValue: 'aniwave',
   memoryValue: null,
-  normalize: (value) => (value === 'anitaku' ? 'anitaku' : 'aniwave'),
+  normalize: () => 'aniwave' as const,
   storageKey: 'papianime-server',
 };
 
@@ -143,9 +143,4 @@ export function usePlayerPreference() {
 export function useAnimeLanguagePreference() {
   const { setValue: setLanguage, value: language } = useStoredChoice(animeLanguageStore);
   return { language, setLanguage } as const;
-}
-
-export function useAnimeServerPreference() {
-  const { setValue: setServer, value: server } = useStoredChoice(animeServerStore);
-  return { server, setServer } as const;
 }

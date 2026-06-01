@@ -75,7 +75,7 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   const progress = sanitizeProgress(getFirstParam(searchParams.progress));
   const language = getFirstParam(searchParams.lang) === 'dub' ? 'dub' : entry.defaultLanguage ?? 'sub';
   const serverValue = getFirstParam(searchParams.server);
-  const server = serverValue === 'anitaku' ? 'anitaku' : serverValue === 'aniwave' ? 'aniwave' : undefined;
+  const server = serverValue === 'aniwave' ? 'aniwave' : undefined;
   const skipIntroValue = getFirstParam(searchParams.skipintro);
   const skipIntro =
     skipIntroValue === undefined ? undefined : skipIntroValue === 'true' || skipIntroValue === '1';

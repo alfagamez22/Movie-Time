@@ -117,7 +117,7 @@ type CanonicalState =
         progress: number | null;
         season: string;
         player: AnimePlayerId;
-        server?: 'aniwave' | 'anitaku';
+        server?: 'aniwave';
         skipIntro: boolean;
       };
       kind: 'canonical';
@@ -145,7 +145,7 @@ async function resolveLegacyState(props: AnimeWatchPageProps, slug: string): Pro
   const resolvedServer =
     player === 'p2'
       ? undefined
-      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? (player === 'p3' ? 'anitaku' : undefined);
+      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? undefined;
   const initialPlayback = {
     ...resolvePlaybackOptions(resolvedEntry.entry, searchParams),
     server: resolvedServer,
@@ -192,7 +192,7 @@ async function resolveCanonicalState(
   const resolvedServer =
     player === 'p2'
       ? undefined
-      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? (player === 'p3' ? 'anitaku' : undefined);
+      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? undefined;
   const initialPlayback = {
     autoNext: parseBooleanParam(getFirstParam(searchParams.autonext), true),
     autoPlay: parseBooleanParam(getFirstParam(searchParams.autoPlay), true),

@@ -4,9 +4,8 @@ const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-
 const RANGE_HEADER = 'range';
 
 const ANIWAVE_CDN_ORIGIN = appConfig.aniwaveCdnOrigin;
-const ANITAKU_CDN_ORIGIN = appConfig.anitakuCdnOrigin;
 
-type ProxyProfile = 'aniwave-media' | 'anitaku-media' | 'subtitle';
+type ProxyProfile = 'aniwave-media' | 'subtitle';
 
 const PROFILE_HEADERS: Record<
   ProxyProfile,
@@ -16,11 +15,6 @@ const PROFILE_HEADERS: Record<
     referer?: string;
   }
 > = {
-  'anitaku-media': {
-    accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,video/*,*/*;q=0.8',
-    origin: ANITAKU_CDN_ORIGIN,
-    referer: `${ANITAKU_CDN_ORIGIN}/`,
-  },
   'aniwave-media': {
     accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,video/*,*/*;q=0.8',
     origin: ANIWAVE_CDN_ORIGIN,
@@ -120,7 +114,7 @@ export async function GET(request: Request) {
     return new Response('Missing playback url.', { status: 400 });
   }
 
-  if (profileParam !== 'aniwave-media' && profileParam !== 'anitaku-media' && profileParam !== 'subtitle') {
+  if (profileParam !== 'aniwave-media' && profileParam !== 'subtitle') {
     return new Response('Invalid playback profile.', { status: 400 });
   }
 

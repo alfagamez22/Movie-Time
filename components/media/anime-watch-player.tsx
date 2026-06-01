@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Settings, SkipForward } from 'lucide-react';
 
 import { buildMegaPlayEmbedUrl } from '@/lib/media/embed';
-import { useAnimeLanguagePreference, useAnimeServerPreference } from '@/lib/hooks/use-player-preference';
+import { useAnimeLanguagePreference } from '@/lib/hooks/use-player-preference';
 import {
   getRecentlyWatchedProgress,
   requestHomeScrollRestore,
@@ -35,11 +35,6 @@ interface QualityLevel {
   height: number;
   index: number;
 }
-
-const ANIME_SERVER_LABELS: Record<AnimePlaybackServer, string> = {
-  anitaku: 'AniTaku',
-  aniwave: 'Aniwave',
-};
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 
@@ -281,7 +276,6 @@ function SidebarControls({
   currentEpisode,
   currentLanguage,
   currentSeason,
-  currentServer,
   episodeCards,
   episodeLimit,
   episodesBySeason,
@@ -289,18 +283,15 @@ function SidebarControls({
   onEpisodeChange,
   onLanguageChange,
   onSeasonChange,
-  onServerChange,
   onToggleAutoNext,
   onToggleSkipIntro,
   skipIntroEnabled,
   showPlaybackToggles = true,
-  showServerSelection = true,
 }: {
   autoNextEnabled: boolean;
   currentEpisode: number;
   currentLanguage: 'dub' | 'sub';
   currentSeason: number;
-  currentServer: AnimePlaybackServer;
   episodeCards: EpisodePreview[];
   episodeLimit: number;
   episodesBySeason: Record<string, number>;
@@ -308,11 +299,9 @@ function SidebarControls({
   onEpisodeChange: (episode: number) => void;
   onLanguageChange: (language: 'dub' | 'sub') => void;
   onSeasonChange: (season: number) => void;
-  onServerChange: (server: AnimePlaybackServer) => void;
   onToggleAutoNext: () => void;
   onToggleSkipIntro: () => void;
   showPlaybackToggles?: boolean;
-  showServerSelection?: boolean;
   skipIntroEnabled: boolean;
 }) {
   const defaultGroupStart =
@@ -390,23 +379,6 @@ function SidebarControls({
             ))}
           </div>
 
-          {showServerSelection ? (
-            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-              {(['aniwave', 'anitaku'] as const).map((server) => (
-                <button
-                  key={server}
-                  type="button"
-                  onClick={() => onServerChange(server)}
-                  className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                    currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  {ANIME_SERVER_LABELS[server]}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           {showPlaybackToggles ? (
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -478,7 +450,6 @@ export function AnimeWatchPlayer({
   const { data: session } = useSession();
   const router = useRouter();
   const { language: storedLanguage, setLanguage: setStoredLanguage } = useAnimeLanguagePreference();
-  const { server: storedServer, setServer: setStoredServer } = useAnimeServerPreference();
   const isEmbedPlayer = animePlayer === 'p2';
   const isSeries = entry.type === 'tv';
   const canSyncWatchHistory = Boolean(session?.user?.id);
@@ -493,9 +464,7 @@ export function AnimeWatchPlayer({
   const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
   const [currentSeason, setCurrentSeason] = useState(1);
   const [currentLanguage, setCurrentLanguage] = useState<'dub' | 'sub'>(initialPlayback.language ?? storedLanguage);
-  const [currentServer, setCurrentServer] = useState<AnimePlaybackServer>(
-    initialPlayback.server ?? (isEmbedPlayer ? 'aniwave' : storedServer),
-  );
+  const currentServer: AnimePlaybackServer = initialPlayback.server ?? 'aniwave';
   const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? true);
   const [skipIntroEnabled, setSkipIntroEnabled] = useState(initialPlayback.skipIntro ?? false);
   const [playbackData, setPlaybackData] = useState<AnimePlaybackPayload | null>(null);
@@ -519,7 +488,7 @@ export function AnimeWatchPlayer({
   const requestedRef = useRef({
     episode: initialEpisode,
     language: initialPlayback.language,
-    server: initialPlayback.server ?? (isEmbedPlayer ? 'aniwave' : storedServer),
+    server: initialPlayback.server ?? 'aniwave',
   });
 
   const savedProgress =
@@ -591,10 +560,6 @@ export function AnimeWatchPlayer({
 
         if (json.data.actualLanguage !== requestedRef.current.language) {
           setCurrentLanguage(json.data.actualLanguage);
-        }
-
-        if (json.data.server !== requestedRef.current.server) {
-          setCurrentServer(json.data.server);
         }
       })
       .catch((fetchError: unknown) => {
@@ -837,14 +802,6 @@ export function AnimeWatchPlayer({
     setCurrentLanguage(language);
     setStoredLanguage(language);
     setResumeOverrideSeconds(0);
-  };
-
-  const handleServerChange = (server: AnimePlaybackServer) => {
-    setIsLoading(true);
-    setError(null);
-    setPlaybackData(null);
-    setCurrentServer(server);
-    setStoredServer(server);
   };
 
   const handleEpisodeChange = (episode: number) => {
@@ -1124,7 +1081,6 @@ export function AnimeWatchPlayer({
           currentEpisode={currentEpisode}
           currentLanguage={currentLanguage}
           currentSeason={currentSeason}
-          currentServer={currentServer}
           episodeCards={episodeCards}
           episodeLimit={episodeLimit}
           episodesBySeason={entry.type === 'tv' ? (entry.episodesBySeason ?? { '1': episodeLimit }) : { '1': 1 }}
@@ -1132,11 +1088,9 @@ export function AnimeWatchPlayer({
           onEpisodeChange={handleEpisodeChange}
           onLanguageChange={handleLanguageChange}
           onSeasonChange={handleSeasonChange}
-          onServerChange={handleServerChange}
           onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
           onToggleSkipIntro={() => setSkipIntroEnabled((value) => !value)}
           showPlaybackToggles={!isEmbedPlayer}
-          showServerSelection={!isEmbedPlayer}
           skipIntroEnabled={skipIntroEnabled}
         />
       ) : (
@@ -1157,20 +1111,6 @@ export function AnimeWatchPlayer({
           </div>
           {isEmbedPlayer ? null : (
             <>
-              <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-                {(['aniwave', 'anitaku'] as const).map((server) => (
-                  <button
-                    key={server}
-                    type="button"
-                    onClick={() => handleServerChange(server)}
-                    className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                      currentServer === server ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {ANIME_SERVER_LABELS[server]}
-                  </button>
-                ))}
-              </div>
               <button
                 type="button"
                 onClick={() => setSkipIntroEnabled((value) => !value)}

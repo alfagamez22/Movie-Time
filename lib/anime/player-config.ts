@@ -25,7 +25,7 @@ export type { AnimePlayerId, AnimePlayerCatalog, AnimePlayerDefinition } from '@
 const PLAYER_STREAMING_SERVER: Record<AnimePlayerId, AnimePlaybackServer> = {
   p1: 'aniwave',
   p2: 'aniwave',
-  p3: 'anitaku',
+  p3: 'aniwave',
   p4: 'aniwave',
   p5: 'aniwave',
 };
@@ -44,11 +44,10 @@ export function getAnimePlayerStreamingServer(id: AnimePlayerId): AnimePlaybackS
 // The catalog drives search, browse rows, and details metadata; the streaming
 // source is the AniList ID that the VidNest pipeline expects.
 //
-// P1 (default) — AniList + /hianime/anime/ JSON (current behavior)
+// P1 (default) — AniList + VidNest API
 // P2            — AniList + VidNest embed iframe
-// P3            — AniList + /animepahe/ JSON (fallback when /hianime/ 502s)
-// P4            — Kitsu data + /hianime/anime/ JSON
-// P5            — Jikan/MAL data + /hianime/anime/ JSON
+// P4            — Kitsu data + VidNest API
+// P5            — Jikan/MAL data + VidNest API
 
 export interface AnimePlayerCatalogAdapter {
   /** Return LibraryMediaEntry[] for a free-text query, or [] on failure. */
