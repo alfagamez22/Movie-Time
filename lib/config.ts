@@ -60,6 +60,8 @@ const SOCIAL_PREVIEW_IMAGE = {
 export const appConfig = {
   aniZipApiBaseUrl: readUrlEnv('ANI_ZIP_API_BASE_URL', 'https://api.ani.zip'),
   anilistGraphqlUrl: readUrlEnv('ANILIST_GRAPHQL_URL', 'https://graphql.anilist.co'),
+  anitakuCdnOrigin: readUrlEnv('ANITAKU_CDN_ORIGIN', 'https://anitaku.to'),
+  aniwaveCdnOrigin: readUrlEnv('ANIWAVE_CDN_ORIGIN', 'https://megaplay.buzz'),
   name: APP_NAME,
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||

@@ -1,8 +1,10 @@
+import { appConfig } from '@/lib/config';
+
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl'];
 const RANGE_HEADER = 'range';
 
-const ANIWAVE_CDN_ORIGIN = process.env.ANIWAVE_CDN_ORIGIN?.trim() || 'https://megaplay.buzz';
-const ANITAKU_CDN_ORIGIN = process.env.ANITAKU_CDN_ORIGIN?.trim() || 'https://anitaku.to';
+const ANIWAVE_CDN_ORIGIN = appConfig.aniwaveCdnOrigin;
+const ANITAKU_CDN_ORIGIN = appConfig.anitakuCdnOrigin;
 
 type ProxyProfile = 'aniwave-media' | 'anitaku-media' | 'subtitle';
 

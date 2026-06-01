@@ -113,7 +113,7 @@ function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
   });
 }
 
-function LoadingState({ error, isLoading }: { error: string | null; isLoading: boolean }) {
+function LoadingState({ error, isLoading, vidnestEmbedUrl }: { error: string | null; isLoading: boolean; vidnestEmbedUrl?: string }) {
   if (!isLoading && !error) {
     return null;
   }
@@ -130,6 +130,16 @@ function LoadingState({ error, isLoading }: { error: string | null; isLoading: b
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">
           {error ?? 'Resolving the selected anime source now.'}
         </p>
+        {error && vidnestEmbedUrl ? (
+          <a
+            href={vidnestEmbedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/20"
+          >
+            Watch on VidNest
+          </a>
+        ) : null}
       </div>
     </div>
   );
@@ -905,7 +915,7 @@ export function AnimeWatchPlayer({
           </span>
         </div>
 
-        <LoadingState error={error} isLoading={isLoading} />
+        <LoadingState error={error} isLoading={isLoading} vidnestEmbedUrl={`https://vidnest.fun/anime/${encodeURIComponent(entry.id)}/${currentEpisode}/${currentLanguage}`} />
 
         {showSkipButton ? (
           <button

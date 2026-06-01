@@ -71,7 +71,7 @@ function cleanUrl(value: string | null | undefined): string {
 
 function buildEndpoint(server: AnimePlaybackServer, anilistId: string, episode: number, language: PlaybackLanguage) {
   if (server === 'anitaku') {
-    return new URL(`/anitaku/${encodeURIComponent(anilistId)}/${episode}/${language}/hd-2`, appConfig.vidnestAnimeApiBaseUrl);
+    return new URL(`/animepahe/${encodeURIComponent(anilistId)}/${episode}/${language}`, appConfig.vidnestAnimeApiBaseUrl);
   }
 
   return new URL(`/hianime/anime/${encodeURIComponent(anilistId)}/${episode}/${language}`, appConfig.vidnestAnimeApiBaseUrl);
@@ -222,7 +222,7 @@ function normalizePlaybackRecord(
   };
 }
 
-async function fetchPlaybackRecord(attempt: AttemptDescriptor, anilistId: string, episode: number): Promise<VidNestPlaybackRecord | null> {
+async function fetchPlaybackRecord(attempt: AttemptDescriptor, anilistId: string, episode: number): Promise<VidNestPlaybackRecord> {
   const endpoint = buildEndpoint(attempt.server, anilistId, episode, attempt.language);
   const response = await fetch(endpoint, {
     headers: {
@@ -235,12 +235,16 @@ async function fetchPlaybackRecord(attempt: AttemptDescriptor, anilistId: string
   }).catch(() => null);
 
   if (!response) {
-    return null;
+    throw new AnimePlaybackError(`${attempt.server} server is unreachable for this ${attempt.language} episode.`);
   }
 
   if (!response.ok) {
-    if (response.status === 404 || response.status === 502 || response.status === 503) {
-      return null;
+    if (response.status === 404) {
+      throw new AnimePlaybackError(`${attempt.server} (${attempt.language}): episode not found on this source.`);
+    }
+
+    if (response.status === 502 || response.status === 503) {
+      throw new AnimePlaybackError(`${attempt.server} (${attempt.language}): source temporarily unavailable.`);
     }
 
     throw new AnimePlaybackError(`VidNest playback request failed with status ${response.status}.`, response.status);
@@ -248,18 +252,21 @@ async function fetchPlaybackRecord(attempt: AttemptDescriptor, anilistId: string
 
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!payload) {
-    return null;
+    throw new AnimePlaybackError(`${attempt.server} (${attempt.language}): invalid response from VidNest.`);
   }
 
   const rawDecoded = decodeVidNestPayload<unknown>(payload);
   const normalizedHeaders = cleanHeaders((rawDecoded as { headers?: Record<string, unknown> }).headers);
 
   if (Object.keys(normalizedHeaders).length > 0) {
-    // Keep parity with the upstream payload normalization even though the proxy
-    // currently uses fixed header profiles.
   }
 
-  return parseVidNestPlaybackRecord(rawDecoded);
+  const parsed = parseVidNestPlaybackRecord(rawDecoded);
+  if (!parsed) {
+    throw new AnimePlaybackError(`${attempt.server} (${attempt.language}): unexpected response shape from VidNest.`);
+  }
+
+  return parsed;
 }
 
 function buildAttemptMatrix(
@@ -286,17 +293,16 @@ export async function resolveAnimePlayback({
   preferredServer,
 }: ResolveAnimePlaybackOptions): Promise<AnimePlaybackPayload> {
   const parsedEpisode = Math.max(1, Math.floor(episode));
+  const attemptLog: string[] = [];
 
   for (const attempt of buildAttemptMatrix(preferredServer, language)) {
-    const payload = await fetchPlaybackRecord(attempt, anilistId, parsedEpisode);
-    if (!payload) {
-      continue;
-    }
-
     try {
+      const payload = await fetchPlaybackRecord(attempt, anilistId, parsedEpisode);
+
       return normalizePlaybackRecord(payload, attempt.server, attempt.language, metadata);
     } catch (error) {
       if (error instanceof AnimePlaybackError) {
+        attemptLog.push(error.message);
         continue;
       }
 
@@ -304,5 +310,5 @@ export async function resolveAnimePlayback({
     }
   }
 
-  throw new AnimePlaybackError('No anime playback server returned a playable source.');
+  throw new AnimePlaybackError(`Playback unavailable. ${attemptLog.join('; ')}`);
 }
