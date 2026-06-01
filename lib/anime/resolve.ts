@@ -4,10 +4,13 @@ import type { MediaEntry, MediaType, SeasonDetails } from '@/lib/media/types';
 import { normalizeSlug } from '@/lib/slugs/media';
 
 import { lookupAnimeMediaEntry, searchAnimeLibrary } from './client';
+import { fetchKitsuAnimeById } from './kitsu';
+import { fetchJikanAnimeById } from './jikan';
+import { resolveAnilistIdByTitle } from './resolve-streaming-id';
 
 export interface ResolvedAnimeMediaEntry {
   entry: MediaEntry;
-  matchedBy: 'id' | 'search' | 'title';
+  matchedBy: 'id' | 'kitsu' | 'mal' | 'search' | 'title';
   seasonDetails: SeasonDetails | null;
 }
 
@@ -16,6 +19,27 @@ function matchesExactAlias(entry: MediaEntry, identifier: string): boolean {
 
   return entry.aliases.some((alias) => normalizeSlug(alias) === normalizedIdentifier);
 }
+
+async function resolveExternalIdToAnilistId(
+  externalId: string,
+  fetcher: { fetch: (id: string) => Promise<{ title: string; year?: number } | null> },
+): Promise<string | null> {
+  const record = await fetcher.fetch(externalId);
+  if (!record) {
+    return null;
+  }
+
+  const resolved = await resolveAnilistIdByTitle({
+    externalTitle: record.title,
+    externalYear: record.year,
+    fallbackId: externalId.replace(/^(kitsu-|mal-)/, ''),
+  });
+
+  return resolved?.anilistId ?? null;
+}
+
+const KitsuFetcher = { fetch: (id: string) => fetchKitsuAnimeById(id.replace(/^kitsu-/, '')) };
+const JikanFetcher = { fetch: (id: string) => fetchJikanAnimeById(id.replace(/^mal-/, '')) };
 
 export async function resolveAnimeMediaEntry(
   identifier: string,
@@ -36,6 +60,26 @@ export async function resolveAnimeMediaEntry(
   const trimmedIdentifier = identifier.trim();
   if (!trimmedIdentifier) {
     return null;
+  }
+
+  if (trimmedIdentifier.startsWith('kitsu-')) {
+    const anilistId = await resolveExternalIdToAnilistId(trimmedIdentifier, KitsuFetcher);
+    if (anilistId) {
+      const lookup = await lookupAnimeMediaEntry(anilistId);
+      if (lookup.ok) {
+        return { entry: lookup.entry, matchedBy: 'kitsu', seasonDetails: lookup.seasonDetails };
+      }
+    }
+  }
+
+  if (trimmedIdentifier.startsWith('mal-')) {
+    const anilistId = await resolveExternalIdToAnilistId(trimmedIdentifier, JikanFetcher);
+    if (anilistId) {
+      const lookup = await lookupAnimeMediaEntry(anilistId);
+      if (lookup.ok) {
+        return { entry: lookup.entry, matchedBy: 'mal', seasonDetails: lookup.seasonDetails };
+      }
+    }
   }
 
   if (/^\d+$/.test(trimmedIdentifier)) {

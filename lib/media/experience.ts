@@ -56,7 +56,7 @@ export const papianimeExperience: MediaExperienceConfig = {
   brandName: 'PapiAnime',
   detailsApiBasePath: '/api/anime',
   emptySearchText: 'Search anime titles, browse current seasons, or enter an AniList ID',
-  footerText: 'Metadata provided by AniList. Playback powered by VidNest anime sources.',
+  footerText: 'Metadata provided by AniList, Kitsu, or MyAnimeList. Playback powered by VidNest anime sources.',
   homeHref: '/anime',
   id: 'papianime',
   navLinks: [
@@ -65,10 +65,12 @@ export const papianimeExperience: MediaExperienceConfig = {
     { href: '/anime#anime-movies', label: 'Movies' },
     { href: '/', label: 'PapiFlix' },
   ],
-  // preferenceMode: 'language' — the PapiAnime watch UI shows a dub/sub
-  // language toggle instead of the PapiFlix player-switcher. This keeps Player
-  // 5 (StreamIMDB) off the /anime route, where it would be irrelevant.
-  preferenceMode: 'language',
+  // preferenceMode: 'player' — the PapiAnime home page renders the multi-player
+  // pill group (P1-P5) at the top of the page instead of the dub/sub language
+  // toggle. The dub/sub toggle still lives inside the watch player sidebar;
+  // the preference here is about which catalog/streaming source the user
+  // browses with on /anime.
+  preferenceMode: 'player',
   searchEndpoint: '/api/anime',
   searchPlaceholder: 'Search anime titles or AniList ID...',
   watchBasePath: '/anime/watch',

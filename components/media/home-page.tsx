@@ -2,14 +2,17 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
+import { useAnimePlayerPreference } from '@/lib/hooks/use-anime-player-preference';
+import { ANIME_PLAYERS, isAnimePlayerId, type AnimePlayerId } from '@/lib/anime/player-metadata';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
@@ -89,7 +92,14 @@ function SearchResultCard({
 function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
   const { player, setPlayer } = usePlayerPreference();
 
-  if (experience.preferenceMode === 'language') {
+  if (experience.preferenceMode !== 'player') {
+    return null;
+  }
+
+  // PapiFlix shows the original P1-P5 (VidFast, VidSrc, Videasy, Vidking, StreamIMDB).
+  // PapiAnime uses a separate AnimePlayerSwitcher below — the global player
+  // store is still consulted (it just renders an empty set on the /anime route).
+  if (experience.id === 'papianime') {
     return null;
   }
 
@@ -108,6 +118,85 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
           P{choice}
         </button>
       ))}
+    </div>
+  );
+}
+
+function readAnimePlayerFromUrl(): { player: string | null } {
+  if (typeof window === 'undefined') {
+    return { player: null };
+  }
+  return { player: new URL(window.location.href).searchParams.get('player') };
+}
+
+function AnimePlayerSwitcher({ experience, sections }: { experience: MediaExperienceConfig; sections: LibrarySection[] }) {
+  const router = useRouter();
+  const { player: storedPlayer, setPlayer } = useAnimePlayerPreference();
+  const [, startTransition] = useTransition();
+
+  const handleSelect = useCallback(
+    (playerId: AnimePlayerId) => {
+      if (playerId === storedPlayer) return;
+      // Update the local preference store first so the pill switches colors
+      // immediately; then navigate so the server re-renders with the new
+      // catalog data.
+      setPlayer(playerId);
+      const url = playerId === 'p1' ? experience.homeHref : `${experience.homeHref}?player=${playerId}`;
+      startTransition(() => {
+        router.push(url, { scroll: false });
+      });
+    },
+    [storedPlayer, setPlayer, experience.homeHref, router],
+  );
+
+  if (experience.id !== 'papianime') {
+    return null;
+  }
+
+  const activePlayer = storedPlayer;
+  const playerIds: AnimePlayerId[] = ['p1', 'p2', 'p3', 'p4', 'p5'];
+
+  return (
+    <div className="flex w-full flex-col items-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-1.5 rounded-full border border-white/10 bg-white/5 p-1 text-xs">
+        {playerIds.map((playerId) => {
+          const player = ANIME_PLAYERS[playerId];
+          const isActive = playerId === activePlayer;
+          return (
+            <button
+              key={playerId}
+              type="button"
+              onClick={() => handleSelect(playerId)}
+              title={player.description}
+              style={
+                isActive
+                  ? {
+                      backgroundColor: player.colorAccent,
+                      borderColor: player.colorAccent,
+                      color: 'white',
+                    }
+                  : undefined
+              }
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-semibold transition-colors ${
+                isActive
+                  ? 'border-transparent text-white shadow-sm'
+                  : 'border-transparent text-zinc-400 hover:border-white/20 hover:text-white'
+              }`}
+            >
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: isActive ? 'rgba(255,255,255,0.85)' : player.colorAccent }}
+              />
+              {player.label}
+            </button>
+          );
+        })}
+      </div>
+      {sections.length === 0 ? (
+        <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+          Showing browse results for {ANIME_PLAYERS[activePlayer]?.label ?? 'PapiAnime'}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -219,7 +308,15 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
     if (!debouncedQuery) return;
 
     const controller = new AbortController();
-    void fetch(`${experience.searchEndpoint}?q=${encodeURIComponent(debouncedQuery)}`, { signal: controller.signal })
+    const params = new URLSearchParams({ q: debouncedQuery });
+    if (experience.id === 'papianime') {
+      const { player: storedAnimePlayer } = readAnimePlayerFromUrl();
+      if (isAnimePlayerId(storedAnimePlayer)) {
+        params.set('player', storedAnimePlayer);
+      }
+    }
+
+    void fetch(`${experience.searchEndpoint}?${params.toString()}`, { signal: controller.signal })
       .then(async (res) => {
         const json = (await res.json().catch(() => null)) as { data?: LibraryMediaEntry[] } | null;
         if (!controller.signal.aborted) {
@@ -234,13 +331,18 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       });
 
     return () => controller.abort(new DOMException('Query changed', 'AbortError'));
-  }, [debouncedQuery, experience.searchEndpoint]);
+  }, [debouncedQuery, experience.searchEndpoint, experience.id]);
 
   const featuredItems = getFeaturedItems(sections);
   const authPromptCopy = getAuthPromptCopy(authPromptReason);
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
+      {experience.id === 'papianime' ? (
+        <div className="px-3 pb-3 pt-[calc(env(safe-area-inset-top)+5.5rem)] sm:px-6 md:px-12 md:pt-[calc(env(safe-area-inset-top)+5rem)]">
+          <AnimePlayerSwitcher experience={experience} sections={sections} />
+        </div>
+      ) : null}
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
