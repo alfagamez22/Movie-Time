@@ -53,14 +53,6 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model VerificationToken {
-  identifier String
-  token      String
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
 // Application models
 
 model Bookmark {
@@ -165,17 +157,6 @@ model MediaComment {
 
   @@index([mediaId, mediaProvider, mediaType, createdAt])
   @@index([userId, createdAt])
-}
-
-model TmdbImdbMapping {
-  id     String @id @default(cuid())
-  tmdbId String
-  type   String
-  imdbId String
-
-  @@unique([tmdbId, type])
-  @@index([imdbId])
-  @@index([tmdbId])
 }
 
 model PapiAnimeProgress {

@@ -1,7 +1,5 @@
 import 'server-only';
 
-import { prisma } from '@/lib/db';
-
 const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL?.trim() || 'https://api.themoviedb.org/3';
 
 interface TmdbImdbResponse {
@@ -70,50 +68,5 @@ export async function resolveStreamimdbId(tmdbId: string, type: string): Promise
   }
 
   const normalizedType = type === 'tv' ? 'tv' : 'movie';
-
-  try {
-    const existing = await prisma.tmdbImdbMapping.findUnique({
-      where: {
-        tmdbId_type: {
-          tmdbId,
-          type: normalizedType,
-        },
-      },
-    });
-
-    if (existing) {
-      return existing.imdbId;
-    }
-  } catch {
-    // DB unavailable; continue to TMDB lookup
-  }
-
-  const imdbId = await fetchImdbIdFromTmdb(tmdbId, normalizedType);
-
-  if (!imdbId) {
-    return null;
-  }
-
-  try {
-    await prisma.tmdbImdbMapping.upsert({
-      where: {
-        tmdbId_type: {
-          tmdbId,
-          type: normalizedType,
-        },
-      },
-      create: {
-        imdbId,
-        tmdbId,
-        type: normalizedType,
-      },
-      update: {
-        imdbId,
-      },
-    });
-  } catch {
-    // Cache write failed; return the IMDB ID anyway
-  }
-
-  return imdbId;
+  return fetchImdbIdFromTmdb(tmdbId, normalizedType);
 }

@@ -13,7 +13,8 @@ const googleCredentials = getGoogleOAuthCredentials();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma as Parameters<typeof PrismaAdapter>[0]),
+  // The adapter type still includes email magic-link methods, which this app does not use.
+  adapter: PrismaAdapter(prisma as unknown as Parameters<typeof PrismaAdapter>[0]),
   providers: [
     Credentials({
       credentials: {
