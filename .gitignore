@@ -33,3 +33,5 @@ tsconfig.tsbuildinfo
 *.db
 *.db-shm
 *.db-wal
+
+.playwright-mcp/

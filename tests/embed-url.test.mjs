@@ -37,7 +37,7 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
   return runtimeModule.exports;
 }
 
-const { buildFilmuEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
+const { buildFilmuEmbedUrl, buildMultiEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
   stubs: {
     '@/lib/config': {
       appConfig: {
@@ -95,4 +95,37 @@ test('buildFilmuEmbedUrl uses FilmU TV wrapper by TMDB season and episode', () =
   );
 
   assert.equal(url, 'https://embed.filmu.in/tv/132117/2/4');
+});
+
+test('buildMultiEmbedUrl uses direct TMDB IDs for movies', () => {
+  const url = buildMultiEmbedUrl(
+    {
+      id: '1726',
+      provider: 'tmdb',
+      title: 'Iron Man',
+      type: 'movie',
+    },
+    defaultPlayback,
+  );
+
+  assert.equal(url, 'https://multiembed.mov/?video_id=1726&tmdb=1&autoplay=true');
+});
+
+test('buildMultiEmbedUrl uses direct TMDB IDs for TV episodes', () => {
+  const url = buildMultiEmbedUrl(
+    {
+      id: '1399',
+      maxSeasons: 8,
+      provider: 'tmdb',
+      title: 'Game of Thrones',
+      type: 'tv',
+    },
+    {
+      ...defaultPlayback,
+      episode: '2',
+      season: '1',
+    },
+  );
+
+  assert.equal(url, 'https://multiembed.mov/?video_id=1399&tmdb=1&s=1&e=2&autoplay=true');
 });

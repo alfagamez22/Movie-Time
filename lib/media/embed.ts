@@ -211,15 +211,12 @@ export function buildAnimepaheEmbedUrl(
   return url.toString();
 }
 
-export function buildStreamimdbEmbedUrl(imdbId: string, entry: MediaEntry, options: PlaybackOptions): string {
-  if (!imdbId) {
-    return '';
-  }
-
+export function buildMultiEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const base = appConfig.multiEmbedBaseUrl;
   const url = new URL(base);
 
-  url.searchParams.set('video_id', imdbId);
+  url.searchParams.set('video_id', entry.id);
+  url.searchParams.set('tmdb', '1');
 
   if (isTvEntry(entry)) {
     url.searchParams.set('s', options.season);
