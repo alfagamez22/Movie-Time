@@ -37,6 +37,7 @@ export const papiflixExperience: MediaExperienceConfig = {
     { href: '/#movies', label: 'Movies' },
     { href: '/#tv-shows', label: 'TV Shows' },
     { href: '/anime', label: 'Anime' },
+    { href: '/manga', label: 'Manga' },
   ],
   // preferenceMode: 'player' — the PapiFlix watch UI shows a player-switcher
   // (Player 1–5). Player 5 is the StreamIMDB embed and is exclusive to the
@@ -64,6 +65,7 @@ export const papianimeExperience: MediaExperienceConfig = {
     { href: '/anime#currently-airing', label: 'Airing' },
     { href: '/anime#anime-movies', label: 'Movies' },
     { href: '/', label: 'PapiFlix' },
+    { href: '/manga', label: 'PapiManga' },
   ],
   // preferenceMode: 'player' — the PapiAnime home page renders the multi-player
   // pill group (P1-P5) at the top of the page instead of the dub/sub language
@@ -74,4 +76,27 @@ export const papianimeExperience: MediaExperienceConfig = {
   searchEndpoint: '/api/anime',
   searchPlaceholder: 'Search anime titles or AniList ID...',
   watchBasePath: '/anime/watch',
+};
+
+export const papimangaExperience: MediaExperienceConfig = {
+  brandBannerSrc: '/icons/papimanga.png',
+  brandBackgroundPosition: '44% center',
+  brandBackgroundSize: '160% auto',
+  brandName: 'PapiManga',
+  detailsApiBasePath: '/api/manga',
+  emptySearchText: 'Search manga titles or MangaDex ID',
+  footerText: 'Metadata provided by MangaDex. Support scanlators and read on the official MangaDex website.',
+  homeHref: '/manga',
+  id: 'papimanga',
+  navLinks: [
+    { href: '/manga', label: 'Home' },
+    { href: '/manga#popular', label: 'Popular' },
+    { href: '/manga#latest', label: 'Latest' },
+    { href: '/', label: 'PapiFlix' },
+    { href: '/anime', label: 'PapiAnime' },
+  ],
+  preferenceMode: 'language',
+  searchEndpoint: '/api/manga',
+  searchPlaceholder: 'Search manga titles or MangaDex ID...',
+  watchBasePath: '/manga/read',
 };

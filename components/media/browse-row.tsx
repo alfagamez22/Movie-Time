@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useCallback, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Info, Play, X } from 'lucide-react';
 
-import type { LibraryMediaEntry } from '@/lib/media/types';
+import { isMangaProvider, type LibraryMediaEntry } from '@/lib/media/types';
 
 const MAX_LOOPABLE_ENTRIES = 8;
 
@@ -116,6 +116,7 @@ function PosterCard({
 }) {
   const progress = getProgressDisplay(entry);
   const isRecentlyWatched = Boolean(onRemove);
+  const recentLabel = isMangaProvider(entry.provider) ? 'recently read' : 'recently watched';
   const nextEpisodeArrival = formatNextEpisodeArrival(entry);
 
   return (
@@ -204,8 +205,8 @@ function PosterCard({
         <button
           type="button"
           onClick={() => onRemove(entry)}
-          aria-label={`Remove ${entry.title} from recently watched`}
-          title="Remove from recently watched"
+          aria-label={`Remove ${entry.title} from ${recentLabel}`}
+          title={`Remove from ${recentLabel}`}
           className="absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/75 text-zinc-100 opacity-100 shadow-lg ring-1 ring-white/10 backdrop-blur-md transition hover:scale-105 hover:bg-netflix-red hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red md:opacity-80 md:group-hover:opacity-100 md:focus:opacity-100"
         >
           <X className="h-4 w-4" />

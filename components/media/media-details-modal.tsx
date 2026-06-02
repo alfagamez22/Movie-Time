@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react';
-import { ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
@@ -12,6 +12,7 @@ import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
 import {
   getMediaKindLabel,
+  isMangaProvider,
   type LibraryMediaEntry,
   type MediaCastMember,
   type MediaDetailsPayload,
@@ -423,21 +424,28 @@ export function MediaDetailsModal({
   const posterUrl = displayEntry?.posterUrl ?? entry?.posterUrl;
   const resumeEntry = findResumeEntry(displayEntry ?? entry, recentlyWatched) as ResumeMediaEntry | null;
   const primaryTrailer = trailers[0];
+  const isManga = displayEntry ? isMangaProvider(displayEntry.provider) : false;
   const playHref = displayEntry
     ? buildWatchHref(displayEntry, {
         basePath: experience.watchBasePath,
-        episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
+        episode: resumeEntry?.provider === 'mangadex' ? resumeEntry.episode : resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
         language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
         player: preferredAnimePlayer,
         progress: resumeEntry?.progressSeconds,
-        season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
+        season: resumeEntry?.provider === 'mangadex' ? resumeEntry.season : resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
       })
     : '#';
   const playLabel =
-    resumeEntry?.type === 'tv' && resumeEntry.episode
-      ? resumeEntry.season
-        ? `Continue S${resumeEntry.season} E${resumeEntry.episode}`
-        : `Continue E${resumeEntry.episode}`
+    isManga
+      ? resumeEntry?.episode
+        ? `Continue Ch. ${resumeEntry.episode}`
+        : resumeEntry
+          ? 'Continue Reading'
+          : 'Read'
+      : resumeEntry?.type === 'tv' && resumeEntry.episode
+        ? resumeEntry.season
+          ? `Continue S${resumeEntry.season} E${resumeEntry.episode}`
+          : `Continue E${resumeEntry.episode}`
       : resumeEntry?.progressSeconds
         ? 'Continue'
         : 'Play';
@@ -506,7 +514,7 @@ export function MediaDetailsModal({
                       href={playHref}
                       className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-zinc-200"
                     >
-                      <Play className="h-4 w-4 fill-current" />
+                      {isManga ? <BookOpen className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
                       {playLabel}
                     </Link>
                     {primaryTrailer ? (

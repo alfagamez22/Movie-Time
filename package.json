@@ -8,7 +8,7 @@
     "build": "npm run clean && prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test tests/config.test.mjs tests/anime-episodes.test.mjs tests/vidnest-schema.test.mjs tests/kitsu-client.test.mjs tests/jikan-client.test.mjs tests/resolve-streaming-id.test.mjs tests/watch-history.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs",
+    "test": "node --test tests/config.test.mjs tests/anime-episodes.test.mjs tests/vidnest-schema.test.mjs tests/kitsu-client.test.mjs tests/jikan-client.test.mjs tests/resolve-streaming-id.test.mjs tests/watch-history.test.mjs tests/manga-routes.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs",
     "typecheck": "tsc --noEmit",
     "validate": "npm run lint && npm run build",
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\""

@@ -57,7 +57,15 @@ const watchedEpisodesSetCache = new Map<RecentlyWatchedNamespace, Map<string, Se
 const serverHydratedNamespace = new Set<RecentlyWatchedNamespace>();
 
 function getNamespacePrefix(namespace: RecentlyWatchedNamespace): string {
-  return namespace === 'papianime' ? 'papianime' : 'papiflix';
+  if (namespace === 'papianime') {
+    return 'papianime';
+  }
+
+  if (namespace === 'papimanga') {
+    return 'papimanga';
+  }
+
+  return 'papiflix';
 }
 
 function getNamespaceKeys(namespace: RecentlyWatchedNamespace): NamespaceKeys {
@@ -147,7 +155,7 @@ function normalizeEntry(value: unknown): RecentlyWatchedEntry | null {
     posterUrl: typeof entry.posterUrl === 'string' ? entry.posterUrl : undefined,
     progressPercent: typeof entry.progressPercent === 'number' ? entry.progressPercent : undefined,
     progressSeconds: typeof entry.progressSeconds === 'number' ? entry.progressSeconds : undefined,
-    provider: entry.provider === 'anilist' ? 'anilist' : entry.provider === 'anikoto' ? 'anikoto' : 'tmdb',
+    provider: entry.provider === 'anilist' ? 'anilist' : entry.provider === 'anikoto' ? 'anikoto' : entry.provider === 'mangadex' ? 'mangadex' : 'tmdb',
     rating: typeof entry.rating === 'number' ? entry.rating : undefined,
     season: typeof entry.season === 'string' ? entry.season : undefined,
     synopsis: typeof entry.synopsis === 'string' ? entry.synopsis : '',

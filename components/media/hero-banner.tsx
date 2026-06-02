@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
-import { getMediaKindLabel, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
+import { getMediaKindLabel, isMangaProvider, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
 import type { AnimePlayerId } from '@/lib/anime/player-metadata';
 
 interface HeroBannerProps {
@@ -50,21 +50,28 @@ export function HeroBanner({
   if (count === 0) return null;
 
   const active = items[activeIndex];
+  const isManga = isMangaProvider(active.provider);
   const resumeEntry = findResumeEntry(active, recentlyWatched);
   const heroImageUrl = active.backdropUrl ?? active.posterUrl;
   const playHref = buildWatchHref(active, {
     basePath: watchBasePath,
-    episode: resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
+    episode: resumeEntry?.provider === 'mangadex' ? resumeEntry.episode : resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
     language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
     player: preferredAnimePlayer,
     progress: resumeEntry?.progressSeconds,
-    season: resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
+    season: resumeEntry?.provider === 'mangadex' ? resumeEntry.season : resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
   });
   const playLabel =
-    resumeEntry?.type === 'tv' && resumeEntry.episode
-      ? resumeEntry.season
-        ? `Continue S${resumeEntry.season} E${resumeEntry.episode}`
-        : `Continue E${resumeEntry.episode}`
+    isManga
+      ? resumeEntry?.episode
+        ? `Continue Ch. ${resumeEntry.episode}`
+        : resumeEntry
+          ? 'Continue Reading'
+          : 'Read'
+      : resumeEntry?.type === 'tv' && resumeEntry.episode
+        ? resumeEntry.season
+          ? `Continue S${resumeEntry.season} E${resumeEntry.episode}`
+          : `Continue E${resumeEntry.episode}`
       : resumeEntry?.progressSeconds
         ? 'Continue'
         : 'Play';
@@ -138,7 +145,7 @@ export function HeroBanner({
                   href={playHref}
                   className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2.5 text-sm font-bold text-black transition-all hover:bg-zinc-200 active:scale-95"
                 >
-                  <Play className="h-4 w-4 fill-current" />
+                  {isManga ? <BookOpen className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
                   {playLabel}
                 </Link>
                 {onInfoSelect ? (

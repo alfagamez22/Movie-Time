@@ -190,6 +190,37 @@ test('serverEntryToClient rejects malformed entries', () => {
   assert.equal(result, null);
 });
 
+test('serverEntryToClient preserves the mangadex provider for manga history', () => {
+  const clientEntry = recentlyWatched.serverEntryToClient({
+    backdropUrl: null,
+    defaultLanguage: null,
+    episode: '12',
+    episodeCount: null,
+    experience: 'papimanga',
+    id: 'wh-manga',
+    mediaId: 'manga-123',
+    mediaProvider: 'mangadex',
+    mediaType: 'tv',
+    posterUrl: '/cover.jpg',
+    progressPercent: null,
+    progressSeconds: null,
+    rating: null,
+    season: 'chapter-id-12',
+    synopsis: 'A manga summary',
+    title: 'Example Manga',
+    updatedAt: 0,
+    userId: 'user-1',
+    watchedAt: 0,
+    year: 2024,
+    durationSeconds: null,
+  });
+
+  assert.ok(clientEntry);
+  assert.equal(clientEntry?.provider, 'mangadex');
+  assert.equal(clientEntry?.season, 'chapter-id-12');
+  assert.equal(clientEntry?.episode, '12');
+});
+
 test('mergeRecentlyWatched prefers the newer entry and merges progress maximums', () => {
   const localEntry = {
     backdropUrl: undefined,

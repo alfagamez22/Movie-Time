@@ -2,8 +2,10 @@ import { normalizeSlug } from '@/lib/slugs/media';
 
 import {
   isAnimeProvider,
+  isMangaProvider,
   type AnimePlaybackServer,
   type LibraryMediaEntry,
+  type MangaLanguage,
   type MediaEntry,
   type MediaType,
   type PlaybackLanguage,
@@ -15,7 +17,7 @@ interface WatchHrefOptions {
   basePath?: string;
   color?: string;
   episode?: number | string;
-  language?: PlaybackLanguage;
+  language?: PlaybackLanguage | MangaLanguage;
   player?: string;
   progress?: number | null;
   season?: number | string;
@@ -30,7 +32,27 @@ export function buildWatchSlug(title: string, id: string): string {
 }
 
 export function buildWatchHref(entry: RouteEntry, options: WatchHrefOptions = {}): string {
-  const basePath = options.basePath ?? (isAnimeProvider(entry.provider) ? '/anime/watch' : '/watch');
+  const basePath = options.basePath ?? (isMangaProvider(entry.provider) ? '/manga/read' : isAnimeProvider(entry.provider) ? '/anime/watch' : '/watch');
+
+  if (isMangaProvider(entry.provider)) {
+    const searchParams = new URLSearchParams();
+    const chapterRef =
+      typeof options.season === 'string' && options.season.trim()
+        ? options.season.trim()
+        : typeof options.episode === 'string' && options.episode.trim()
+          ? options.episode.trim()
+          : typeof options.episode === 'number'
+            ? String(options.episode)
+            : '';
+
+    if (options.language) {
+      searchParams.set('language', options.language === 'raw' ? 'raw' : 'en');
+    }
+
+    const search = searchParams.toString();
+    const chapterPath = chapterRef ? `/${encodeURIComponent(chapterRef)}` : '';
+    return `${basePath}/${encodeURIComponent(entry.id)}${chapterPath}${search ? `?${search}` : ''}`;
+  }
 
   if (isAnimeProvider(entry.provider)) {
     const searchParams = new URLSearchParams();
@@ -106,4 +128,12 @@ export function parsePlaybackLanguage(value: string | null | undefined): Playbac
   }
 
   return undefined;
+}
+
+export function parseMangaLanguage(value: string | null | undefined): MangaLanguage | undefined {
+  if (value === 'raw') {
+    return 'raw';
+  }
+
+  return 'en';
 }

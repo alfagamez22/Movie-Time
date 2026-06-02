@@ -16,7 +16,7 @@ export interface RecentlyWatchedEntry {
   posterUrl?: string;
   progressPercent?: number;
   progressSeconds?: number;
-  provider: 'tmdb' | 'anilist' | 'anikoto';
+  provider: 'tmdb' | 'anilist' | 'anikoto' | 'mangadex';
   rating?: number;
   season?: string;
   synopsis: string;
@@ -80,7 +80,7 @@ export function watchedAtToMs(value: string | number | Date | null | undefined):
 }
 
 function normalizeServerProvider(provider: string): RecentlyWatchedEntry['provider'] {
-  if (provider === 'anilist' || provider === 'anikoto' || provider === 'tmdb') {
+  if (provider === 'anilist' || provider === 'anikoto' || provider === 'mangadex' || provider === 'tmdb') {
     return provider;
   }
   return 'tmdb';

@@ -215,6 +215,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const isSearchPending = query.trim() !== debouncedQuery;
   const currentPlayerParam = searchParams.get('player');
   const currentAnimePlayer: AnimePlayerId = isAnimePlayerId(currentPlayerParam) ? currentPlayerParam : 'p1';
+  const preferredLanguage = experience.id === 'papianime' ? language : undefined;
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -449,7 +450,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           items={featuredItems}
           onInfoSelect={openDetails}
           preferredAnimePlayer={experience.id === 'papianime' ? currentAnimePlayer : undefined}
-          preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
+          preferredAnimeLanguage={preferredLanguage}
           recentlyWatched={recentlyWatched}
           watchBasePath={experience.watchBasePath}
         />
@@ -468,7 +469,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           <BrowseRow
             anchorId="recently-watched"
             key="recently-watched"
-            title="Recently Watched"
+            title={experience.id === 'papimanga' ? 'Recently Read' : 'Recently Watched'}
             entries={recentlyWatched}
             loop={false}
             onEntryRemove={removeRecentEntry}
@@ -495,7 +496,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         onSelectEntry={selectDetailsEntry}
         onSignInRequired={openAuthModal}
         preferredAnimePlayer={experience.id === 'papianime' ? currentAnimePlayer : undefined}
-        preferredAnimeLanguage={experience.preferenceMode === 'language' ? language : undefined}
+        preferredAnimeLanguage={preferredLanguage}
         recentlyWatched={recentlyWatched}
       />
 

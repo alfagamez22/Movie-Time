@@ -63,6 +63,8 @@ export const appConfig = {
   aniwaveCdnOrigin: readUrlEnv('ANIWAVE_CDN_ORIGIN', 'https://megaplay.buzz'),
   jikanApiBaseUrl: readUrlEnv('JIKAN_API_BASE_URL', 'https://api.jikan.moe/v4'),
   kitsuApiBaseUrl: readUrlEnv('KITSU_API_BASE_URL', 'https://kitsu.app/api/edge'),
+  mangadexApiBaseUrl: readUrlEnv('MANGADEX_API_BASE_URL', 'https://api.mangadex.org'),
+  mangadexCdnOrigin: readUrlEnv('MANGADEX_CDN_ORIGIN', 'https://uploads.mangadex.org'),
   name: APP_NAME,
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||

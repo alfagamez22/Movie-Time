@@ -1,10 +1,12 @@
 export type MediaType = 'movie' | 'tv';
 export type BrowseMediaType = MediaType | 'all';
-export type MediaProvider = 'tmdb' | 'anilist' | 'anikoto';
-export type MediaExperience = 'papiflix' | 'papianime';
+export type MediaProvider = 'tmdb' | 'anilist' | 'anikoto' | 'mangadex';
+export type MediaExperience = 'papiflix' | 'papianime' | 'papimanga';
 export type PlaybackLanguage = 'sub' | 'dub';
 export type AnimePlaybackServer = 'aniwave';
 export type AnimeFormat = 'TV' | 'TV_SHORT' | 'MOVIE' | 'SPECIAL' | 'OVA' | 'ONA' | 'MUSIC';
+export type MangaFormat = 'manga' | 'novel' | 'one_shot' | 'manhwa' | 'manhua';
+export type MangaLanguage = 'en' | 'raw';
 
 export interface PlaybackMarker {
   endTime: number;
@@ -71,6 +73,7 @@ interface CatalogEntryBase {
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
+  mangaFormat?: MangaFormat;
   nextEpisodeAt?: number;
   nextEpisodeNumber?: number;
   posterUrl?: string;
@@ -112,6 +115,7 @@ export interface LibraryMediaEntry {
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
+  mangaFormat?: MangaFormat;
   nextEpisodeAt?: number;
   nextEpisodeNumber?: number;
   posterUrl?: string;
@@ -203,7 +207,7 @@ export function getEpisodeLimit(entry: TvCatalogEntry | TvMediaEntry, season: st
 }
 
 export function getMediaKindLabel(
-  entry: Pick<LibraryMediaEntry | MediaEntry, 'animeFormat' | 'provider' | 'type'>,
+  entry: Pick<LibraryMediaEntry | MediaEntry, 'animeFormat' | 'mangaFormat' | 'provider' | 'type'>,
 ): string {
   if (isAnimeProvider(entry.provider)) {
     if (entry.type === 'movie') {
@@ -213,5 +217,61 @@ export function getMediaKindLabel(
     return entry.animeFormat === 'TV_SHORT' ? 'Anime Short' : 'Anime Series';
   }
 
+  if (entry.provider === 'mangadex') {
+    if (entry.mangaFormat === 'novel') {
+      return 'Light Novel';
+    }
+
+    if (entry.mangaFormat === 'manhwa') {
+      return 'Manhwa';
+    }
+
+    if (entry.mangaFormat === 'manhua') {
+      return 'Manhua';
+    }
+
+    if (entry.mangaFormat === 'one_shot') {
+      return 'One Shot';
+    }
+
+    return 'Manga';
+  }
+
   return entry.type === 'movie' ? 'Movie' : 'TV Series';
+}
+
+export interface MangaChapter {
+  chapter: string | null;
+  id: string;
+  language: string;
+  pages: number;
+  readableAt: string;
+  scanlationGroup: string;
+  title: string;
+  volume: string | null;
+}
+
+export interface MangaChapterPage {
+  height: number;
+  index: number;
+  src: string;
+  width: number;
+}
+
+export interface MangaChapterData {
+  chapters: MangaChapter[];
+  manga: {
+    id: string;
+    posterUrl: string;
+    title: string;
+  };
+}
+
+export interface MangaReadPayload {
+  chapter: MangaChapter;
+  pages: MangaChapterPage[];
+}
+
+export function isMangaProvider(provider: MediaProvider): boolean {
+  return provider === 'mangadex';
 }
