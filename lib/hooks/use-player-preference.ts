@@ -14,7 +14,7 @@ export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '2': 'VidSrc',
   '3': 'Videasy',
   '4': 'Vidking',
-  '5': 'Player 5',
+  '5': 'MultiEmbed',
 };
 
 export const ANIME_LANGUAGE_LABELS: Record<AnimeLanguageChoice, string> = {

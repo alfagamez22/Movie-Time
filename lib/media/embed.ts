@@ -207,12 +207,15 @@ export function buildStreamimdbEmbedUrl(imdbId: string, entry: MediaEntry, optio
     return '';
   }
 
-  const base = 'https://streamimdb.ru/embed';
-  const path = isTvEntry(entry)
-    ? `${base}/tv/${imdbId}`
-    : `${base}/movie/${imdbId}`;
+  const base = appConfig.multiEmbedBaseUrl;
+  const url = new URL(base);
 
-  const url = new URL(path);
+  url.searchParams.set('video_id', imdbId);
+
+  if (isTvEntry(entry)) {
+    url.searchParams.set('s', options.season);
+    url.searchParams.set('e', options.episode);
+  }
 
   if (options.autoPlay) {
     url.searchParams.set('autoplay', 'true');

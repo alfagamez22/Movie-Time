@@ -66,6 +66,7 @@ export const appConfig = {
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
     'Search-driven movie and series library with native playback controls.',
+  multiEmbedBaseUrl: readUrlEnv('MULTIEMBED_BASE_URL', 'https://multiembed.mov'),
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: readSiteUrl(),
