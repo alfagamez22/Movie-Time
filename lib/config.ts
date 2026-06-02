@@ -74,4 +74,5 @@ export const appConfig = {
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: readSiteUrl(),
   socialPreviewImage: SOCIAL_PREVIEW_IMAGE,
+
 };

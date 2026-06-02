@@ -67,12 +67,7 @@ export const papianimeExperience: MediaExperienceConfig = {
     { href: '/', label: 'PapiFlix' },
     { href: '/manga', label: 'PapiManga' },
   ],
-  // preferenceMode: 'player' — the PapiAnime home page renders the multi-player
-  // pill group (P1-P5) at the top of the page instead of the dub/sub language
-  // toggle. The dub/sub toggle still lives inside the watch player sidebar;
-  // the preference here is about which catalog/streaming source the user
-  // browses with on /anime.
-  preferenceMode: 'player',
+  preferenceMode: 'language',
   searchEndpoint: '/api/anime',
   searchPlaceholder: 'Search anime titles or AniList ID...',
   watchBasePath: '/anime/watch',

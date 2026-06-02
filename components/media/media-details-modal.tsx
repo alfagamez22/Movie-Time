@@ -7,7 +7,6 @@ import { BookOpen, ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
-import type { AnimePlayerId } from '@/lib/anime/player-metadata';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
 import {
@@ -29,7 +28,6 @@ interface MediaDetailsModalProps {
   onClose: () => void;
   onSelectEntry: (entry: LibraryMediaEntry) => void;
   onSignInRequired?: (reason: AuthPromptReason) => void;
-  preferredAnimePlayer?: AnimePlayerId;
   preferredAnimeLanguage?: PlaybackLanguage;
   recentlyWatched?: RecentlyWatchedEntry[];
 }
@@ -320,7 +318,6 @@ export function MediaDetailsModal({
   onClose,
   onSelectEntry,
   onSignInRequired,
-  preferredAnimePlayer,
   preferredAnimeLanguage,
   recentlyWatched,
 }: MediaDetailsModalProps) {
@@ -429,8 +426,7 @@ export function MediaDetailsModal({
     ? buildWatchHref(displayEntry, {
         basePath: experience.watchBasePath,
         episode: resumeEntry?.provider === 'mangadex' ? resumeEntry.episode : resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
-        language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
-        player: preferredAnimePlayer,
+    language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
         progress: resumeEntry?.progressSeconds,
         season: resumeEntry?.provider === 'mangadex' ? resumeEntry.season : resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
       })

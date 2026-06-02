@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { resolveAnimeMediaEntry } from '@/lib/anime/resolve';
+import { lookupAnimeMediaEntry } from '@/lib/anime/client';
 import { buildWatchSlug } from '@/lib/media/routes';
 
 interface AnimeRouteContext {
@@ -12,16 +12,16 @@ export async function GET(request: Request, context: AnimeRouteContext) {
   const identifier = decodeURIComponent(slug);
   const requestUrl = new URL(request.url);
   const preferredId = requestUrl.searchParams.get('id')?.trim();
-  const resolvedEntry = await resolveAnimeMediaEntry(identifier, preferredId);
+  const id = preferredId || identifier;
+  const lookup = await lookupAnimeMediaEntry(id);
 
-  if (!resolvedEntry) {
+  if (!lookup.ok) {
     return NextResponse.json({ error: 'Anime entry not found.' }, { status: 404 });
   }
 
   return NextResponse.json({
-    canonicalSlug: buildWatchSlug(resolvedEntry.entry.title, resolvedEntry.entry.id),
-    data: resolvedEntry.entry,
-    matchedBy: resolvedEntry.matchedBy,
+    canonicalSlug: buildWatchSlug(lookup.entry.title, lookup.entry.id),
+    data: lookup.entry,
     source: 'live',
   });
 }

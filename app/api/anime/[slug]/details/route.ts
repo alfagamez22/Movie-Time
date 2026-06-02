@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { lookupAnimeMediaDetails } from '@/lib/anime/client';
-import { resolveAnimeMediaEntry } from '@/lib/anime/resolve';
+import { lookupAnimeMediaDetails, lookupAnimeMediaEntry } from '@/lib/anime/client';
 
 interface AnimeDetailsRouteContext {
   params: Promise<{ slug: string }>;
@@ -12,21 +11,21 @@ export async function GET(request: Request, context: AnimeDetailsRouteContext) {
   const requestUrl = new URL(request.url);
   const identifier = decodeURIComponent(slug);
   const preferredId = requestUrl.searchParams.get('id')?.trim();
-  const resolvedEntry = await resolveAnimeMediaEntry(identifier, preferredId);
+  const id = preferredId || identifier;
+  const lookup = await lookupAnimeMediaEntry(id);
 
-  if (!resolvedEntry) {
+  if (!lookup.ok) {
     return NextResponse.json({ error: 'Anime entry not found.' }, { status: 404 });
   }
 
-  const details = await lookupAnimeMediaDetails(resolvedEntry.entry.id);
+  const details = await lookupAnimeMediaDetails(lookup.entry.id);
   if (!details.ok) {
     return NextResponse.json({ error: details.message }, { status: details.status });
   }
 
   return NextResponse.json({
     data: details.data,
-    matchedBy: resolvedEntry.matchedBy,
-    requestedKey: `anilist:${resolvedEntry.entry.type}:${preferredId ?? resolvedEntry.entry.id}`,
+    requestedKey: `anilist:${lookup.entry.type}:${id}`,
     source: 'live',
   });
 }

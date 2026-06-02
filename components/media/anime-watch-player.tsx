@@ -7,7 +7,6 @@ import { startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, Settings, SkipForward } from 'lucide-react';
 
-import { buildMegaPlayEmbedUrl } from '@/lib/media/embed';
 import { useAnimeLanguagePreference } from '@/lib/hooks/use-player-preference';
 import {
   getRecentlyWatchedProgress,
@@ -125,7 +124,7 @@ function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
   });
 }
 
-function LoadingState({ error, isLoading, vidnestEmbedUrl }: { error: string | null; isLoading: boolean; vidnestEmbedUrl?: string }) {
+function LoadingState({ error, isLoading }: { error: string | null; isLoading: boolean }) {
   if (!isLoading && !error) {
     return null;
   }
@@ -142,16 +141,7 @@ function LoadingState({ error, isLoading, vidnestEmbedUrl }: { error: string | n
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">
           {error ?? 'Resolving the selected anime source now.'}
         </p>
-        {error && vidnestEmbedUrl ? (
-          <a
-            href={vidnestEmbedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/20"
-          >
-            Watch on VidNest
-          </a>
-        ) : null}
+
       </div>
     </div>
   );
@@ -442,7 +432,6 @@ function SidebarControls({
 
 export function AnimeWatchPlayer({
   entry,
-  animePlayer,
   experience,
   initialPlayback,
   initialSeasonDetails = null,
@@ -450,7 +439,6 @@ export function AnimeWatchPlayer({
   const { data: session } = useSession();
   const router = useRouter();
   const { language: storedLanguage, setLanguage: setStoredLanguage } = useAnimeLanguagePreference();
-  const isEmbedPlayer = animePlayer === 'p2';
   const isSeries = entry.type === 'tv';
   const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
@@ -518,15 +506,10 @@ export function AnimeWatchPlayer({
   const manualQualityOptions = playbackData?.qualityOptions ?? [];
   const activeManualQuality =
     manualQualityOptions.find((candidate) => candidate.src === (selectedQualitySrc ?? playbackData?.src)) ?? null;
-  const embedUrl = buildMegaPlayEmbedUrl(entry, playbackOptions);
-  const resolvedSourceUrl = isEmbedPlayer ? undefined : selectedQualitySrc ?? playbackData?.src;
-  const resolvedSourceType = isEmbedPlayer ? undefined : activeManualQuality?.sourceType ?? playbackData?.sourceType;
+  const resolvedSourceUrl = selectedQualitySrc ?? playbackData?.src;
+  const resolvedSourceType = activeManualQuality?.sourceType ?? playbackData?.sourceType;
 
   useEffect(() => {
-    if (isEmbedPlayer) {
-      return;
-    }
-
     requestedRef.current = {
       episode: currentEpisode,
       language: currentLanguage,
@@ -574,20 +557,7 @@ export function AnimeWatchPlayer({
       });
 
     return () => controller.abort(new DOMException('Playback request changed', 'AbortError'));
-  }, [currentEpisode, currentLanguage, currentServer, entry.id, isEmbedPlayer]);
-
-  useEffect(() => {
-    if (!isEmbedPlayer || !isLoading) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setError('The embedded player did not finish loading.');
-      setIsLoading(false);
-    }, 12000);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [embedUrl, isEmbedPlayer, isLoading]);
+  }, [currentEpisode, currentLanguage, currentServer, entry.id]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -754,9 +724,8 @@ export function AnimeWatchPlayer({
       basePath: experience.watchBasePath,
       episode: currentEpisode,
       language: currentLanguage,
-      player: animePlayer,
       progress: null,
-      server: isEmbedPlayer ? undefined : currentServer,
+      server: currentServer,
       skipIntro: skipIntroEnabled,
     });
 
@@ -770,7 +739,7 @@ export function AnimeWatchPlayer({
     }
 
     startTransition(() => router.replace(href, { scroll: false }));
-  }, [autoNextEnabled, currentEpisode, currentLanguage, currentServer, entry, experience.watchBasePath, initialPlayback.autoPlay, animePlayer, isEmbedPlayer, router, skipIntroEnabled]);
+  }, [autoNextEnabled, currentEpisode, currentLanguage, currentServer, entry, experience.watchBasePath, initialPlayback.autoPlay, router, skipIntroEnabled]);
 
   useEffect(() => {
     return () => {
@@ -903,11 +872,10 @@ export function AnimeWatchPlayer({
   }, [showQualityMenu]);
 
   const showSkipButton =
-    !isEmbedPlayer &&
     Boolean(playbackData?.intro) &&
     playheadSeconds >= (playbackData?.intro?.startTime ?? Number.MAX_SAFE_INTEGER) &&
     playheadSeconds < (playbackData?.intro?.endTime ?? -1);
-  const showQualityControl = !isEmbedPlayer && (qualityLevels.length > 1 || manualQualityOptions.length > 1);
+  const showQualityControl = qualityLevels.length > 1 || manualQualityOptions.length > 1;
   const qualityButtonLabel =
     manualQualityOptions.length > 1
       ? activeManualQuality?.label ?? 'Quality'
@@ -941,7 +909,7 @@ export function AnimeWatchPlayer({
           </span>
         </div>
 
-        <LoadingState error={error} isLoading={isLoading} vidnestEmbedUrl={embedUrl} />
+        <LoadingState error={error} isLoading={isLoading} />
 
         {showSkipButton ? (
           <button
@@ -1015,7 +983,7 @@ export function AnimeWatchPlayer({
           </div>
         ) : null}
 
-        {!isEmbedPlayer && resolvedSourceUrl ? (
+        {resolvedSourceUrl ? (
           <button
             type="button"
             onClick={handleDownloadVideo}
@@ -1031,26 +999,7 @@ export function AnimeWatchPlayer({
           </button>
         ) : null}
 
-        {isEmbedPlayer ? (
-          <iframe
-            key={`${entry.id}-${currentEpisode}-${currentLanguage}-${currentServer}`}
-            src={embedUrl}
-            title={`Watch ${entry.title}`}
-            className="h-full w-full border-0 bg-black"
-            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            onLoad={() => {
-              setIsLoading(false);
-              setError(null);
-            }}
-            onError={() => {
-              setIsLoading(false);
-              setError('The embedded player could not be loaded.');
-            }}
-          />
-        ) : (
-          <video
+        <video
             key={`${entry.id}-${currentEpisode}-${currentLanguage}-${currentServer}`}
             ref={videoRef}
             controls
@@ -1072,7 +1021,6 @@ export function AnimeWatchPlayer({
               />
             ))}
           </video>
-        )}
       </div>
 
       {isSeries ? (
@@ -1090,7 +1038,7 @@ export function AnimeWatchPlayer({
           onSeasonChange={handleSeasonChange}
           onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
           onToggleSkipIntro={() => setSkipIntroEnabled((value) => !value)}
-          showPlaybackToggles={!isEmbedPlayer}
+          showPlaybackToggles
           skipIntroEnabled={skipIntroEnabled}
         />
       ) : (
@@ -1109,19 +1057,15 @@ export function AnimeWatchPlayer({
               </button>
             ))}
           </div>
-          {isEmbedPlayer ? null : (
-            <>
-              <button
-                type="button"
-                onClick={() => setSkipIntroEnabled((value) => !value)}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-                  skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
-                }`}
-              >
-                Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => setSkipIntroEnabled((value) => !value)}
+            className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+              skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
+            }`}
+          >
+            Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
+          </button>
         </div>
       )}
     </div>

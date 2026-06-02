@@ -8,12 +8,10 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import { getMediaKindLabel, isMangaProvider, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
-import type { AnimePlayerId } from '@/lib/anime/player-metadata';
 
 interface HeroBannerProps {
   items: LibraryMediaEntry[];
   onInfoSelect?: (entry: LibraryMediaEntry) => void;
-  preferredAnimePlayer?: AnimePlayerId;
   preferredAnimeLanguage?: PlaybackLanguage;
   recentlyWatched?: RecentlyWatchedEntry[];
   watchBasePath?: string;
@@ -30,7 +28,6 @@ function findResumeEntry(entry: LibraryMediaEntry, recentlyWatched: RecentlyWatc
 export function HeroBanner({
   items,
   onInfoSelect,
-  preferredAnimePlayer,
   preferredAnimeLanguage,
   recentlyWatched,
   watchBasePath,
@@ -57,7 +54,6 @@ export function HeroBanner({
     basePath: watchBasePath,
     episode: resumeEntry?.provider === 'mangadex' ? resumeEntry.episode : resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
     language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
-    player: preferredAnimePlayer,
     progress: resumeEntry?.progressSeconds,
     season: resumeEntry?.provider === 'mangadex' ? resumeEntry.season : resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
   });
@@ -199,7 +195,7 @@ export function HeroBanner({
         <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2 landscape:bottom-4">
           {items.map((item, i) => (
             <button
-              key={item.id}
+              key={`${item.provider}:${item.type}:${item.id}`}
               type="button"
               onClick={() => go(i)}
               aria-label={`Show ${item.title}`}

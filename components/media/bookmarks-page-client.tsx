@@ -30,7 +30,9 @@ function isAnimeBookmark(bookmark: BookmarkRecord): boolean {
 }
 
 function getExperienceLabel(experience: string): string {
-  return experience === 'papianime' ? 'PapiAnime' : 'PapiFlix';
+  if (experience === 'papianime') return 'PapiAnime';
+  if (experience === 'papimanga') return 'PapiManga';
+  return 'PapiFlix';
 }
 
 function getKindLabel(bookmark: BookmarkRecord): string {

@@ -4,9 +4,6 @@ import { redirect } from 'next/navigation';
 
 import { AnimeWatchPlayer } from '@/components/media/anime-watch-player';
 import { lookupAnimeMediaEntry } from '@/lib/anime/client';
-import { isAnimePlayerId, type AnimePlayerId } from '@/lib/anime/player-metadata';
-import { resolveAnimeMediaEntry } from '@/lib/anime/resolve';
-import { resolvePlaybackOptions } from '@/lib/media/embed';
 import { papianimeExperience } from '@/lib/media/experience';
 import { buildWatchHref, parseAnimePlaybackServer, parsePlaybackLanguage } from '@/lib/media/routes';
 
@@ -38,40 +35,6 @@ function parseProgressParam(value: string | undefined): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function parseAnimePlayerParam(value: string | undefined): AnimePlayerId {
-  return isAnimePlayerId(value) ? value : 'p1';
-}
-
-function serializeSearchParams(searchParams: URLSearchParams): string {
-  return Array.from(searchParams.entries())
-    .sort(([leftKey, leftValue], [rightKey, rightValue]) => {
-      return leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey);
-    })
-    .map(([key, value]) => `${key}=${value}`)
-    .join('&');
-}
-
-function normalizeSearchParams(searchParams: Record<string, string | string[] | undefined>): string {
-  const normalized = new URLSearchParams();
-
-  Object.entries(searchParams).forEach(([key, value]) => {
-    if (Array.isArray(value)) {
-      value.forEach((item) => {
-        if (item != null) {
-          normalized.append(key, item);
-        }
-      });
-      return;
-    }
-
-    if (value != null) {
-      normalized.set(key, value);
-    }
-  });
-
-  return serializeSearchParams(normalized);
-}
-
 function LookupErrorState({ message }: { message: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
@@ -92,17 +55,6 @@ function LookupErrorState({ message }: { message: string }) {
   );
 }
 
-type LegacyState =
-  | {
-      canonicalHref: string;
-      kind: 'legacy';
-      lookup: Awaited<ReturnType<typeof resolveAnimeMediaEntry>>;
-    }
-  | {
-      kind: 'error';
-      message: string;
-    };
-
 type CanonicalState =
   | {
       canonicalHref: string;
@@ -116,7 +68,6 @@ type CanonicalState =
         language: 'dub' | 'sub';
         progress: number | null;
         season: string;
-        player: AnimePlayerId;
         server?: 'aniwave';
         skipIntro: boolean;
       };
@@ -128,47 +79,6 @@ type CanonicalState =
       message: string;
     };
 
-async function resolveLegacyState(props: AnimeWatchPageProps, slug: string): Promise<LegacyState> {
-  const searchParams = await props.searchParams;
-  const identifier = decodeURIComponent(slug);
-  const preferredId = getFirstParam(searchParams.id)?.trim();
-  const player = parseAnimePlayerParam(getFirstParam(searchParams.player));
-  const resolvedEntry = await resolveAnimeMediaEntry(identifier, preferredId);
-
-  if (!resolvedEntry) {
-    return {
-      kind: 'error',
-      message: 'Search for a broader anime title or use the AniList identifier from the search results.',
-    };
-  }
-
-  const resolvedServer =
-    player === 'p2'
-      ? undefined
-      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? undefined;
-  const initialPlayback = {
-    ...resolvePlaybackOptions(resolvedEntry.entry, searchParams),
-    server: resolvedServer,
-  };
-  const canonicalHref = buildWatchHref(resolvedEntry.entry, {
-    autoNext: initialPlayback.autoNext,
-    autoPlay: initialPlayback.autoPlay,
-    basePath: papianimeExperience.watchBasePath,
-    episode: initialPlayback.episode,
-    language: initialPlayback.language,
-    progress: initialPlayback.progress,
-    player,
-    server: initialPlayback.server,
-    skipIntro: initialPlayback.skipIntro,
-  });
-
-  return {
-    canonicalHref,
-    kind: 'legacy',
-    lookup: resolvedEntry,
-  };
-}
-
 async function resolveCanonicalState(
   props: AnimeWatchPageProps,
   anilistId: string,
@@ -177,7 +87,6 @@ async function resolveCanonicalState(
 ): Promise<CanonicalState> {
   const searchParams = await props.searchParams;
   const lookup = await lookupAnimeMediaEntry(anilistId);
-  const player = parseAnimePlayerParam(getFirstParam(searchParams.player));
 
   if (!lookup.ok) {
     return {
@@ -189,10 +98,7 @@ async function resolveCanonicalState(
   const episodeLimit = lookup.seasonDetails?.releasedEpisodeCount ?? lookup.entry.episodeCount ?? 1;
   const parsedEpisode = Math.min(Math.max(1, Number.parseInt(episode, 10) || 1), episodeLimit);
   const parsedLanguage = (parsePlaybackLanguage(language) ?? lookup.entry.defaultLanguage ?? 'sub') as 'dub' | 'sub';
-  const resolvedServer =
-    player === 'p2'
-      ? undefined
-      : parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? undefined;
+  const resolvedServer = parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? undefined;
   const initialPlayback = {
     autoNext: parseBooleanParam(getFirstParam(searchParams.autonext), true),
     autoPlay: parseBooleanParam(getFirstParam(searchParams.autoPlay), true),
@@ -201,7 +107,6 @@ async function resolveCanonicalState(
     language: parsedLanguage,
     progress: parseProgressParam(getFirstParam(searchParams.progress)),
     season: '1',
-    player,
     server: resolvedServer,
     skipIntro: parseBooleanParam(getFirstParam(searchParams.skipintro), false),
   };
@@ -212,7 +117,6 @@ async function resolveCanonicalState(
     episode: initialPlayback.episode,
     language: initialPlayback.language,
     progress: initialPlayback.progress,
-    player,
     server: initialPlayback.server,
     skipIntro: initialPlayback.skipIntro,
   });
@@ -220,7 +124,7 @@ async function resolveCanonicalState(
   return {
     canonicalHref,
     currentPath: `/anime/watch/${encodeURIComponent(anilistId)}/${encodeURIComponent(episode)}/${language}`,
-    currentSearch: normalizeSearchParams(searchParams),
+    currentSearch: Object.entries(searchParams).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => Array.isArray(v) ? v.map(vv => `${k}=${vv}`).join('&') : `${k}=${v}`).join('&'),
     initialPlayback,
     kind: 'canonical',
     lookup,
@@ -229,21 +133,6 @@ async function resolveCanonicalState(
 
 export async function generateMetadata(props: AnimeWatchPageProps): Promise<Metadata> {
   const { segments } = await props.params;
-
-  if (segments.length === 1) {
-    const legacyState = await resolveLegacyState(props, segments[0]);
-    if (legacyState.kind === 'error' || !legacyState.lookup) {
-      return {};
-    }
-
-    const searchParams = await props.searchParams;
-    const playback = resolvePlaybackOptions(legacyState.lookup.entry, searchParams);
-
-    return {
-      description: legacyState.lookup.entry.synopsis || undefined,
-      title: `${legacyState.lookup.entry.title} Episode ${playback.episode.padStart(2, '0')}`,
-    };
-  }
 
   if (segments.length === 3) {
     const canonicalState = await resolveCanonicalState(props, segments[0], segments[1], segments[2]);
@@ -266,16 +155,6 @@ export async function generateMetadata(props: AnimeWatchPageProps): Promise<Meta
 export default async function AnimeWatchPage(props: AnimeWatchPageProps) {
   const { segments } = await props.params;
 
-  if (segments.length === 1) {
-    const legacyState = await resolveLegacyState(props, segments[0]);
-
-    if (legacyState.kind === 'error') {
-      return <LookupErrorState message={legacyState.message} />;
-    }
-
-    redirect(legacyState.canonicalHref);
-  }
-
   if (segments.length === 3) {
     const canonicalState = await resolveCanonicalState(props, segments[0], segments[1], segments[2]);
 
@@ -283,17 +162,9 @@ export default async function AnimeWatchPage(props: AnimeWatchPageProps) {
       return <LookupErrorState message={canonicalState.message} />;
     }
 
-    const canonicalUrl = new URL(canonicalState.canonicalHref, 'http://localhost');
-    const canonicalSearch = serializeSearchParams(canonicalUrl.searchParams);
-
-    if (canonicalState.currentPath !== canonicalUrl.pathname || canonicalState.currentSearch !== canonicalSearch) {
-      redirect(canonicalState.canonicalHref);
-    }
-
     return (
       <AnimeWatchPlayer
         entry={canonicalState.lookup.entry}
-        animePlayer={canonicalState.initialPlayback.player}
         experience={papianimeExperience}
         initialPlayback={canonicalState.initialPlayback}
         initialSeasonDetails={canonicalState.lookup.seasonDetails}

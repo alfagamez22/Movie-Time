@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { browseAnimeForPlayer, isAnimePlayerId, searchAnimeForPlayer, type AnimePlayerId } from '@/lib/anime/player-config';
+import { browseAnimeForPlayer, searchAnimeForPlayer } from '@/lib/anime/player-config';
 import type { LibraryMediaEntry, MediaType } from '@/lib/media/types';
 
 function parseMediaType(value: string | null): MediaType | undefined {
@@ -8,10 +8,6 @@ function parseMediaType(value: string | null): MediaType | undefined {
     return value;
   }
   return undefined;
-}
-
-function parsePlayer(value: string | null): AnimePlayerId {
-  return isAnimePlayerId(value) ? value : 'p1';
 }
 
 function dedupeEntries(entries: LibraryMediaEntry[]): LibraryMediaEntry[] {
@@ -25,11 +21,10 @@ function dedupeEntries(entries: LibraryMediaEntry[]): LibraryMediaEntry[] {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const type = parseMediaType(searchParams.get('type'));
-  const playerId = parsePlayer(searchParams.get('player'));
   const query = searchParams.get('q')?.trim() || '';
 
   if (query) {
-    const result = await searchAnimeForPlayer(playerId, query, type);
+    const result = await searchAnimeForPlayer('p1', query, type);
     const error = result.error ?? null;
 
     if (error && result.data.length === 0) {
@@ -37,9 +32,8 @@ export async function GET(request: Request) {
         {
           data: [],
           error,
-          filters: { player: playerId, query, type: type ?? null },
+          filters: { player: 'p1', query, type: type ?? null },
           mode: 'search',
-          player: playerId,
           source: result.source,
           total: 0,
           totalResults: 0,
@@ -50,24 +44,22 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       data: result.data,
-      filters: { player: playerId, query, type: type ?? null },
+      filters: { player: 'p1', query, type: type ?? null },
       mode: 'search',
-      player: playerId,
       source: result.source,
       total: result.data.length,
       totalResults: result.data.length,
     });
   }
 
-  const library = await browseAnimeForPlayer(playerId);
+  const library = await browseAnimeForPlayer('p1');
   if (library.error && library.data.length === 0) {
     return NextResponse.json(
       {
         data: [],
         error: library.error,
-        filters: { player: playerId, query: null, type: type ?? null },
+        filters: { player: 'p1', query: null, type: type ?? null },
         mode: 'browse',
-        player: playerId,
         source: library.source,
         total: 0,
         totalResults: 0,
@@ -80,9 +72,8 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     data: browseEntries,
-    filters: { player: playerId, query: null, type: type ?? null },
+    filters: { player: 'p1', query: null, type: type ?? null },
     mode: 'browse',
-    player: playerId,
     source: library.source,
     total: browseEntries.length,
     totalResults: browseEntries.length,

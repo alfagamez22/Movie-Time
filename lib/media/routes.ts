@@ -57,10 +57,6 @@ export function buildWatchHref(entry: RouteEntry, options: WatchHrefOptions = {}
   if (isAnimeProvider(entry.provider)) {
     const searchParams = new URLSearchParams();
 
-    if (options.player) {
-      searchParams.set('player', options.player);
-    }
-
     if (options.server && options.server !== 'aniwave') {
       searchParams.set('server', options.server);
     }
