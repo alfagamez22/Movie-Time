@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-export type PlayerChoice = '1' | '2' | '3' | '4' | '5';
+export type PlayerChoice = '1' | '2' | '3' | '4' | '5' | '6';
 export type AnimeLanguageChoice = 'dub' | 'sub';
 export type AnimeServerChoice = 'aniwave';
 
@@ -15,6 +15,7 @@ export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '3': 'Videasy',
   '4': 'Vidking',
   '5': 'MultiEmbed',
+  '6': 'FilmU',
 };
 
 export const ANIME_LANGUAGE_LABELS: Record<AnimeLanguageChoice, string> = {
@@ -31,7 +32,17 @@ interface ChoiceStore<T extends string> {
 }
 
 function normalizePlayerChoice(value: string | null): PlayerChoice {
-  return value === '2' ? '2' : value === '3' ? '3' : value === '4' ? '4' : value === '5' ? '5' : '1';
+  return value === '2'
+    ? '2'
+    : value === '3'
+      ? '3'
+      : value === '4'
+        ? '4'
+        : value === '5'
+          ? '5'
+          : value === '6'
+            ? '6'
+            : '1';
 }
 
 function migratePlayerChoice(value: string | null, version: string | null): PlayerChoice {

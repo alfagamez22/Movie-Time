@@ -9,6 +9,7 @@ import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
   buildEmbedUrl,
+  buildFilmuEmbedUrl,
   buildStreamimdbEmbedUrl,
   buildVidFastEmbedUrl,
   buildVideasyEmbedUrl,
@@ -312,7 +313,7 @@ export function WatchPlayer({
     ...initialPlayback,
     episode: safeEpisode,
     language: effectiveLanguage,
-    progress: player === '4' || player === '5' ? null : initialPlayback.progress,
+    progress: player === '4' || player === '5' || player === '6' ? null : initialPlayback.progress,
     season: safeSeason,
   };
   const isVidFastPlayer = !isAnime && player === '1';
@@ -322,9 +323,13 @@ export function WatchPlayer({
         ? buildVidSrcEmbedUrl(entry, playbackOptions)
         : player === '3'
           ? buildVideasyEmbedUrl(entry, playbackOptions)
-          : player === '5' && streamimdbId
-            ? buildStreamimdbEmbedUrl(streamimdbId, entry, playbackOptions)
-            : buildEmbedUrl(entry, playbackOptions);
+          : player === '5'
+            ? streamimdbId
+              ? buildStreamimdbEmbedUrl(streamimdbId, entry, playbackOptions)
+              : ''
+            : player === '6'
+              ? buildFilmuEmbedUrl(entry, playbackOptions)
+              : buildEmbedUrl(entry, playbackOptions);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
@@ -372,6 +377,10 @@ export function WatchPlayer({
   }, [player, entry.id, entry.type, isAnime]);
 
   useEffect(() => {
+    if (!embedUrl) {
+      return;
+    }
+
     hasIframeLoadedRef.current = false;
     const timeoutId = window.setTimeout(() => {
       if (hasIframeLoadedRef.current) return;
@@ -383,6 +392,10 @@ export function WatchPlayer({
   }, [embedUrl, isAnime]);
 
   useEffect(() => {
+    if (!embedUrl) {
+      return;
+    }
+
     const expectedOrigin = new URL(embedUrl).origin;
 
     const onMessage = (event: MessageEvent) => {

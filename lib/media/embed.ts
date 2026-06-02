@@ -173,6 +173,15 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
   return url.toString();
 }
 
+export function buildFilmuEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
+  const baseUrl = appConfig.filmuEmbedBaseUrl;
+  const path = isTvEntry(entry)
+    ? `${baseUrl}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${baseUrl}/movie/${encodeURIComponent(entry.id)}`;
+
+  return new URL(path).toString();
+}
+
 export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const base = 'https://vidsrc-embed.ru/embed';
   const tmdbId = encodeURIComponent(entry.id);

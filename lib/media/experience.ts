@@ -40,7 +40,7 @@ export const papiflixExperience: MediaExperienceConfig = {
     { href: '/manga', label: 'Manga' },
   ],
   // preferenceMode: 'player' — the PapiFlix watch UI shows a player-switcher
-  // (Player 1–5). Player 5 is the StreamIMDB embed and is exclusive to the
+  // (Player 1-6). Player 5 is the StreamIMDB embed and is exclusive to the
   // PapiFlix experience; it is intentionally absent on the /anime route because
   // papianimeExperience sets preferenceMode: 'language' (see below), which
   // renders a dub/sub toggle in place of the player-switcher.
