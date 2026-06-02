@@ -174,12 +174,15 @@ export function buildEmbedUrl(entry: MediaEntry, options: PlaybackOptions): stri
 }
 
 export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
-  const base = 'https://vidsrc.to/embed';
-  const path = isTvEntry(entry)
-    ? `${base}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
-    : `${base}/movie/${encodeURIComponent(entry.id)}`;
-
-  return path;
+  const base = 'https://vidsrc-embed.ru/embed';
+  const tmdbId = encodeURIComponent(entry.id);
+  const url = new URL(isTvEntry(entry) ? `${base}/tv` : `${base}/movie`);
+  url.searchParams.set('tmdb', tmdbId);
+  if (isTvEntry(entry)) {
+    url.searchParams.set('season', options.season);
+    url.searchParams.set('episode', options.episode);
+  }
+  return url.toString();
 }
 
 export function buildAnimepaheEmbedUrl(
