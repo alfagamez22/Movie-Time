@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { AnimeWatchPlayer } from '@/components/media/anime-watch-player';
 import { lookupAnimeMediaEntry } from '@/lib/anime/client';
 import { papianimeExperience } from '@/lib/media/experience';
-import { buildWatchHref, parseAnimePlaybackServer, parsePlaybackLanguage } from '@/lib/media/routes';
+import { buildWatchHref, parsePlaybackLanguage } from '@/lib/media/routes';
 
 interface AnimeWatchPageProps {
   params: Promise<{ segments: string[] }>;
@@ -68,7 +68,6 @@ type CanonicalState =
         language: 'dub' | 'sub';
         progress: number | null;
         season: string;
-        server?: 'aniwave';
         skipIntro: boolean;
       };
       kind: 'canonical';
@@ -98,7 +97,6 @@ async function resolveCanonicalState(
   const episodeLimit = lookup.seasonDetails?.releasedEpisodeCount ?? lookup.entry.episodeCount ?? 1;
   const parsedEpisode = Math.min(Math.max(1, Number.parseInt(episode, 10) || 1), episodeLimit);
   const parsedLanguage = (parsePlaybackLanguage(language) ?? lookup.entry.defaultLanguage ?? 'sub') as 'dub' | 'sub';
-  const resolvedServer = parseAnimePlaybackServer(getFirstParam(searchParams.server)) ?? undefined;
   const initialPlayback = {
     autoNext: parseBooleanParam(getFirstParam(searchParams.autonext), true),
     autoPlay: parseBooleanParam(getFirstParam(searchParams.autoPlay), true),
@@ -107,7 +105,6 @@ async function resolveCanonicalState(
     language: parsedLanguage,
     progress: parseProgressParam(getFirstParam(searchParams.progress)),
     season: '1',
-    server: resolvedServer,
     skipIntro: parseBooleanParam(getFirstParam(searchParams.skipintro), false),
   };
   const canonicalHref = buildWatchHref(lookup.entry, {
@@ -117,7 +114,6 @@ async function resolveCanonicalState(
     episode: initialPlayback.episode,
     language: initialPlayback.language,
     progress: initialPlayback.progress,
-    server: initialPlayback.server,
     skipIntro: initialPlayback.skipIntro,
   });
 

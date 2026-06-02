@@ -189,12 +189,18 @@ async function requestAnilist<T>(query: string, variables: Record<string, unknow
     return cached.value as T;
   }
 
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+
+  if (appConfig.anilistClientId) {
+    headers['X-Anilist-Client-Id'] = appConfig.anilistClientId;
+  }
+
   const response = await fetch(appConfig.anilistGraphqlUrl, {
     body: JSON.stringify({ query, variables }),
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
+    headers,
     method: 'POST',
     next: {
       revalidate: Math.max(60, Math.floor(ttlMs / 1000)),
@@ -281,6 +287,10 @@ export async function fetchAnilistMediaById(id: string): Promise<AnilistMediaDet
   return result.Media ?? null;
 }
 
+function buildAdultFilter(): string {
+  return appConfig.animeIncludeAdult ? '' : 'isAdult: false, ';
+}
+
 export async function searchAnilistAnime(queryText: string, perPage = 18): Promise<AnilistMedia[]> {
   const trimmedQuery = queryText.trim();
   if (!trimmedQuery) {
@@ -290,7 +300,7 @@ export async function searchAnilistAnime(queryText: string, perPage = 18): Promi
   const query = `
     query AnimeSearch($search: String!, $perPage: Int!) {
       Page(page: 1, perPage: $perPage) {
-        media(type: ANIME, isAdult: false, search: $search, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
+        media(type: ANIME, ${buildAdultFilter()}search: $search, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
@@ -307,35 +317,36 @@ export async function searchAnilistAnime(queryText: string, perPage = 18): Promi
 
 export async function fetchAnilistBrowseBuckets(): Promise<BrowseQueryResult> {
   const { season, year } = getCurrentSeason();
+  const adultFilter = buildAdultFilter();
   const query = `
     query AnimeBrowse($season: MediaSeason!, $seasonYear: Int!) {
       trending: Page(page: 1, perPage: 18) {
-        media(type: ANIME, isAdult: false, sort: [TRENDING_DESC, POPULARITY_DESC]) {
+        media(type: ANIME, ${adultFilter}sort: [TRENDING_DESC, POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       seasonal: Page(page: 1, perPage: 18) {
-        media(type: ANIME, isAdult: false, season: $season, seasonYear: $seasonYear, sort: [POPULARITY_DESC]) {
+        media(type: ANIME, ${adultFilter}season: $season, seasonYear: $seasonYear, sort: [POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       airing: Page(page: 1, perPage: 18) {
-        media(type: ANIME, isAdult: false, status: RELEASING, sort: [POPULARITY_DESC]) {
+        media(type: ANIME, ${adultFilter}status: RELEASING, sort: [POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       topRated: Page(page: 1, perPage: 18) {
-        media(type: ANIME, isAdult: false, sort: [SCORE_DESC, POPULARITY_DESC]) {
+        media(type: ANIME, ${adultFilter}sort: [SCORE_DESC, POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       movies: Page(page: 1, perPage: 18) {
-        media(type: ANIME, isAdult: false, format: MOVIE, sort: [POPULARITY_DESC]) {
+        media(type: ANIME, ${adultFilter}format: MOVIE, sort: [POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }
       completed: Page(page: 1, perPage: 18) {
-        media(type: ANIME, isAdult: false, status: FINISHED, sort: [END_DATE_DESC, POPULARITY_DESC]) {
+        media(type: ANIME, ${adultFilter}status: FINISHED, sort: [END_DATE_DESC, POPULARITY_DESC]) {
           ${MEDIA_CARD_FRAGMENT}
         }
       }

@@ -8,10 +8,6 @@ import ts from 'typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ---------------------------------------------------------------------------
-// Test infrastructure (mirrors watch-history.test.mjs pattern)
-// ---------------------------------------------------------------------------
-
 function loadTsModuleWithRequire(relativePath, options = {}) {
   const filename = resolve(__dirname, '..', relativePath);
   const source = readFileSync(filename, 'utf8');
@@ -36,26 +32,8 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
   return runtimeModule.exports;
 }
 
-// Minimal AniZip stubs used by episodes.ts
-const aniZipStub = {
-  listAniZipEpisodes(mappings) {
-    const episodes = mappings?.episodes ?? {};
-    return Object.entries(episodes)
-      .map(([key, value]) => ({
-        ...value,
-        episodeNumber: value?.episodeNumber ?? (Number.parseInt(key, 10) || null),
-      }))
-      .filter((ep) => typeof ep.episodeNumber === 'number' && ep.episodeNumber > 0)
-      .sort((a, b) => a.episodeNumber - b.episodeNumber);
-  },
-  getAniZipEpisodeTitle(episode) {
-    return episode?.title?.en?.trim() || episode?.title?.['x-jat']?.trim() || episode?.title?.ja?.trim() || '';
-  },
-};
-
 const episodes = loadTsModuleWithRequire('lib/anime/episodes.ts', {
   stubs: {
-    '@/lib/anime/ani-zip': aniZipStub,
     '@/lib/media/types': {},
     '@/lib/anime/anilist': {},
   },
@@ -69,24 +47,12 @@ const {
   getBackdropUrl,
   getPosterUrl,
   isReleasedAnime,
-  getReleasedEpisodeCount,
-  getVisibleEpisodeCount,
-  getNextEpisodeInfo,
   getEpisodeCount,
-  isAniZipEpisodeReleased,
-  isAniZipEpisodeScheduled,
-  getUpcomingEpisodeBoundary,
   getStartDateTimestamp,
 } = episodes;
 
-// ---------------------------------------------------------------------------
-// Helpers for building test fixtures
-// ---------------------------------------------------------------------------
-
-const FAR_FUTURE = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365; // 1 year from now
-const FAR_PAST = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365;   // 1 year ago
-const TOMORROW = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
-const YESTERDAY = Math.floor(Date.now() / 1000) - 60 * 60 * 24;
+const FAR_FUTURE = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
+const FAR_PAST = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365;
 
 function makeMedia(overrides = {}) {
   return {
@@ -106,24 +72,6 @@ function makeMedia(overrides = {}) {
   };
 }
 
-function makeMappings(episodeList) {
-  const episodes = {};
-  for (const ep of episodeList) {
-    episodes[String(ep.episodeNumber)] = {
-      episodeNumber: ep.episodeNumber,
-      airDate: ep.airDate ?? null,
-      title: ep.title ? { en: ep.title } : null,
-      runtime: ep.runtime ?? null,
-      overview: ep.overview ?? null,
-    };
-  }
-  return { episodes };
-}
-
-// ---------------------------------------------------------------------------
-// cleanText
-// ---------------------------------------------------------------------------
-
 test('cleanText: null/undefined → empty string', () => {
   assert.equal(cleanText(null), '');
   assert.equal(cleanText(undefined), '');
@@ -140,10 +88,6 @@ test('cleanText: normalises CRLF to LF', () => {
 test('cleanText: converts numbers to strings', () => {
   assert.equal(cleanText(42), '42');
 });
-
-// ---------------------------------------------------------------------------
-// cleanSynopsis
-// ---------------------------------------------------------------------------
 
 test('cleanSynopsis: strips HTML tags', () => {
   assert.equal(cleanSynopsis('<p>Hello <b>world</b></p>'), 'Hello world');
@@ -166,10 +110,6 @@ test('cleanSynopsis: handles null', () => {
   assert.equal(cleanSynopsis(null), '');
 });
 
-// ---------------------------------------------------------------------------
-// mapAnilistFormatToMediaType
-// ---------------------------------------------------------------------------
-
 test('mapAnilistFormatToMediaType: MOVIE → movie', () => {
   assert.equal(mapAnilistFormatToMediaType('MOVIE'), 'movie');
 });
@@ -190,18 +130,14 @@ test('mapAnilistFormatToMediaType: undefined → tv (default)', () => {
   assert.equal(mapAnilistFormatToMediaType(undefined), 'tv');
 });
 
-// ---------------------------------------------------------------------------
-// getAnilistTitle
-// ---------------------------------------------------------------------------
-
-test('getAnilistTitle: prefers userPreferred', () => {
+test('getAnilistTitle: prefers english', () => {
   const media = makeMedia({ title: { userPreferred: 'Preferred', english: 'English', romaji: 'Romaji', native: 'Native' } });
-  assert.equal(getAnilistTitle(media), 'Preferred');
+  assert.equal(getAnilistTitle(media), 'English');
 });
 
-test('getAnilistTitle: falls through to english when userPreferred missing', () => {
-  const media = makeMedia({ title: { userPreferred: null, english: 'English Title', romaji: null, native: null } });
-  assert.equal(getAnilistTitle(media), 'English Title');
+test('getAnilistTitle: falls through to userPreferred when english missing', () => {
+  const media = makeMedia({ title: { userPreferred: 'Preferred', english: null, romaji: null, native: null } });
+  assert.equal(getAnilistTitle(media), 'Preferred');
 });
 
 test('getAnilistTitle: falls through to romaji', () => {
@@ -218,10 +154,6 @@ test('getAnilistTitle: falls back to AniList ID', () => {
   const media = makeMedia({ id: 999, title: { userPreferred: null, english: null, romaji: null, native: null } });
   assert.equal(getAnilistTitle(media), 'AniList 999');
 });
-
-// ---------------------------------------------------------------------------
-// getBackdropUrl / getPosterUrl
-// ---------------------------------------------------------------------------
 
 test('getBackdropUrl: returns bannerImage when present', () => {
   const media = makeMedia({ bannerImage: 'https://cdn/banner.jpg', coverImage: { extraLarge: 'https://cdn/cover.jpg' } });
@@ -247,10 +179,6 @@ test('getPosterUrl: falls back to backdrop', () => {
   const media = makeMedia({ bannerImage: 'https://cdn/banner.jpg', coverImage: null });
   assert.equal(getPosterUrl(media), 'https://cdn/banner.jpg');
 });
-
-// ---------------------------------------------------------------------------
-// isReleasedAnime
-// ---------------------------------------------------------------------------
 
 test('isReleasedAnime: NOT_YET_RELEASED status → false', () => {
   const media = makeMedia({ status: 'NOT_YET_RELEASED' });
@@ -289,65 +217,14 @@ test('isReleasedAnime: RELEASING with episode 2 airing soon → true', () => {
   assert.equal(isReleasedAnime(media), true);
 });
 
-// ---------------------------------------------------------------------------
-// getReleasedEpisodeCount
-// ---------------------------------------------------------------------------
-
-test('getReleasedEpisodeCount: MOVIE format → 1 if released', () => {
+test('getEpisodeCount: MOVIE format → 1 if released', () => {
   const media = makeMedia({ format: 'MOVIE', status: 'FINISHED' });
-  assert.equal(getReleasedEpisodeCount(media), 1);
+  assert.equal(getEpisodeCount(media), 1);
 });
 
-test('getReleasedEpisodeCount: MOVIE format → 0 if not released', () => {
+test('getEpisodeCount: MOVIE format → 0 if not released', () => {
   const media = makeMedia({ format: 'MOVIE', status: 'NOT_YET_RELEASED' });
-  assert.equal(getReleasedEpisodeCount(media), 0);
-});
-
-test('getReleasedEpisodeCount: FINISHED TV with episodes field → episode count', () => {
-  const media = makeMedia({ format: 'TV', status: 'FINISHED', episodes: 24 });
-  assert.equal(getReleasedEpisodeCount(media), 24);
-});
-
-test('getReleasedEpisodeCount: RELEASING TV, uses upcoming boundary', () => {
-  const media = makeMedia({
-    format: 'TV',
-    status: 'RELEASING',
-    episodes: null,
-    nextAiringEpisode: { episode: 5, airingAt: TOMORROW },
-  });
-  // upcomingEpisodeBoundary = 5, so released = max(5-1, 0) = 4
-  assert.equal(getReleasedEpisodeCount(media), 4);
-});
-
-test('getReleasedEpisodeCount: RELEASING TV, no boundary, uses AniZip episodes', () => {
-  const media = makeMedia({
-    format: 'TV',
-    status: 'RELEASING',
-    episodes: null,
-    nextAiringEpisode: null,
-  });
-  const pastDate = '2020-01-01';
-  const mappings = makeMappings([
-    { episodeNumber: 1, airDate: pastDate },
-    { episodeNumber: 2, airDate: pastDate },
-    { episodeNumber: 3, airDate: pastDate },
-  ]);
-  assert.equal(getReleasedEpisodeCount(media, mappings), 3);
-});
-
-// ---------------------------------------------------------------------------
-// getEpisodeCount
-// ---------------------------------------------------------------------------
-
-test('getEpisodeCount: MOVIE → always 1', () => {
-  const media = makeMedia({ format: 'MOVIE', status: 'FINISHED', episodes: 0 });
-  assert.equal(getEpisodeCount(media), 1);
-});
-
-test('getEpisodeCount: TV min 1', () => {
-  // NOT_YET_RELEASED → releasedEpisodeCount = 0, getEpisodeCount clamps to 1
-  const media = makeMedia({ format: 'TV', status: 'NOT_YET_RELEASED', episodes: 0 });
-  assert.equal(getEpisodeCount(media), 1);
+  assert.equal(getEpisodeCount(media), 0);
 });
 
 test('getEpisodeCount: TV finished 12ep → 12', () => {
@@ -355,92 +232,30 @@ test('getEpisodeCount: TV finished 12ep → 12', () => {
   assert.equal(getEpisodeCount(media), 12);
 });
 
-// ---------------------------------------------------------------------------
-// getNextEpisodeInfo
-// ---------------------------------------------------------------------------
-
-test('getNextEpisodeInfo: non-tv entry → empty object', () => {
-  const media = makeMedia({ format: 'MOVIE' });
-  assert.deepEqual(getNextEpisodeInfo(media), {});
-});
-
-test('getNextEpisodeInfo: not yet released → empty object', () => {
-  const media = makeMedia({ format: 'TV', status: 'NOT_YET_RELEASED' });
-  assert.deepEqual(getNextEpisodeInfo(media), {});
-});
-
-test('getNextEpisodeInfo: airing in the future → returns episode info', () => {
+test('getEpisodeCount: RELEASING TV uses next airing boundary when episode count is missing', () => {
   const media = makeMedia({
     format: 'TV',
     status: 'RELEASING',
-    nextAiringEpisode: { episode: 7, airingAt: FAR_FUTURE },
+    episodes: null,
+    nextAiringEpisode: { episode: 1165, airingAt: FAR_FUTURE },
   });
-  const result = getNextEpisodeInfo(media);
-  assert.equal(result.nextEpisodeNumber, 7);
-  assert.equal(result.nextEpisodeAt, FAR_FUTURE);
+  assert.equal(getEpisodeCount(media), 1164);
 });
 
-test('getNextEpisodeInfo: airing time in the past → empty object', () => {
+test('getEpisodeCount: RELEASING TV prefers next airing boundary over stale episode field', () => {
   const media = makeMedia({
     format: 'TV',
     status: 'RELEASING',
-    nextAiringEpisode: { episode: 7, airingAt: FAR_PAST },
+    episodes: 1,
+    nextAiringEpisode: { episode: 10, airingAt: FAR_FUTURE },
   });
-  assert.deepEqual(getNextEpisodeInfo(media), {});
+  assert.equal(getEpisodeCount(media), 9);
 });
 
-// ---------------------------------------------------------------------------
-// getUpcomingEpisodeBoundary
-// ---------------------------------------------------------------------------
-
-test('getUpcomingEpisodeBoundary: no nextAiringEpisode → null', () => {
-  const media = makeMedia({ nextAiringEpisode: null });
-  assert.equal(getUpcomingEpisodeBoundary(media), null);
+test('getEpisodeCount: TV NOT_YET_RELEASED → 0', () => {
+  const media = makeMedia({ format: 'TV', status: 'NOT_YET_RELEASED', episodes: 0 });
+  assert.equal(getEpisodeCount(media), 0);
 });
-
-test('getUpcomingEpisodeBoundary: future airing → episode number', () => {
-  const media = makeMedia({ nextAiringEpisode: { episode: 3, airingAt: FAR_FUTURE } });
-  assert.equal(getUpcomingEpisodeBoundary(media), 3);
-});
-
-test('getUpcomingEpisodeBoundary: airing time in the past → null', () => {
-  const media = makeMedia({ nextAiringEpisode: { episode: 3, airingAt: FAR_PAST } });
-  assert.equal(getUpcomingEpisodeBoundary(media), null);
-});
-
-// ---------------------------------------------------------------------------
-// isAniZipEpisodeReleased / isAniZipEpisodeScheduled
-// ---------------------------------------------------------------------------
-
-test('isAniZipEpisodeReleased: no airDate → true (assume released)', () => {
-  assert.equal(isAniZipEpisodeReleased({ airDate: null }), true);
-});
-
-test('isAniZipEpisodeReleased: past airDate → true', () => {
-  assert.equal(isAniZipEpisodeReleased({ airDate: '2020-01-01' }), true);
-});
-
-test('isAniZipEpisodeReleased: future airDate → false', () => {
-  const nextYear = new Date().getUTCFullYear() + 1;
-  assert.equal(isAniZipEpisodeReleased({ airDate: `${nextYear}-01-01` }), false);
-});
-
-test('isAniZipEpisodeScheduled: no airDate → false', () => {
-  assert.equal(isAniZipEpisodeScheduled({ airDate: null }), false);
-});
-
-test('isAniZipEpisodeScheduled: future airDate → true', () => {
-  const nextYear = new Date().getUTCFullYear() + 1;
-  assert.equal(isAniZipEpisodeScheduled({ airDate: `${nextYear}-01-01` }), true);
-});
-
-test('isAniZipEpisodeScheduled: past airDate → false', () => {
-  assert.equal(isAniZipEpisodeScheduled({ airDate: '2020-01-01' }), false);
-});
-
-// ---------------------------------------------------------------------------
-// getStartDateTimestamp
-// ---------------------------------------------------------------------------
 
 test('getStartDateTimestamp: no year → null', () => {
   const media = makeMedia({ startDate: { year: null, month: 4, day: 1 } });

@@ -9,7 +9,6 @@ import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
   buildEmbedUrl,
-  buildMegaPlayEmbedUrl,
   buildStreamimdbEmbedUrl,
   buildVidFastEmbedUrl,
   buildVideasyEmbedUrl,
@@ -317,9 +316,7 @@ export function WatchPlayer({
     season: safeSeason,
   };
   const isVidFastPlayer = !isAnime && player === '1';
-  const embedUrl = isAnime
-    ? buildMegaPlayEmbedUrl(entry, playbackOptions)
-    : player === '1'
+  const embedUrl = player === '1'
       ? buildVidFastEmbedUrl(entry, playbackOptions)
       : player === '2'
         ? buildVidSrcEmbedUrl(entry, playbackOptions)

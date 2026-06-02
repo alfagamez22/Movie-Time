@@ -21,22 +21,10 @@ export default async function MangaReadPage(props: ReadPageProps) {
     return <div className="flex min-h-screen items-center justify-center bg-[#050505] text-white">Missing manga ID.</div>;
   }
 
-  try {
-    const data = await loadMangaReadPageData(mangaId, chapter, language);
+  let data: Awaited<ReturnType<typeof loadMangaReadPageData>>;
 
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-[#050505]" />}>
-        <MangaReaderClient
-          chapterData={data.chapterData}
-          entry={data.entry}
-          mangaId={mangaId}
-          mangaTitle={data.entry.title}
-          nextChapter={data.nextChapter}
-          payload={data.payload}
-          prevChapter={data.prevChapter}
-        />
-      </Suspense>
-    );
+  try {
+    data = await loadMangaReadPageData(mangaId, chapter, language);
   } catch (err) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#050505] text-white">
@@ -45,4 +33,18 @@ export default async function MangaReadPage(props: ReadPageProps) {
       </div>
     );
   }
+
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#050505]" />}>
+      <MangaReaderClient
+        chapterData={data.chapterData}
+        entry={data.entry}
+        mangaId={mangaId}
+        mangaTitle={data.entry.title}
+        nextChapter={data.nextChapter}
+        payload={data.payload}
+        prevChapter={data.prevChapter}
+      />
+    </Suspense>
+  );
 }

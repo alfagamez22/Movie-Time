@@ -397,7 +397,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             title={section.title}
             entries={section.entries}
             onEntrySelect={openDetails}
-            prioritizeLeadPoster={recentlyWatched.length === 0 && index === 0}
+            prioritizeLeadPoster={index === 0}
           />
         ))}
       </div>

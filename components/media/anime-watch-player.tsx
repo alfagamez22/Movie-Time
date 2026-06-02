@@ -1,11 +1,10 @@
 'use client';
 
-import Hls from 'hls.js';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download, Settings, SkipForward } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 import { useAnimeLanguagePreference } from '@/lib/hooks/use-player-preference';
 import {
@@ -15,36 +14,41 @@ import {
   useWatchedEpisodes,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
+import { buildAnimepaheEmbedUrl } from '@/lib/media/embed';
 import {
   getEpisodeLimit,
-  type AnimePlaybackPayload,
-  type AnimePlaybackQualityOption,
-  type AnimePlaybackServer,
   type EpisodePreview,
 } from '@/lib/media/types';
 
 import type { WatchPlayerProps } from './watch-player.types';
 
-interface AnimePlaybackResponse {
-  data?: AnimePlaybackPayload;
-  error?: string;
-}
-
-interface QualityLevel {
-  height: number;
-  index: number;
-}
-
 const ANIME_EPISODE_GROUP_SIZE = 50;
+const VIDNEST_ORIGIN = 'https://vidnest.fun';
+
+interface NormalizedPlayerProgress {
+  durationSeconds?: number;
+  progressPercent?: number;
+  progressSeconds: number;
+}
+
+interface PapiProgressPayload {
+  anilistId: string;
+  season: string;
+  episode: string;
+  title: string;
+  posterUrl?: string | null;
+  backdropUrl?: string | null;
+  startAt: number;
+  currentTime: number;
+  duration?: number | null;
+  progressPercent: number;
+  lastEventType?: string | null;
+}
 
 function buildEpisodeHistoryKey(seasonNumber: number, episodeNumber: number): string {
   return `${seasonNumber}:${episodeNumber}`;
 }
 
-/**
- * Normalize a URL search string for comparison, stripping transient params
- * (e.g. `progress`) and sorting remaining keys alphabetically.
- */
 function normalizeWatchSearch(searchString: string): string {
   if (!searchString || searchString === '?') return '';
   const params = new URLSearchParams(searchString.startsWith('?') ? searchString.slice(1) : searchString);
@@ -124,27 +128,97 @@ function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
   });
 }
 
-function LoadingState({ error, isLoading }: { error: string | null; isLoading: boolean }) {
-  if (!isLoading && !error) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readNumber(records: Record<string, unknown>[], keys: string[]): number | undefined {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string') {
+        const parsed = Number.parseFloat(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseMessageData(data: unknown): unknown {
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data);
+    } catch {
+      return data;
+    }
+  }
+  return data;
+}
+
+function readEventName(records: Record<string, unknown>[]): string {
+  for (const record of records) {
+    for (const key of ['type', 'event', 'name', 'action']) {
+      const value = record[key];
+      if (typeof value === 'string') return value.toLowerCase();
+    }
+  }
+  return '';
+}
+
+function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
+  const parsed = parseMessageData(data);
+  if (!isRecord(parsed)) return null;
+
+  const nestedRecords = [parsed.data, parsed.payload, parsed.detail, parsed.player, parsed.video].filter(isRecord);
+  const records = [parsed, ...nestedRecords];
+  const eventName = readEventName(records);
+  const looksLikeProgressEvent = /progress|time|seek|pause|play|ended|update/.test(eventName);
+
+  let progressSeconds = readNumber(records, [
+    'currentTime',
+    'current_time',
+    'seconds',
+    'time',
+    'position',
+    'playedSeconds',
+  ]);
+  const durationSeconds = readNumber(records, ['duration', 'totalDuration', 'total_duration', 'length']);
+  let progressPercent = readNumber(records, ['progressPercent', 'progress_percent', 'percent', 'percentage']);
+  const rawProgress = readNumber(records, ['progress']);
+
+  if (rawProgress !== undefined && progressSeconds === undefined) {
+    if (durationSeconds && rawProgress <= 100) {
+      progressPercent = progressPercent ?? (rawProgress <= 1 ? rawProgress * 100 : rawProgress);
+      progressSeconds = durationSeconds * (progressPercent / 100);
+    } else {
+      progressSeconds = rawProgress;
+    }
+  } else if (progressSeconds === undefined && durationSeconds && progressPercent !== undefined) {
+    progressSeconds = durationSeconds * (progressPercent / 100);
+  }
+
+  if (progressSeconds === undefined || !Number.isFinite(progressSeconds) || progressSeconds < 0) {
     return null;
   }
 
-  return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 px-6 backdrop-blur-sm">
-      <div className="max-w-md rounded-2xl border border-white/10 bg-black/75 p-5 text-center shadow-2xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
-          {error ? 'Playback Error' : 'Loading Player'}
-        </p>
-        <h2 className="mt-3 text-xl font-bold text-white">
-          {error ? 'This stream could not be loaded.' : 'Preparing your stream...'}
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-          {error ?? 'Resolving the selected anime source now.'}
-        </p>
+  if (!looksLikeProgressEvent && durationSeconds === undefined && progressPercent === undefined) {
+    return null;
+  }
 
-      </div>
-    </div>
-  );
+  const clampedPercent =
+    progressPercent !== undefined && Number.isFinite(progressPercent)
+      ? Math.min(100, Math.max(0, progressPercent))
+      : durationSeconds && durationSeconds > 0
+        ? Math.min(100, Math.max(0, (progressSeconds / durationSeconds) * 100))
+        : undefined;
+
+  return {
+    durationSeconds,
+    progressPercent: clampedPercent,
+    progressSeconds,
+  };
 }
 
 function EpisodeStillImage({
@@ -274,8 +348,6 @@ function SidebarControls({
   onLanguageChange,
   onSeasonChange,
   onToggleAutoNext,
-  onToggleSkipIntro,
-  skipIntroEnabled,
   showPlaybackToggles = true,
 }: {
   autoNextEnabled: boolean;
@@ -290,9 +362,7 @@ function SidebarControls({
   onLanguageChange: (language: 'dub' | 'sub') => void;
   onSeasonChange: (season: number) => void;
   onToggleAutoNext: () => void;
-  onToggleSkipIntro: () => void;
   showPlaybackToggles?: boolean;
-  skipIntroEnabled: boolean;
 }) {
   const defaultGroupStart =
     Math.floor((Math.max(currentEpisode, 1) - 1) / ANIME_EPISODE_GROUP_SIZE) * ANIME_EPISODE_GROUP_SIZE + 1;
@@ -333,7 +403,6 @@ function SidebarControls({
         </div>
 
         <div className="flex flex-col gap-2">
-          {/* Season selector — only visible when the entry has multiple seasons */}
           {Object.keys(episodesBySeason).length > 1 ? (
             <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
               {Object.keys(episodesBySeason)
@@ -379,15 +448,6 @@ function SidebarControls({
                 }`}
               >
                 Auto Next {autoNextEnabled ? 'On' : 'Off'}
-              </button>
-              <button
-                type="button"
-                onClick={onToggleSkipIntro}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-                  skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
-                }`}
-              >
-                Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
               </button>
             </div>
           ) : null}
@@ -448,39 +508,22 @@ export function AnimeWatchPlayer({
     : 1;
   const episodeLimit = isSeries ? (initialSeasonDetails?.episodeCount ?? playableEpisodeLimit) : 1;
   const initialEpisode = Math.min(Math.max(1, Number.parseInt(initialPlayback.episode, 10) || 1), playableEpisodeLimit);
+  const anilistId = entry.anilistId ?? entry.id;
 
   const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
   const [currentSeason, setCurrentSeason] = useState(1);
   const [currentLanguage, setCurrentLanguage] = useState<'dub' | 'sub'>(initialPlayback.language ?? storedLanguage);
-  const currentServer: AnimePlaybackServer = initialPlayback.server ?? 'aniwave';
   const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? true);
-  const [skipIntroEnabled, setSkipIntroEnabled] = useState(initialPlayback.skipIntro ?? false);
-  const [playbackData, setPlaybackData] = useState<AnimePlaybackPayload | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [playheadSeconds, setPlayheadSeconds] = useState(0);
-  const [resumeOverrideSeconds, setResumeOverrideSeconds] = useState<number | null>(initialPlayback.progress ?? null);
-  const [isChromeVisible, setIsChromeVisible] = useState(true);
-  const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
-  const [currentQuality, setCurrentQuality] = useState(-1);
-  const [showQualityMenu, setShowQualityMenu] = useState(false);
-  const [selectedQualitySrc, setSelectedQualitySrc] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const qualityMenuRef = useRef<HTMLDivElement>(null);
+  const [isIframeLoading, setIsIframeLoading] = useState(true);
+  const [iframeError, setIframeError] = useState<string | null>(null);
+  const [savedStartAt, setSavedStartAt] = useState<number | null>(initialPlayback.progress ?? null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const lastProgressWriteRef = useRef(0);
-  const autoSkippedEpisodeRef = useRef<string | null>(null);
-  const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSeekRef = useRef<number | null>(null);
-  const shouldResumePlaybackRef = useRef(false);
-  const requestedRef = useRef({
-    episode: initialEpisode,
-    language: initialPlayback.language,
-    server: initialPlayback.server ?? 'aniwave',
-  });
+  const lastEventTypeRef = useRef<string | null>(null);
+  const savedProgressRef = useRef<PapiProgressPayload | null>(null);
 
   const savedProgress =
-    initialPlayback.progress == null
+    savedStartAt == null
       ? getRecentlyWatchedProgress(
           entry,
           isSeries
@@ -491,219 +534,122 @@ export function AnimeWatchPlayer({
           experience.id,
         )
       : null;
-  const resumeStartSeconds = resumeOverrideSeconds ?? savedProgress?.progressSeconds ?? 0;
-  const playbackOptions = {
-    autoNext: autoNextEnabled,
-    autoPlay: initialPlayback.autoPlay,
-    color: initialPlayback.color,
-    episode: String(currentEpisode),
-    language: currentLanguage,
-    progress: initialPlayback.progress,
-    season: String(currentSeason),
-    server: currentServer,
-    skipIntro: skipIntroEnabled,
-  };
-  const manualQualityOptions = playbackData?.qualityOptions ?? [];
-  const activeManualQuality =
-    manualQualityOptions.find((candidate) => candidate.src === (selectedQualitySrc ?? playbackData?.src)) ?? null;
-  const resolvedSourceUrl = selectedQualitySrc ?? playbackData?.src;
-  const resolvedSourceType = activeManualQuality?.sourceType ?? playbackData?.sourceType;
+  const resumeStartSeconds = savedStartAt ?? savedProgress?.progressSeconds ?? 0;
+
+  const embedUrl = buildAnimepaheEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
 
   useEffect(() => {
-    requestedRef.current = {
-      episode: currentEpisode,
-      language: currentLanguage,
-      server: currentServer,
-    };
+    if (!canSyncWatchHistory) return;
 
     const controller = new AbortController();
-    const searchParams = new URLSearchParams();
-    searchParams.set('server', currentServer);
 
     void fetch(
-      `/api/anime/playback/${encodeURIComponent(entry.id)}/${currentEpisode}/${currentLanguage}?${searchParams.toString()}`,
-      {
-        signal: controller.signal,
-      },
+      `/api/watch-history/anime-progress?anilistId=${encodeURIComponent(anilistId)}&season=1&episode=${currentEpisode}`,
+      { signal: controller.signal },
     )
       .then(async (response) => {
-        const json = (await response.json().catch(() => null)) as AnimePlaybackResponse | null;
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        if (!response.ok || !json?.data) {
-          throw new Error(json?.error ?? 'Could not load anime playback.');
-        }
-
-        setSelectedQualitySrc(null);
-        setPlaybackData(json.data);
-        setIsLoading(false);
-        setError(null);
-
-        if (json.data.actualLanguage !== requestedRef.current.language) {
-          setCurrentLanguage(json.data.actualLanguage);
-        }
+        if (!response.ok) return;
+        const json = await response.json().catch(() => null);
+        if (!json?.progress) return;
+        savedProgressRef.current = json.progress;
+        setSavedStartAt(json.progress.currentTime ?? json.progress.startAt ?? null);
       })
-      .catch((fetchError: unknown) => {
-        if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
-          return;
-        }
+      .catch(() => undefined);
 
-        if (!controller.signal.aborted) {
-          setError(fetchError instanceof Error ? fetchError.message : 'Could not load anime playback.');
-          setIsLoading(false);
-        }
-      });
+    return () => controller.abort();
+  }, [anilistId, currentEpisode, canSyncWatchHistory]);
 
-    return () => controller.abort(new DOMException('Playback request changed', 'AbortError'));
-  }, [currentEpisode, currentLanguage, currentServer, entry.id]);
+  const saveProgress = useCallback((progress: NormalizedPlayerProgress, eventType: string) => {
+    if (!canSyncWatchHistory) return;
+
+    const now = Date.now();
+    if (now - lastProgressWriteRef.current < 5_000 && progress.progressPercent !== 100) return;
+    lastProgressWriteRef.current = now;
+    lastEventTypeRef.current = eventType;
+
+    const payload: PapiProgressPayload = {
+      anilistId,
+      season: '1',
+      episode: String(currentEpisode),
+      title: entry.title,
+      posterUrl: entry.posterUrl ?? null,
+      backdropUrl: entry.backdropUrl ?? null,
+      startAt: resumeStartSeconds,
+      currentTime: Math.floor(progress.progressSeconds),
+      duration: progress.durationSeconds != null ? Math.floor(progress.durationSeconds) : null,
+      progressPercent: progress.progressPercent ?? 0,
+      lastEventType: eventType,
+    };
+
+    void fetch('/api/watch-history/anime-progress', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).catch(() => undefined);
+
+    const trackingEntry = { ...entry, defaultLanguage: currentLanguage };
+    trackRecentlyWatched(
+      trackingEntry,
+      {
+        durationSeconds: progress.durationSeconds ? Math.floor(progress.durationSeconds) : undefined,
+        episode: isSeries ? String(currentEpisode) : undefined,
+        progressPercent: progress.progressPercent,
+        progressSeconds: Math.floor(progress.progressSeconds),
+      },
+      experience.id,
+      canSyncWatchHistory,
+    );
+  }, [anilistId, canSyncWatchHistory, currentEpisode, currentLanguage, entry, experience.id, isSeries, resumeStartSeconds]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    const sourceUrl = resolvedSourceUrl;
+    if (!embedUrl) return;
 
-    if (!video || !sourceUrl) {
-      return;
-    }
+    const expectedOrigin = VIDNEST_ORIGIN;
 
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== expectedOrigin) return;
 
-    setQualityLevels([]);
-    setCurrentQuality(-1);
-
-    if (resolvedSourceType === 'hls' && Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-      });
-
-      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-        const levels = data.levels
-          .map((level, index) => ({ height: level.height, index }))
-          .filter((l) => l.height > 0)
-          .sort((a, b) => b.height - a.height);
-        setQualityLevels(levels);
-      });
-
-      hls.loadSource(sourceUrl);
-      hls.attachMedia(video);
-      hlsRef.current = hls;
-    } else if (resolvedSourceType === 'hls' && !video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Browser supports neither hls.js nor native HLS (e.g. older Chromium
-      // without Media Source Extensions). Surface a clear message rather than
-      // letting the video element silently fail to load.
-      setError(
-        'HLS playback is not supported in this browser. Try Chrome, Firefox, or Safari, or switch to a different server.',
-      );
-      setIsLoading(false);
-    } else {
-      video.src = sourceUrl;
-    }
-
-    return () => {
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
-    };
-  }, [resolvedSourceType, resolvedSourceUrl]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-
-    if (!video || !playbackData) {
-      return;
-    }
-
-    const playbackKey = `${currentEpisode}:${playbackData.server}:${playbackData.actualLanguage}`;
-    autoSkippedEpisodeRef.current = null;
-
-    const applyStartPosition = () => {
-      const targetStartSeconds = pendingSeekRef.current ?? resumeStartSeconds;
-      if (targetStartSeconds > 0 && Number.isFinite(targetStartSeconds)) {
-        const safeResume = Math.max(0, Math.min(targetStartSeconds, Math.max(0, video.duration - 5)));
-        if (safeResume > 0) {
-          video.currentTime = safeResume;
+      const rootWindow = iframeRef.current?.contentWindow;
+      if (rootWindow) {
+        let win: Window | null = event.source as Window | null;
+        let isDescendant = false;
+        while (win) {
+          if (win === rootWindow) { isDescendant = true; break; }
+          try {
+            const parent = win.parent;
+            win = parent === win ? null : parent;
+          } catch {
+            win = null;
+          }
         }
+        if (!isDescendant) return;
       }
 
-      pendingSeekRef.current = null;
+      setIsIframeLoading(false);
+      setIframeError(null);
 
-      if (skipIntroEnabled && playbackData.intro && autoSkippedEpisodeRef.current !== playbackKey && video.currentTime < playbackData.intro.endTime) {
-        video.currentTime = playbackData.intro.endTime;
-        autoSkippedEpisodeRef.current = playbackKey;
-      }
+      const progress = extractPlayerProgress(event.data);
+      if (!progress) return;
 
-      if (shouldResumePlaybackRef.current || initialPlayback.autoPlay !== false) {
-        void video.play().catch(() => undefined);
-      }
+      const eventType = typeof event.data === 'object' && event.data !== null ? (event.data as Record<string, unknown>).type as string ?? 'update' : 'update';
+      saveProgress(progress, eventType);
 
-      shouldResumePlaybackRef.current = false;
-    };
-
-    video.addEventListener('loadedmetadata', applyStartPosition);
-
-    return () => {
-      video.removeEventListener('loadedmetadata', applyStartPosition);
-    };
-  }, [currentEpisode, initialPlayback.autoPlay, playbackData, resumeStartSeconds, skipIntroEnabled]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-
-    if (!video) {
-      return;
-    }
-
-    const writeProgress = () => {
-      const now = Date.now();
-      if (now - lastProgressWriteRef.current < 5_000 && !video.ended) {
-        return;
-      }
-
-      lastProgressWriteRef.current = now;
-      trackRecentlyWatched(
-        {
-          ...entry,
-          defaultLanguage: currentLanguage,
-        },
-        {
-          durationSeconds: Number.isFinite(video.duration) ? Math.floor(video.duration) : undefined,
-          episode: isSeries ? String(currentEpisode) : undefined,
-          progressPercent:
-            Number.isFinite(video.duration) && video.duration > 0 ? (video.currentTime / video.duration) * 100 : undefined,
-          progressSeconds: Math.floor(video.currentTime),
-        },
-        experience.id,
-        canSyncWatchHistory,
-      );
-    };
-
-      const handleEnded = () => {
-        writeProgress();
-
+      if (progress.progressPercent != null && progress.progressPercent >= 90) {
         if (autoNextEnabled && isSeries && currentEpisode < playableEpisodeLimit) {
           setCurrentEpisode((episode) => Math.min(playableEpisodeLimit, episode + 1));
         }
-      };
-
-    const handleTimeUpdate = () => {
-      setPlayheadSeconds(video.currentTime);
-      writeProgress();
+      }
     };
 
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('pause', writeProgress);
-    video.addEventListener('ended', handleEnded);
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [embedUrl, autoNextEnabled, isSeries, currentEpisode, playableEpisodeLimit, saveProgress]);
 
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('pause', writeProgress);
-      video.removeEventListener('ended', handleEnded);
-    };
-  }, [autoNextEnabled, canSyncWatchHistory, currentEpisode, currentLanguage, entry, experience.id, isSeries, playableEpisodeLimit]);
+  useEffect(() => {
+    startTransition(() => {
+      setIsIframeLoading(true);
+      setIframeError(null);
+    });
+  }, [embedUrl]);
 
   useEffect(() => {
     const trackingEntry = { ...entry, defaultLanguage: currentLanguage };
@@ -725,8 +671,7 @@ export function AnimeWatchPlayer({
       episode: currentEpisode,
       language: currentLanguage,
       progress: null,
-      server: currentServer,
-      skipIntro: skipIntroEnabled,
+      skipIntro: false,
     });
 
     const currentSearch = normalizeWatchSearch(window.location.search);
@@ -739,25 +684,7 @@ export function AnimeWatchPlayer({
     }
 
     startTransition(() => router.replace(href, { scroll: false }));
-  }, [autoNextEnabled, currentEpisode, currentLanguage, currentServer, entry, experience.watchBasePath, initialPlayback.autoPlay, router, skipIntroEnabled]);
-
-  useEffect(() => {
-    return () => {
-      if (chromeTimerRef.current) {
-        clearTimeout(chromeTimerRef.current);
-      }
-    };
-  }, []);
-
-  const revealChrome = () => {
-    setIsChromeVisible(true);
-
-    if (chromeTimerRef.current) {
-      clearTimeout(chromeTimerRef.current);
-    }
-
-    chromeTimerRef.current = setTimeout(() => setIsChromeVisible(false), 3000);
-  };
+  }, [autoNextEnabled, currentEpisode, currentLanguage, entry, experience.watchBasePath, initialPlayback.autoPlay, router]);
 
   const handleBackToLibrary = () => {
     requestHomeScrollRestore(experience.id);
@@ -765,129 +692,32 @@ export function AnimeWatchPlayer({
   };
 
   const handleLanguageChange = (language: 'dub' | 'sub') => {
-    setIsLoading(true);
-    setError(null);
-    setPlaybackData(null);
+    setIsIframeLoading(true);
+    setIframeError(null);
     setCurrentLanguage(language);
     setStoredLanguage(language);
-    setResumeOverrideSeconds(0);
+    setSavedStartAt(0);
   };
 
   const handleEpisodeChange = (episode: number) => {
-    if (episode > playableEpisodeLimit) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-    setPlaybackData(null);
+    if (episode > playableEpisodeLimit) return;
+    setIsIframeLoading(true);
+    setIframeError(null);
     setCurrentEpisode(Math.min(Math.max(1, episode), playableEpisodeLimit));
-    setResumeOverrideSeconds(0);
+    setSavedStartAt(0);
   };
 
   const handleSeasonChange = (season: number) => {
-    if (season === currentSeason) {
-      return;
-    }
-
+    if (season === currentSeason) return;
+    setIsIframeLoading(true);
+    setIframeError(null);
     setCurrentSeason(season);
     setCurrentEpisode(1);
-    setIsLoading(true);
-    setError(null);
-    setPlaybackData(null);
-    setResumeOverrideSeconds(0);
+    setSavedStartAt(0);
   };
-
-  const handleSkipIntroNow = () => {
-    if (!videoRef.current || !playbackData?.intro) {
-      return;
-    }
-
-    videoRef.current.currentTime = playbackData.intro.endTime;
-  };
-
-  const handleQualityChange = (levelIndex: number) => {
-    if (hlsRef.current) {
-      hlsRef.current.currentLevel = levelIndex;
-    }
-    setCurrentQuality(levelIndex);
-    setShowQualityMenu(false);
-  };
-
-  const handleManualQualityChange = (qualityOption: AnimePlaybackQualityOption) => {
-    if (!videoRef.current || selectedQualitySrc === qualityOption.src) {
-      setShowQualityMenu(false);
-      return;
-    }
-
-    pendingSeekRef.current = videoRef.current.currentTime;
-    shouldResumePlaybackRef.current = !videoRef.current.paused && !videoRef.current.ended;
-    setSelectedQualitySrc(qualityOption.src);
-    setShowQualityMenu(false);
-  };
-
-  const handleDownloadVideo = () => {
-    if (!resolvedSourceUrl) {
-      return;
-    }
-
-    const filename = `${entry.title} EP${String(currentEpisode).padStart(2, '0')}${resolvedSourceType === 'hls' ? '.m3u8' : '.mp4'}`;
-
-    if (resolvedSourceUrl.startsWith('/api/anime/playback/proxy?')) {
-      const proxyUrl = new URL(resolvedSourceUrl, window.location.origin);
-      proxyUrl.searchParams.set('download', '1');
-      proxyUrl.searchParams.set('filename', filename);
-      const anchor = document.createElement('a');
-      anchor.href = `${proxyUrl.pathname}${proxyUrl.search}`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      return;
-    }
-
-    if (resolvedSourceType === 'mp4') {
-      const downloadUrl = `/api/playback/proxy?url=${encodeURIComponent(resolvedSourceUrl)}&download=1&filename=${encodeURIComponent(filename)}`;
-      const anchor = document.createElement('a');
-      anchor.href = downloadUrl;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      return;
-    }
-
-    window.open(resolvedSourceUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  useEffect(() => {
-    if (!showQualityMenu) return;
-
-    const handleOutsideClick = (event: MouseEvent) => {
-      if (qualityMenuRef.current && !qualityMenuRef.current.contains(event.target as Node)) {
-        setShowQualityMenu(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [showQualityMenu]);
-
-  const showSkipButton =
-    Boolean(playbackData?.intro) &&
-    playheadSeconds >= (playbackData?.intro?.startTime ?? Number.MAX_SAFE_INTEGER) &&
-    playheadSeconds < (playbackData?.intro?.endTime ?? -1);
-  const showQualityControl = qualityLevels.length > 1 || manualQualityOptions.length > 1;
-  const qualityButtonLabel =
-    manualQualityOptions.length > 1
-      ? activeManualQuality?.label ?? 'Quality'
-      : currentQuality === -1
-        ? 'Auto'
-        : `${qualityLevels.find((l) => l.index === currentQuality)?.height ?? '?'}p`;
 
   return (
-    <div
-      onMouseMove={revealChrome}
-      className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
-    >
+    <div className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row">
       <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
         <button
           type="button"
@@ -899,128 +729,53 @@ export function AnimeWatchPlayer({
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <div
-          className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
-            isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
-          }`}
-        >
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)]">
           <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
-            {playbackData?.displayTitle ?? entry.title} EP {String(currentEpisode).padStart(2, '0')}
+            {entry.title} EP {String(currentEpisode).padStart(2, '0')}
           </span>
         </div>
 
-        <LoadingState error={error} isLoading={isLoading} />
-
-        {showSkipButton ? (
-          <button
-            type="button"
-            onClick={handleSkipIntroNow}
-            className="absolute bottom-6 right-6 z-30 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/55 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-          >
-            <SkipForward className="h-4 w-4" />
-            Skip Intro
-          </button>
-        ) : null}
-
-        {showQualityControl ? (
-          <div
-            ref={qualityMenuRef}
-            className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex flex-col items-end transition-opacity duration-300 ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-          >
-            <button
-              type="button"
-              onClick={() => setShowQualityMenu((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/70"
-            >
-              <Settings className="h-3.5 w-3.5" />
-              {qualityButtonLabel}
-            </button>
-            {showQualityMenu ? (
-              <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-black/90 backdrop-blur-sm">
-                {manualQualityOptions.length > 1 ? (
-                  manualQualityOptions.map((qualityOption) => (
-                    <button
-                      key={qualityOption.src}
-                      type="button"
-                      onClick={() => handleManualQualityChange(qualityOption)}
-                      className={`flex w-full items-center px-4 py-2 text-xs font-medium transition-colors ${
-                        activeManualQuality?.src === qualityOption.src
-                          ? 'bg-white/10 text-white'
-                          : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                      }`}
-                    >
-                      {qualityOption.label}
-                      {activeManualQuality?.src === qualityOption.src ? (
-                        <span className="ml-auto pl-4 text-netflix-red">*</span>
-                      ) : null}
-                    </button>
-                  ))
-                ) : (
-                  <>
-                <button
-                  type="button"
-                  onClick={() => handleQualityChange(-1)}
-                  className={`flex w-full items-center px-4 py-2 text-xs font-medium transition-colors ${currentQuality === -1 ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
-                >
-                  Auto
-                  {currentQuality === -1 ? <span className="ml-auto pl-4 text-netflix-red">●</span> : null}
-                </button>
-                {qualityLevels.map((level) => (
-                  <button
-                    key={level.index}
-                    type="button"
-                    onClick={() => handleQualityChange(level.index)}
-                    className={`flex w-full items-center px-4 py-2 text-xs font-medium transition-colors ${currentQuality === level.index ? 'bg-white/10 text-white' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}
-                  >
-                    {level.height}p
-                    {currentQuality === level.index ? <span className="ml-auto pl-4 text-netflix-red">●</span> : null}
-                  </button>
-                ))}
-                  </>
-                )}
-              </div>
-            ) : null}
+        {isIframeLoading ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 px-6 backdrop-blur-sm">
+            <div className="max-w-md rounded-2xl border border-white/10 bg-black/75 p-5 text-center shadow-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">Loading Player</p>
+              <h2 className="mt-3 text-xl font-bold text-white">Preparing your stream...</h2>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-300">Loading the anime player now.</p>
+            </div>
           </div>
         ) : null}
 
-        {resolvedSourceUrl ? (
-          <button
-            type="button"
-            onClick={handleDownloadVideo}
-            aria-label="Download video"
-            title="Download video"
-            className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] z-40 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white backdrop-blur-sm transition-all hover:bg-black/70 hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
-              showQualityControl
-                ? 'top-[calc(env(safe-area-inset-top)+3.5rem)]'
-                : 'top-[calc(env(safe-area-inset-top)+0.75rem)]'
-            } ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-          >
-            <Download className="h-4 w-4" />
-          </button>
+        {iframeError && !isIframeLoading ? (
+          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] z-30 flex max-w-sm items-start gap-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 backdrop-blur-sm">
+            <p className="flex-1 text-xs leading-relaxed text-amber-100">{iframeError}</p>
+            <button
+              type="button"
+              onClick={() => setIframeError(null)}
+              aria-label="Dismiss"
+              className="text-amber-200 transition hover:text-white"
+            >
+              ×
+            </button>
+          </div>
         ) : null}
 
-        <video
-            key={`${entry.id}-${currentEpisode}-${currentLanguage}-${currentServer}`}
-            ref={videoRef}
-            controls
-            autoPlay={initialPlayback.autoPlay !== false}
-            poster={playbackData?.posterUrl ?? entry.posterUrl}
-            className="h-full w-full bg-black"
-            playsInline
-            preload="metadata"
-            crossOrigin="anonymous"
-          >
-            {playbackData?.tracks.map((track, index) => (
-              <track
-                key={`${index}-${track.srclang}-${track.label}`}
-                default={track.default}
-                kind={track.kind}
-                label={track.label}
-                src={track.src}
-                srcLang={track.srclang}
-              />
-            ))}
-          </video>
+        <iframe
+          ref={iframeRef}
+          src={embedUrl}
+          className="h-full w-full"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowFullScreen
+          onLoad={() => {
+            setIsIframeLoading(false);
+            setIframeError(null);
+          }}
+          onError={() => {
+            setIsIframeLoading(false);
+            setIframeError('The player failed to load. Try refreshing the page.');
+          }}
+          referrerPolicy="no-referrer"
+          title={`Watch ${entry.title}`}
+        />
       </div>
 
       {isSeries ? (
@@ -1037,9 +792,7 @@ export function AnimeWatchPlayer({
           onLanguageChange={handleLanguageChange}
           onSeasonChange={handleSeasonChange}
           onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
-          onToggleSkipIntro={() => setSkipIntroEnabled((value) => !value)}
           showPlaybackToggles
-          skipIntroEnabled={skipIntroEnabled}
         />
       ) : (
         <div className="flex w-full flex-col gap-3 border-t border-white/5 bg-[#101014] p-4 landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0 landscape:pt-[calc(env(safe-area-inset-top)+1rem)]">
@@ -1057,15 +810,6 @@ export function AnimeWatchPlayer({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setSkipIntroEnabled((value) => !value)}
-            className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
-              skipIntroEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
-            }`}
-          >
-            Skip Intro {skipIntroEnabled ? 'On' : 'Off'}
-          </button>
         </div>
       )}
     </div>

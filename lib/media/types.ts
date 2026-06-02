@@ -3,42 +3,9 @@ export type BrowseMediaType = MediaType | 'all';
 export type MediaProvider = 'tmdb' | 'anilist' | 'anikoto' | 'mangadex';
 export type MediaExperience = 'papiflix' | 'papianime' | 'papimanga';
 export type PlaybackLanguage = 'sub' | 'dub';
-export type AnimePlaybackServer = 'aniwave';
 export type AnimeFormat = 'TV' | 'TV_SHORT' | 'MOVIE' | 'SPECIAL' | 'OVA' | 'ONA' | 'MUSIC';
 export type MangaFormat = 'manga' | 'novel' | 'one_shot' | 'manhwa' | 'manhua';
 export type MangaLanguage = 'en' | 'raw';
-
-export interface PlaybackMarker {
-  endTime: number;
-  startTime: number;
-}
-
-export interface AnimePlaybackTrack {
-  default: boolean;
-  kind: 'captions' | 'subtitles';
-  label: string;
-  src: string;
-  srclang: string;
-}
-
-export interface AnimePlaybackQualityOption {
-  label: string;
-  sourceType: 'hls' | 'mp4';
-  src: string;
-}
-
-export interface AnimePlaybackPayload {
-  actualLanguage: PlaybackLanguage;
-  displayTitle: string;
-  intro?: PlaybackMarker;
-  outro?: PlaybackMarker;
-  posterUrl?: string;
-  qualityOptions: AnimePlaybackQualityOption[];
-  server: AnimePlaybackServer;
-  sourceType: 'hls' | 'mp4';
-  src: string;
-  tracks: AnimePlaybackTrack[];
-}
 
 export interface EpisodePreview {
   airDate?: string;

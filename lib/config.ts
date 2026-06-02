@@ -58,21 +58,17 @@ const SOCIAL_PREVIEW_IMAGE = {
 } as const;
 
 export const appConfig = {
-  aniZipApiBaseUrl: readUrlEnv('ANI_ZIP_API_BASE_URL', 'https://api.ani.zip'),
   anilistGraphqlUrl: readUrlEnv('ANILIST_GRAPHQL_URL', 'https://graphql.anilist.co'),
-  aniwaveCdnOrigin: readUrlEnv('ANIWAVE_CDN_ORIGIN', 'https://megaplay.buzz'),
-  jikanApiBaseUrl: readUrlEnv('JIKAN_API_BASE_URL', 'https://api.jikan.moe/v4'),
-  kitsuApiBaseUrl: readUrlEnv('KITSU_API_BASE_URL', 'https://kitsu.app/api/edge'),
+  anilistClientId: process.env.ANILIST_CLIENT_ID?.trim(),
   mangadexApiBaseUrl: readUrlEnv('MANGADEX_API_BASE_URL', 'https://api.mangadex.org'),
   mangadexCdnOrigin: readUrlEnv('MANGADEX_CDN_ORIGIN', 'https://uploads.mangadex.org'),
   name: APP_NAME,
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
     'Search-driven movie and series library with native playback controls.',
-  vidnestAnimeApiBaseUrl: readUrlEnv('VIDNEST_ANIME_API_BASE_URL', 'https://new.vidnest.fun'),
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: readSiteUrl(),
   socialPreviewImage: SOCIAL_PREVIEW_IMAGE,
-
+  animeIncludeAdult: process.env.NEXT_PUBLIC_ANIME_INCLUDE_ADULT?.trim() === '1',
 };

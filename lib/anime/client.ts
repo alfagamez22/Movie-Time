@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { fetchAniZipMappings, type AniZipEpisode, type AniZipMappingsResponse } from '@/lib/anime/ani-zip';
 import {
   fetchAnilistBrowseBuckets,
   fetchAnilistMediaById,
@@ -12,19 +11,11 @@ import {
   cleanSynopsis,
   cleanText,
   getAnilistTitle,
-  getAniZipEpisodeAirTimestamp,
-  getAniZipEpisodeTitle,
   getBackdropUrl,
   getEpisodeCount,
-  getNextEpisodeInfo,
+  getReleasedEpisodeBoundary,
   getPosterUrl,
-  getReleasedEpisodeCount,
-  getUpcomingEpisodeBoundary,
-  getVisibleEpisodeCount,
-  isAniZipEpisodeReleased,
-  isAniZipEpisodeScheduled,
   isReleasedAnime,
-  listAniZipEpisodes,
   mapAnilistFormatToMediaType,
 } from '@/lib/anime/episodes';
 import {
@@ -111,8 +102,8 @@ function dedupeStrings(values: Array<string | null | undefined>): string[] {
 
 function getAliases(media: AnilistMedia): string[] {
   return dedupeStrings([
-    media.title.userPreferred,
     media.title.english,
+    media.title.userPreferred,
     media.title.romaji,
     media.title.native,
     ...(media.synonyms ?? []),
@@ -127,75 +118,72 @@ function getFallbackEpisodeName(episodeNumber: number): string {
   return `Episode ${String(episodeNumber).padStart(2, '0')}`;
 }
 
-function mapAniZipEpisode(
-  episode: AniZipEpisode | undefined,
-  episodeNumber: number,
-  isReleased: boolean,
-  scheduledAt: number | undefined,
-  fallbackStillUrl?: string,
-) {
-  return {
-    airDate: cleanText(episode?.airDate) || undefined,
-    episodeNumber,
-    fallbackStillUrl,
-    isReleased,
-    name: getAniZipEpisodeTitle(episode) || getFallbackEpisodeName(episodeNumber),
-    overview: cleanSynopsis(episode?.overview),
-    runtime: typeof episode?.runtime === 'number' && Number.isFinite(episode.runtime) ? episode.runtime : undefined,
-    scheduledAt,
-    seasonNumber: 1,
-    stillUrl: cleanText(episode?.image) || fallbackStillUrl,
-  };
+function getVisibleEpisodeCount(media: AnilistMedia): number {
+  if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
+    return isReleasedAnime(media) ? 1 : 0;
+  }
+
+  return Math.max(
+    getEpisodeCount(media),
+    media.nextAiringEpisode?.episode ?? 0,
+  );
 }
 
-function buildSeasonDetails(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): SeasonDetails | null {
+function buildSeasonDetails(media: AnilistMedia): SeasonDetails | null {
   if (mapAnilistFormatToMediaType(media.format ?? undefined) !== 'tv') {
     return null;
   }
 
-  const fallbackStillUrl = getBackdropUrl(media) || getPosterUrl(media);
-  const aniZipEpisodes = listAniZipEpisodes(mappings);
-  const episodeMap = new Map<number, AniZipEpisode>();
-
-  aniZipEpisodes.forEach((episode) => {
-    if (typeof episode.episodeNumber === 'number') {
-      episodeMap.set(episode.episodeNumber, episode);
-    }
-  });
-
-  const releasedEpisodeCount = getReleasedEpisodeCount(media, mappings);
-  const episodeCount = Math.max(releasedEpisodeCount, getVisibleEpisodeCount(media, mappings));
-  const nextAiringEpisodeNumber = media.nextAiringEpisode?.episode;
-  const nextAiringTimestamp =
-    typeof media.nextAiringEpisode?.airingAt === 'number' ? media.nextAiringEpisode.airingAt * 1000 : undefined;
-  const upcomingEpisodeBoundary = getUpcomingEpisodeBoundary(media);
+  const releasedEpisodeCount = getEpisodeCount(media);
+  const episodeCount = Math.max(releasedEpisodeCount, getVisibleEpisodeCount(media));
+  const upcomingEpisodeBoundary = getReleasedEpisodeBoundary(media);
 
   return {
     episodeCount,
     episodes: Array.from({ length: episodeCount }, (_, index) => {
       const episodeNumber = index + 1;
-      const mappedEpisode = episodeMap.get(episodeNumber);
-      const mappedScheduledAt = getAniZipEpisodeAirTimestamp(mappedEpisode);
-      const isReleased =
-        typeof upcomingEpisodeBoundary === 'number'
-          ? episodeNumber < upcomingEpisodeBoundary
-          : mappedEpisode != null
-            ? isAniZipEpisodeReleased(mappedEpisode)
-            : episodeNumber <= releasedEpisodeCount;
-      const scheduledAt =
-        typeof mappedScheduledAt === 'number'
-          ? Math.floor(mappedScheduledAt / 1000)
-          : episodeNumber === nextAiringEpisodeNumber && nextAiringTimestamp
-            ? Math.floor(nextAiringTimestamp / 1000)
-            : undefined;
-
-      return mapAniZipEpisode(mappedEpisode, episodeNumber, isReleased, scheduledAt, fallbackStillUrl);
+      return {
+        episodeNumber,
+        fallbackStillUrl: getBackdropUrl(media) || getPosterUrl(media),
+        isReleased: upcomingEpisodeBoundary > 0 ? episodeNumber <= upcomingEpisodeBoundary : episodeNumber <= releasedEpisodeCount,
+        name: getFallbackEpisodeName(episodeNumber),
+        overview: '',
+        scheduledAt:
+          episodeNumber === media.nextAiringEpisode?.episode && typeof media.nextAiringEpisode.airingAt === 'number'
+            ? media.nextAiringEpisode.airingAt
+            : undefined,
+        seasonNumber: 1,
+        stillUrl: getBackdropUrl(media) || getPosterUrl(media),
+      };
     }),
     name: 'Episodes',
     overview: cleanSynopsis(media.description),
     posterUrl: getPosterUrl(media),
     releasedEpisodeCount,
     seasonNumber: 1,
+  };
+}
+
+function getNextEpisodeInfo(media: AnilistMedia): Pick<TvMediaEntry, 'nextEpisodeAt' | 'nextEpisodeNumber'> {
+  if (mapAnilistFormatToMediaType(media.format ?? undefined) !== 'tv' || !isReleasedAnime(media)) {
+    return {};
+  }
+
+  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
+  const nextEpisodeNumber = media.nextAiringEpisode?.episode;
+  if (
+    typeof nextEpisodeAt !== 'number' ||
+    !Number.isFinite(nextEpisodeAt) ||
+    nextEpisodeAt * 1000 <= Date.now() ||
+    typeof nextEpisodeNumber !== 'number' ||
+    !Number.isFinite(nextEpisodeNumber)
+  ) {
+    return {};
+  }
+
+  return {
+    nextEpisodeAt,
+    nextEpisodeNumber,
   };
 }
 
@@ -220,8 +208,8 @@ function createMovieEntry(media: AnilistMedia): MovieMediaEntry {
   };
 }
 
-function createTvEntry(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): TvMediaEntry {
-  const episodeCount = getEpisodeCount(media, mappings);
+function createTvEntry(media: AnilistMedia): TvMediaEntry {
+  const episodeCount = getEpisodeCount(media);
   const nextEpisodeInfo = getNextEpisodeInfo(media);
 
   return {
@@ -251,10 +239,10 @@ function createTvEntry(media: AnilistMedia, mappings?: AniZipMappingsResponse | 
   };
 }
 
-function createAnimeEntry(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): MediaEntry {
+function createAnimeEntry(media: AnilistMedia): MediaEntry {
   return mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie'
     ? createMovieEntry(media)
-    : createTvEntry(media, mappings);
+    : createTvEntry(media);
 }
 
 function dedupeEntries(entries: Array<LibraryMediaEntry | null | undefined>, limit = 18): LibraryMediaEntry[] {
@@ -350,10 +338,7 @@ export async function lookupAnimeMediaEntry(id: string): Promise<AnimeLookupResu
     return createLookupFailure('AniList ID must be a positive integer.', 'not-found', 404);
   }
 
-  const [media, mappings] = await Promise.all([
-    fetchAnilistMediaById(String(parsedId)).catch(() => null),
-    fetchAniZipMappings(String(parsedId)).catch(() => null),
-  ]);
+  const media = await fetchAnilistMediaById(String(parsedId)).catch(() => null);
 
   if (!media) {
     return createLookupFailure(`AniList anime ${id} was not found.`, 'not-found', 404);
@@ -364,9 +349,9 @@ export async function lookupAnimeMediaEntry(id: string): Promise<AnimeLookupResu
   }
 
   return {
-    entry: createAnimeEntry(media, mappings),
+    entry: createAnimeEntry(media),
     ok: true,
-    seasonDetails: buildSeasonDetails(media, mappings),
+    seasonDetails: buildSeasonDetails(media),
   };
 }
 

@@ -1,31 +1,14 @@
-import 'server-only';
-
-import {
-  ANIME_PLAYERS,
-  DEFAULT_ANIME_PLAYER,
-  getAnimePlayer,
-  isAnimePlayerId,
-  type AnimePlayerCatalog,
-  type AnimePlayerId,
-} from '@/lib/anime/player-metadata';
 import { searchAnimeLibrary, getAnimeLibrarySections } from '@/lib/anime/client';
 import type { LibraryMediaEntry, LibrarySection, MediaType } from '@/lib/media/types';
-
-export { ANIME_PLAYERS, DEFAULT_ANIME_PLAYER, getAnimePlayer, isAnimePlayerId };
-export type { AnimePlayerId, AnimePlayerCatalog, AnimePlayerDefinition } from '@/lib/anime/player-metadata';
-
-// ---------------------------------------------------------------------------
-// Search / browse — always uses AniList via the anime library client.
-// ---------------------------------------------------------------------------
 
 export interface AnimeSearchResult {
   data: LibraryMediaEntry[];
   error?: string;
-  source: AnimePlayerCatalog;
+  source: string;
 }
 
 export async function searchAnimeForPlayer(
-  _playerId: AnimePlayerId,
+  _playerId: string,
   query: string,
   type?: MediaType,
 ): Promise<AnimeSearchResult> {
@@ -45,10 +28,10 @@ export interface AnimeBrowseResult {
   data: LibraryMediaEntry[];
   error?: string;
   sections: LibrarySection[];
-  source: AnimePlayerCatalog;
+  source: string;
 }
 
-export async function browseAnimeForPlayer(_playerId: AnimePlayerId): Promise<AnimeBrowseResult> {
+export async function browseAnimeForPlayer(_playerId: string): Promise<AnimeBrowseResult> {
   const result = await getAnimeLibrarySections();
   if (!result.ok) {
     return { data: [], error: result.message, sections: [], source: 'anilist' };

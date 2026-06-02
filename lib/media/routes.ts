@@ -3,7 +3,6 @@ import { normalizeSlug } from '@/lib/slugs/media';
 import {
   isAnimeProvider,
   isMangaProvider,
-  type AnimePlaybackServer,
   type LibraryMediaEntry,
   type MangaLanguage,
   type MediaEntry,
@@ -21,7 +20,6 @@ interface WatchHrefOptions {
   player?: string;
   progress?: number | null;
   season?: number | string;
-  server?: AnimePlaybackServer;
   skipIntro?: boolean;
 }
 
@@ -57,20 +55,8 @@ export function buildWatchHref(entry: RouteEntry, options: WatchHrefOptions = {}
   if (isAnimeProvider(entry.provider)) {
     const searchParams = new URLSearchParams();
 
-    if (options.server && options.server !== 'aniwave') {
-      searchParams.set('server', options.server);
-    }
-
     if (options.autoPlay === false) {
       searchParams.set('autoPlay', 'false');
-    }
-
-    if (options.autoNext === false) {
-      searchParams.set('autonext', 'false');
-    }
-
-    if (typeof options.skipIntro === 'boolean') {
-      searchParams.set('skipintro', String(options.skipIntro));
     }
 
     if (typeof options.progress === 'number' && Number.isFinite(options.progress) && options.progress >= 0) {
@@ -104,10 +90,6 @@ export function buildWatchHref(entry: RouteEntry, options: WatchHrefOptions = {}
   }
 
   return `${basePath}/${encodeURIComponent(buildWatchSlug(entry.title, entry.id))}?${searchParams.toString()}`;
-}
-
-export function parseAnimePlaybackServer(value: string | null | undefined): AnimePlaybackServer | undefined {
-  return value === 'aniwave' ? 'aniwave' : undefined;
 }
 
 export function parseMediaType(value: string | null | undefined): MediaType | undefined {

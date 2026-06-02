@@ -4,7 +4,6 @@ import {
   getEpisodeLimit,
   isAnimeProvider,
   isTvEntry,
-  type AnimePlaybackServer,
   type MediaEntry,
   type PlaybackLanguage,
 } from './types';
@@ -13,13 +12,12 @@ const DEFAULT_PLAYER_COLOR = 'e50914';
 const HEX_COLOR = /^[0-9a-fA-F]{6}$/;
 
 export interface PlaybackOptions {
-  autoPlay: boolean;
   autoNext?: boolean;
+  autoPlay: boolean;
   color: string;
   episode: string;
   language: PlaybackLanguage;
   progress: number | null;
-  server?: AnimePlaybackServer;
   season: string;
   skipIntro?: boolean;
 }
@@ -74,25 +72,16 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   const autoNext = autoNextRaw === undefined ? true : autoNextRaw !== 'false';
   const progress = sanitizeProgress(getFirstParam(searchParams.progress));
   const language = getFirstParam(searchParams.lang) === 'dub' ? 'dub' : entry.defaultLanguage ?? 'sub';
-  const serverValue = getFirstParam(searchParams.server);
-  const server = serverValue === 'aniwave' ? 'aniwave' : undefined;
-  const skipIntroValue = getFirstParam(searchParams.skipintro);
-  const skipIntro =
-    skipIntroValue === undefined ? undefined : skipIntroValue === 'true' || skipIntroValue === '1';
-
   if (isAnimeProvider(entry.provider)) {
     const maxEpisodes = entry.type === 'tv' ? getEpisodeLimit(entry, 1) : 1;
 
     return {
       autoPlay,
-      autoNext,
       color,
       episode: clampPositiveInteger(getFirstParam(searchParams.e), maxEpisodes),
       language,
       progress,
-      server,
       season: '1',
-      skipIntro,
     };
   }
 
@@ -193,14 +182,18 @@ export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions)
   return path;
 }
 
-export function buildMegaPlayEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
-  const anilistId = entry.provider === 'anikoto' ? entry.anilistId || entry.id : entry.id;
+export function buildAnimepaheEmbedUrl(
+  anilistId: string,
+  episode: string | number,
+  language: 'sub' | 'dub',
+  startAt: number | null,
+): string {
   const url = new URL(
-    `https://vidnest.fun/anime/${encodeURIComponent(anilistId)}/${options.episode}/${options.language}`,
+    `https://vidnest.fun/animepahe/${encodeURIComponent(anilistId)}/${encodeURIComponent(String(episode))}/${language}`,
   );
 
-  if (options.autoPlay) {
-    url.searchParams.set('autoplay', 'true');
+  if (startAt != null && startAt > 0) {
+    url.searchParams.set('startAt', String(Math.floor(startAt)));
   }
 
   return url.toString();

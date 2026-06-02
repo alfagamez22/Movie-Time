@@ -356,6 +356,41 @@ function getReleaseYear(dateValue?: string): number | undefined {
   return Number.isNaN(year) ? undefined : year;
 }
 
+function getUtcDateString(date = new Date()): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getUtcDayTimestamp(date = new Date()): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function getReleaseDateTimestamp(dateValue?: string): number | null {
+  if (!dateValue) {
+    return null;
+  }
+
+  const [yearRaw, monthRaw, dayRaw] = dateValue.split('-');
+  const year = Number.parseInt(yearRaw, 10);
+  const month = Number.parseInt(monthRaw, 10);
+  const day = Number.parseInt(dayRaw, 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  return Date.UTC(year, month - 1, day);
+}
+
+export function isReleasedTmdbBrowseResult(result: TmdbBrowseResult, explicitType?: MediaType, date = new Date()): boolean {
+  const type = explicitType ?? (result.media_type === 'movie' || result.media_type === 'tv' ? result.media_type : null);
+  if (!type) {
+    return true;
+  }
+
+  const releaseTimestamp = getReleaseDateTimestamp(type === 'movie' ? result.release_date : result.first_air_date);
+  return releaseTimestamp === null || releaseTimestamp <= getUtcDayTimestamp(date);
+}
+
 function buildTmdbImageUrl(path: string | undefined, size: 'w300' | 'w780' = 'w780'): string | undefined {
   if (!path) {
     return undefined;
@@ -655,7 +690,9 @@ function mapPageResultsToEntries(
   limit = 18,
 ): LibraryMediaEntry[] {
   return takeDistinctEntries(
-    (results ?? []).map((result) => createLibraryEntryFromBrowseResult(result, explicitType)),
+    (results ?? [])
+      .filter((result) => isReleasedTmdbBrowseResult(result, explicitType))
+      .map((result) => createLibraryEntryFromBrowseResult(result, explicitType)),
     limit,
   );
 }
@@ -670,6 +707,20 @@ function filterBrowseResultsForSection(
 
   const hasAdultFlag = results.some((result) => typeof result.adult === 'boolean');
   return hasAdultFlag ? results.filter((result) => result.adult === true) : results;
+}
+
+function buildBrowseReleaseDateQuery(section: TmdbBrowseSectionDefinition): Record<string, string> {
+  const today = getUtcDateString();
+
+  if (section.type === 'movie') {
+    return { 'primary_release_date.lte': today, 'release_date.lte': today };
+  }
+
+  if (section.type === 'tv') {
+    return { 'first_air_date.lte': today };
+  }
+
+  return {};
 }
 
 function mapCastMembers(cast: TmdbCastResult[] | undefined, limit = 10): MediaCastMember[] {
@@ -713,6 +764,7 @@ async function fetchBrowseSection(
     include_adult: section.includeAdult ?? false,
     language: DEFAULT_TMDB_LANGUAGE,
     page: 1,
+    ...buildBrowseReleaseDateQuery(section),
   });
 
   if (isTmdbFailure(payload)) {

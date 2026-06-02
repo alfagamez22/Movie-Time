@@ -1,11 +1,5 @@
 import type { AnilistMedia } from '@/lib/anime/anilist';
-import type { AniZipEpisode, AniZipMappingsResponse } from '@/lib/anime/ani-zip';
-import { getAniZipEpisodeTitle, listAniZipEpisodes } from '@/lib/anime/ani-zip';
-import type { AnimeFormat, MediaType, TvMediaEntry } from '@/lib/media/types';
-
-// ---------------------------------------------------------------------------
-// Text helpers
-// ---------------------------------------------------------------------------
+import type { AnimeFormat, MediaType } from '@/lib/media/types';
 
 export function cleanText(value: string | number | null | undefined): string {
   return value == null ? '' : String(value).replace(/\r\n/g, '\n').trim();
@@ -26,22 +20,14 @@ export function cleanSynopsis(value: string | number | null | undefined): string
     .trim();
 }
 
-// ---------------------------------------------------------------------------
-// Format / type helpers
-// ---------------------------------------------------------------------------
-
 export function mapAnilistFormatToMediaType(format: AnimeFormat | null | undefined): MediaType {
   return format === 'MOVIE' ? 'movie' : 'tv';
 }
 
-// ---------------------------------------------------------------------------
-// AniList media field helpers
-// ---------------------------------------------------------------------------
-
 export function getAnilistTitle(media: AnilistMedia): string {
   return (
-    cleanText(media.title.userPreferred) ||
     cleanText(media.title.english) ||
+    cleanText(media.title.userPreferred) ||
     cleanText(media.title.romaji) ||
     cleanText(media.title.native) ||
     `AniList ${media.id}`
@@ -59,62 +45,6 @@ export function getBackdropUrl(media: AnilistMedia): string | undefined {
 
 export function getPosterUrl(media: AnilistMedia): string | undefined {
   return cleanText(media.coverImage?.extraLarge) || cleanText(media.coverImage?.large) || getBackdropUrl(media);
-}
-
-// ---------------------------------------------------------------------------
-// Release / airing logic
-// ---------------------------------------------------------------------------
-
-export function getStartDateTimestamp(media: AnilistMedia): number | null {
-  const year = media.startDate?.year;
-  if (typeof year !== 'number' || !Number.isFinite(year)) {
-    return null;
-  }
-
-  const month = media.startDate?.month;
-  const day = media.startDate?.day;
-  return Date.UTC(year, Math.max(0, (month ?? 1) - 1), day ?? 1);
-}
-
-export function getAniZipEpisodeAirTimestamp(episode: AniZipEpisode | undefined): number | null {
-  const airDate = cleanText(episode?.airDate);
-  if (!airDate) {
-    return null;
-  }
-
-  const parsedAirDate = Date.parse(`${airDate}T00:00:00Z`);
-  return Number.isFinite(parsedAirDate) ? parsedAirDate : null;
-}
-
-export function isAniZipEpisodeReleased(episode: AniZipEpisode): boolean {
-  const parsedAirDate = getAniZipEpisodeAirTimestamp(episode);
-  if (parsedAirDate === null) {
-    return true;
-  }
-
-  return parsedAirDate <= Date.now();
-}
-
-export function isAniZipEpisodeScheduled(episode: AniZipEpisode): boolean {
-  const parsedAirDate = getAniZipEpisodeAirTimestamp(episode);
-  return parsedAirDate !== null && parsedAirDate > Date.now();
-}
-
-export function getUpcomingEpisodeBoundary(media: AnilistMedia): number | null {
-  const nextEpisodeNumber = media.nextAiringEpisode?.episode;
-  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
-
-  if (
-    typeof nextEpisodeNumber !== 'number' ||
-    !Number.isFinite(nextEpisodeNumber) ||
-    typeof nextEpisodeAt !== 'number' ||
-    !Number.isFinite(nextEpisodeAt) ||
-    nextEpisodeAt * 1000 <= Date.now()
-  ) {
-    return null;
-  }
-
-  return nextEpisodeNumber;
 }
 
 export function isReleasedAnime(media: AnilistMedia): boolean {
@@ -141,107 +71,42 @@ export function isReleasedAnime(media: AnilistMedia): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Episode counting
-// ---------------------------------------------------------------------------
-
-export function getReleasedAniZipEpisodeCount(
-  mappings?: AniZipMappingsResponse | null,
-  upcomingEpisodeBoundary?: number | null,
-): number {
-  return listAniZipEpisodes(mappings)
-    .filter((episode) => {
-      if (
-        typeof episode.episodeNumber === 'number' &&
-        upcomingEpisodeBoundary &&
-        episode.episodeNumber >= upcomingEpisodeBoundary
-      ) {
-        return false;
-      }
-
-      return isAniZipEpisodeReleased(episode);
-    })
-    .length;
-}
-
-export function getVisibleAniZipEpisodeCount(mappings?: AniZipMappingsResponse | null): number {
-  return listAniZipEpisodes(mappings)
-    .filter((episode) => isAniZipEpisodeReleased(episode) || isAniZipEpisodeScheduled(episode))
-    .reduce((highestEpisodeNumber, episode) => {
-      return typeof episode.episodeNumber === 'number'
-        ? Math.max(highestEpisodeNumber, episode.episodeNumber)
-        : highestEpisodeNumber;
-    }, 0);
-}
-
-export function getReleasedEpisodeCount(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): number {
-  if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
-    return isReleasedAnime(media) ? 1 : 0;
+export function getStartDateTimestamp(media: AnilistMedia): number | null {
+  const year = media.startDate?.year;
+  if (typeof year !== 'number' || !Number.isFinite(year)) {
+    return null;
   }
 
-  const upcomingEpisodeBoundary = getUpcomingEpisodeBoundary(media);
-  const aniZipEpisodeCount = getReleasedAniZipEpisodeCount(mappings, upcomingEpisodeBoundary);
-
-  if (media.status === 'RELEASING') {
-    if (typeof upcomingEpisodeBoundary === 'number') {
-      return Math.max(upcomingEpisodeBoundary - 1, 0);
-    }
-
-    if (aniZipEpisodeCount > 0) {
-      return aniZipEpisodeCount;
-    }
-
-    return isReleasedAnime(media) ? 1 : 0;
-  }
-
-  return Math.max(media.episodes ?? 0, aniZipEpisodeCount, isReleasedAnime(media) ? 1 : 0);
+  const month = media.startDate?.month;
+  const day = media.startDate?.day;
+  return Date.UTC(year, Math.max(0, (month ?? 1) - 1), day ?? 1);
 }
 
-export function getVisibleEpisodeCount(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): number {
-  if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
-    return isReleasedAnime(media) ? 1 : 0;
-  }
-
-  return Math.max(
-    getReleasedEpisodeCount(media, mappings),
-    getVisibleAniZipEpisodeCount(mappings),
-    media.nextAiringEpisode?.episode ?? 0,
-  );
-}
-
-export function getNextEpisodeInfo(media: AnilistMedia): Pick<TvMediaEntry, 'nextEpisodeAt' | 'nextEpisodeNumber'> {
-  if (mapAnilistFormatToMediaType(media.format ?? undefined) !== 'tv' || !isReleasedAnime(media)) {
-    return {};
-  }
-
-  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
+export function getReleasedEpisodeBoundary(media: AnilistMedia): number {
   const nextEpisodeNumber = media.nextAiringEpisode?.episode;
+  const nextEpisodeAt = media.nextAiringEpisode?.airingAt;
+
   if (
+    typeof nextEpisodeNumber !== 'number' ||
+    !Number.isFinite(nextEpisodeNumber) ||
     typeof nextEpisodeAt !== 'number' ||
     !Number.isFinite(nextEpisodeAt) ||
-    nextEpisodeAt * 1000 <= Date.now() ||
-    typeof nextEpisodeNumber !== 'number' ||
-    !Number.isFinite(nextEpisodeNumber)
+    nextEpisodeAt * 1000 <= Date.now()
   ) {
-    return {};
+    return 0;
   }
 
-  return {
-    nextEpisodeAt,
-    nextEpisodeNumber,
-  };
+  return Math.max(0, Math.floor(nextEpisodeNumber) - 1);
 }
 
-export function getEpisodeCount(media: AnilistMedia, mappings?: AniZipMappingsResponse | null): number {
+export function getEpisodeCount(media: AnilistMedia): number {
   if (mapAnilistFormatToMediaType(media.format ?? undefined) === 'movie') {
-    return 1;
+    return isReleasedAnime(media) ? 1 : 0;
   }
 
-  return Math.max(getReleasedEpisodeCount(media, mappings), 1);
+  if (!isReleasedAnime(media)) {
+    return 0;
+  }
+
+  return Math.max(media.episodes ?? 0, getReleasedEpisodeBoundary(media), 1);
 }
-
-// ---------------------------------------------------------------------------
-// Episode-specific helpers (used for building SeasonDetails)
-// ---------------------------------------------------------------------------
-
-export { getAniZipEpisodeTitle, listAniZipEpisodes };
