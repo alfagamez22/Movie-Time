@@ -10,7 +10,7 @@ export type AnimeServerChoice = 'aniwave';
 
 const PLAYER_STORAGE_VERSION = '3';
 const PLAYER_STORAGE_VERSION_KEY = 'papiflix-player-version';
-const DEFAULT_EZVID_PROVIDER: EzvidProvider = EZVID_PROVIDERS[0];
+const DEFAULT_EZVID_PROVIDER: EzvidProvider = 'vidsrc';
 
 export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '1': 'VidFast',
