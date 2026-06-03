@@ -59,12 +59,16 @@ export function buildWatchHref(entry: RouteEntry, options: WatchHrefOptions = {}
       searchParams.set('autoPlay', 'false');
     }
 
+    if (options.autoNext === true) {
+      searchParams.set('autonext', 'true');
+    }
+
     if (typeof options.progress === 'number' && Number.isFinite(options.progress) && options.progress >= 0) {
       searchParams.set('progress', String(Math.floor(options.progress)));
     }
 
     const search = searchParams.toString();
-    return `${basePath}/${encodeURIComponent(entry.id)}/${encodeURIComponent(String(options.episode ?? 1))}/${options.language ?? 'sub'}${search ? `?${search}` : ''}`;
+    return `${basePath}/${encodeURIComponent(entry.id)}/${encodeURIComponent(String(options.episode ?? 1))}/sub${search ? `?${search}` : ''}`;
   }
 
   const searchParams = new URLSearchParams({

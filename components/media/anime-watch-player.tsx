@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
-import { useAnimeLanguagePreference } from '@/lib/hooks/use-player-preference';
 import {
   getRecentlyWatchedProgress,
   requestHomeScrollRestore,
@@ -346,28 +345,24 @@ function EpisodeCardList({
 function SidebarControls({
   autoNextEnabled,
   currentEpisode,
-  currentLanguage,
   currentSeason,
   episodeCards,
   episodeLimit,
   episodesBySeason,
   watchedEpisodeKeys,
   onEpisodeChange,
-  onLanguageChange,
   onSeasonChange,
   onToggleAutoNext,
   showPlaybackToggles = true,
 }: {
   autoNextEnabled: boolean;
   currentEpisode: number;
-  currentLanguage: 'dub' | 'sub';
   currentSeason: number;
   episodeCards: EpisodePreview[];
   episodeLimit: number;
   episodesBySeason: Record<string, number>;
   watchedEpisodeKeys: Set<string>;
   onEpisodeChange: (episode: number) => void;
-  onLanguageChange: (language: 'dub' | 'sub') => void;
   onSeasonChange: (season: number) => void;
   onToggleAutoNext: () => void;
   showPlaybackToggles?: boolean;
@@ -431,21 +426,6 @@ function SidebarControls({
             </div>
           ) : null}
 
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-            {(['sub', 'dub'] as const).map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                onClick={() => onLanguageChange(choice)}
-                className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                  currentLanguage === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {choice === 'sub' ? 'Sub' : 'Dub'}
-              </button>
-            ))}
-          </div>
-
           {showPlaybackToggles ? (
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -506,7 +486,6 @@ export function AnimeWatchPlayer({
 }: WatchPlayerProps) {
   const { data: session } = useSession();
   const router = useRouter();
-  const { language: storedLanguage, setLanguage: setStoredLanguage } = useAnimeLanguagePreference();
   const isSeries = entry.type === 'tv';
   const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
@@ -520,8 +499,7 @@ export function AnimeWatchPlayer({
 
   const [currentEpisode, setCurrentEpisode] = useState(initialEpisode);
   const [currentSeason, setCurrentSeason] = useState(1);
-  const [currentLanguage, setCurrentLanguage] = useState<'dub' | 'sub'>(initialPlayback.language ?? storedLanguage);
-  const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? true);
+  const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? false);
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState<string | null>(null);
   const [savedStartAt, setSavedStartAt] = useState<number | null>(initialPlayback.progress ?? null);
@@ -543,6 +521,7 @@ export function AnimeWatchPlayer({
         )
       : null;
   const resumeStartSeconds = savedStartAt ?? savedProgress?.progressSeconds ?? 0;
+  const currentLanguage = 'sub' as const;
 
   const embedUrl = buildAnimepaheEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
 
@@ -699,14 +678,6 @@ export function AnimeWatchPlayer({
     router.push(experience.homeHref, { scroll: false });
   };
 
-  const handleLanguageChange = (language: 'dub' | 'sub') => {
-    setIsIframeLoading(true);
-    setIframeError(null);
-    setCurrentLanguage(language);
-    setStoredLanguage(language);
-    setSavedStartAt(0);
-  };
-
   const handleEpisodeChange = (episode: number) => {
     if (episode > playableEpisodeLimit) return;
     setIsIframeLoading(true);
@@ -790,36 +761,17 @@ export function AnimeWatchPlayer({
         <SidebarControls
           autoNextEnabled={autoNextEnabled}
           currentEpisode={currentEpisode}
-          currentLanguage={currentLanguage}
           currentSeason={currentSeason}
           episodeCards={episodeCards}
           episodeLimit={episodeLimit}
           episodesBySeason={entry.type === 'tv' ? (entry.episodesBySeason ?? { '1': episodeLimit }) : { '1': 1 }}
           watchedEpisodeKeys={watchedEpisodeKeys}
           onEpisodeChange={handleEpisodeChange}
-          onLanguageChange={handleLanguageChange}
           onSeasonChange={handleSeasonChange}
           onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
           showPlaybackToggles
         />
-      ) : (
-        <div className="flex w-full flex-col gap-3 border-t border-white/5 bg-[#101014] p-4 landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0 landscape:pt-[calc(env(safe-area-inset-top)+1rem)]">
-          <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-            {(['sub', 'dub'] as const).map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                onClick={() => handleLanguageChange(choice)}
-                className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                  currentLanguage === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                {choice === 'sub' ? 'Sub' : 'Dub'}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

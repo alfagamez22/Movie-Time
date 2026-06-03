@@ -72,3 +72,70 @@ test('buildWatchHref uses the stored manga chapter id when resuming reading', ()
 
   assert.equal(href, '/manga/read/manga-123/chapter-id-12?language=raw');
 });
+
+test('buildWatchHref defaults anime watch routes to sub', () => {
+  const href = mediaRoutes.buildWatchHref(
+    {
+      id: '189046',
+      provider: 'anilist',
+      title: 'Example Anime',
+      type: 'tv',
+    },
+    {
+      episode: 2,
+    },
+  );
+
+  assert.equal(href, '/anime/watch/189046/2/sub');
+});
+
+test('buildWatchHref ignores stale dub language for anime watch routes', () => {
+  const href = mediaRoutes.buildWatchHref(
+    {
+      id: '189046',
+      provider: 'anilist',
+      title: 'Example Anime',
+      type: 'tv',
+    },
+    {
+      episode: 2,
+      language: 'dub',
+    },
+  );
+
+  assert.equal(href, '/anime/watch/189046/2/sub');
+});
+
+test('buildWatchHref keeps anime auto-next off by default', () => {
+  const href = mediaRoutes.buildWatchHref(
+    {
+      id: '189046',
+      provider: 'anilist',
+      title: 'Example Anime',
+      type: 'tv',
+    },
+    {
+      autoNext: false,
+      episode: 2,
+    },
+  );
+
+  assert.equal(href, '/anime/watch/189046/2/sub');
+});
+
+test('buildWatchHref preserves explicit anime auto-next opt-in', () => {
+  const href = mediaRoutes.buildWatchHref(
+    {
+      id: '189046',
+      provider: 'anilist',
+      title: 'Example Anime',
+      type: 'tv',
+    },
+    {
+      autoNext: true,
+      episode: 2,
+    },
+  );
+
+  assert.equal(href, '/anime/watch/189046/2/sub?autonext=true');
+});

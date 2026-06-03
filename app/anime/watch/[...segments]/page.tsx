@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 
 import { AnimeWatchPlayer } from '@/components/media/anime-watch-player';
 import { lookupAnimeMediaEntry } from '@/lib/anime/client';
 import { papianimeExperience } from '@/lib/media/experience';
-import { buildWatchHref, parsePlaybackLanguage } from '@/lib/media/routes';
+import { buildWatchHref } from '@/lib/media/routes';
 
 interface AnimeWatchPageProps {
   params: Promise<{ segments: string[] }>;
@@ -96,9 +95,9 @@ async function resolveCanonicalState(
 
   const episodeLimit = lookup.seasonDetails?.releasedEpisodeCount ?? lookup.entry.episodeCount ?? 1;
   const parsedEpisode = Math.min(Math.max(1, Number.parseInt(episode, 10) || 1), episodeLimit);
-  const parsedLanguage = (parsePlaybackLanguage(language) ?? lookup.entry.defaultLanguage ?? 'sub') as 'dub' | 'sub';
+  const parsedLanguage = 'sub' as const;
   const initialPlayback = {
-    autoNext: parseBooleanParam(getFirstParam(searchParams.autonext), true),
+    autoNext: parseBooleanParam(getFirstParam(searchParams.autonext), false),
     autoPlay: parseBooleanParam(getFirstParam(searchParams.autoPlay), true),
     color: 'e50914',
     episode: String(parsedEpisode),

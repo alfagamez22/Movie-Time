@@ -20,9 +20,7 @@ import {
 } from '@/lib/media/embed';
 import {
   PLAYER_LABELS,
-  useAnimeLanguagePreference,
   usePlayerPreference,
-  type AnimeLanguageChoice,
   type PlayerChoice,
 } from '@/lib/hooks/use-player-preference';
 import {
@@ -175,9 +173,7 @@ function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
 }
 
 function LoadingOverlay({
-  isAnime,
   isLoading,
-  onSwitchLanguage,
   player,
   posterUrl,
   pressToPlay,
@@ -186,9 +182,7 @@ function LoadingOverlay({
   onReload,
   showFallback,
 }: {
-  isAnime: boolean;
   isLoading: boolean;
-  onSwitchLanguage?: () => void;
   player: PlayerChoice;
   posterUrl?: string;
   pressToPlay: boolean;
@@ -202,7 +196,6 @@ function LoadingOverlay({
   }
 
   const showPressToPlay = pressToPlay && Boolean(posterUrl);
-  const showPlayerStrip = !isAnime && !showPressToPlay;
 
   return (
     <div
@@ -252,16 +245,6 @@ function LoadingOverlay({
           </button>
         ) : null}
 
-        {showFallback && isAnime && onSwitchLanguage ? (
-          <button
-            type="button"
-            onClick={onSwitchLanguage}
-            className="mt-4 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-          >
-            Switch Sub/Dub
-          </button>
-        ) : null}
-
         {!showPressToPlay ? (
           <button
             type="button"
@@ -272,7 +255,7 @@ function LoadingOverlay({
           </button>
         ) : null}
 
-        {showPlayerStrip ? (
+        {!showPressToPlay ? (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {(['1', '2', '3', '4', '5', '6'] as const).map((choice) => (
               <button
@@ -353,11 +336,9 @@ export function WatchPlayer({
   const [isChromeVisible, setIsChromeVisible] = useState(true);
   const [isPlayerLoading, setIsPlayerLoading] = useState(true);
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
-  const [animeLanguage, setAnimeLanguage] = useState(initialPlayback.language);
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [pressToPlay, setPressToPlay] = useState(false);
   const { player, setPlayer } = usePlayerPreference();
-  const { setLanguage: setStoredAnimeLanguage } = useAnimeLanguagePreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasIframeLoadedRef = useRef(false);
@@ -372,7 +353,6 @@ export function WatchPlayer({
     ? (activeSeasonDetails?.episodeCount ?? getEpisodeLimit(entry, safeSeason))
     : 1;
   const safeEpisode = String(Math.min(Math.max(1, Number.parseInt(episode, 10)), safeEpisodeLimit));
-  const effectiveLanguage = isAnime ? animeLanguage : initialPlayback.language;
 
   const seasonOptions = !isAnime && isSeries
     ? Array.from({ length: entry.maxSeasons }, (_, index) => String(index + 1))
@@ -397,7 +377,7 @@ export function WatchPlayer({
   const playbackOptions = {
     ...initialPlayback,
     episode: safeEpisode,
-    language: effectiveLanguage,
+    language: initialPlayback.language,
     progress: player === '4' || player === '5' || player === '6' ? null : initialPlayback.progress,
     season: safeSeason,
   };
@@ -421,7 +401,7 @@ export function WatchPlayer({
   }, []);
 
   useEffect(() => {
-    const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
+    const trackingEntry = isAnime ? { ...entry, defaultLanguage: initialPlayback.language } : entry;
     trackRecentlyWatched(
       trackingEntry,
       {
@@ -431,7 +411,7 @@ export function WatchPlayer({
       experience.id,
       canSyncWatchHistory,
     );
-  }, [canSyncWatchHistory, effectiveLanguage, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, initialPlayback.language, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
     if (!embedUrl) {
@@ -471,7 +451,7 @@ export function WatchPlayer({
       if (now - lastProgressWriteRef.current < 5_000 && progress.progressPercent !== 100) return;
       lastProgressWriteRef.current = now;
 
-      const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
+      const trackingEntry = isAnime ? { ...entry, defaultLanguage: initialPlayback.language } : entry;
       trackRecentlyWatched(
         trackingEntry,
         {
@@ -488,7 +468,7 @@ export function WatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [canSyncWatchHistory, effectiveLanguage, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, initialPlayback.language, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
 
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
@@ -648,24 +628,10 @@ export function WatchPlayer({
     [entry.id, entry.slug, entry.type, isAnime],
   );
 
-  const handleAnimeLanguageChange = useCallback(
-    (nextLanguage: AnimeLanguageChoice) => {
-      setIsPlayerLoading(true);
-      setShowPlayerFallback(false);
-      setAnimeLanguage(nextLanguage);
-      setStoredAnimeLanguage(nextLanguage);
-    },
-    [setStoredAnimeLanguage],
-  );
-
   const handleBackToLibrary = useCallback(() => {
     requestHomeScrollRestore(experience.id);
     router.push(experience.homeHref, { scroll: false });
   }, [experience.homeHref, experience.id, router]);
-
-  const handleSwitchAnimeLanguage = useCallback(() => {
-    handleAnimeLanguageChange(animeLanguage === 'sub' ? 'dub' : 'sub');
-  }, [animeLanguage, handleAnimeLanguageChange]);
 
   if (isAnime) {
     return (
@@ -749,9 +715,7 @@ export function WatchPlayer({
         ) : null}
 
         <LoadingOverlay
-          isAnime={isAnime}
           isLoading={isPlayerLoading}
-          onSwitchLanguage={isAnime ? handleSwitchAnimeLanguage : undefined}
           player={player}
           posterUrl={entry.backdropUrl ?? entry.posterUrl}
           pressToPlay={pressToPlay}
@@ -762,7 +726,7 @@ export function WatchPlayer({
         />
 
         <iframe
-          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
+          key={`${entry.provider}-${isAnime ? initialPlayback.language : player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"

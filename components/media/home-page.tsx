@@ -9,7 +9,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
-import { PLAYER_LABELS, useAnimeLanguagePreference, usePlayerPreference } from '@/lib/hooks/use-player-preference';
+import { PLAYER_LABELS, usePlayerPreference } from '@/lib/hooks/use-player-preference';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
@@ -132,13 +132,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [navScrolled, setNavScrolled] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>('default');
-  const { language } = useAnimeLanguagePreference();
   const recentlyWatched = useRecentlyWatched(experience.id);
   useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
   const isSearchPending = query.trim() !== debouncedQuery;
-  const preferredLanguage = experience.id === 'papianime' ? language : undefined;
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
@@ -381,7 +379,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         <HeroBanner
           items={featuredItems}
           onInfoSelect={openDetails}
-          preferredAnimeLanguage={preferredLanguage}
           recentlyWatched={recentlyWatched}
           watchBasePath={experience.watchBasePath}
         />
@@ -426,7 +423,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         onClose={closeDetails}
         onSelectEntry={selectDetailsEntry}
         onSignInRequired={openAuthModal}
-        preferredAnimeLanguage={preferredLanguage}
         recentlyWatched={recentlyWatched}
       />
 
