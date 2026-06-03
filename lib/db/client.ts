@@ -2,7 +2,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/lib/generated/prisma/client';
 
 function makePrisma() {
-  const raw = process.env.DATABASE_URL!;
+  const raw = process.env.DATABASE_URL;
+  if (!raw) throw new Error('DATABASE_URL environment variable is not set.');
 
   // pg-connection-string v2.13.0 emits a one-time SECURITY WARNING on startup
   // when sslmode is set to 'prefer', 'require', or 'verify-ca'.
@@ -17,11 +18,22 @@ function makePrisma() {
   //   url.searchParams.set('uselibpqcompat', 'true');
 
   const adapter = new PrismaPg({ connectionString: url.toString() });
-  return new PrismaClient({ adapter });
+  const client = new PrismaClient({ adapter });
+  if (process.env.NODE_ENV !== 'production') {
+    (globalThis as unknown as { prisma?: PrismaClient }).prisma = client;
+  }
+  return client;
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? makePrisma();
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// Use a Proxy so that `makePrisma()` (and therefore `new URL(DATABASE_URL)`) is
+// only called the first time a Prisma method is actually invoked at request
+// time — never during Next.js build-time module evaluation, when DATABASE_URL
+// is not available.
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = globalForPrisma.prisma ?? (globalForPrisma.prisma = makePrisma());
+    return Reflect.get(client, prop);
+  },
+});
