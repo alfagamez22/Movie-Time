@@ -6,6 +6,8 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 
+import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
+
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
   buildEmbedUrl,
@@ -17,11 +19,11 @@ import {
   type PlaybackOptions,
 } from '@/lib/media/embed';
 import {
-  EZVID_PROVIDER_LABELS,
+  PLAYER_LABELS,
   useAnimeLanguagePreference,
-  useEzvidProviderPreference,
   usePlayerPreference,
   type AnimeLanguageChoice,
+  type PlayerChoice,
 } from '@/lib/hooks/use-player-preference';
 import {
   requestHomeScrollRestore,
@@ -176,31 +178,80 @@ function LoadingOverlay({
   isAnime,
   isLoading,
   onSwitchLanguage,
+  player,
+  posterUrl,
+  pressToPlay,
+  onPressToPlay,
+  onSwitchPlayer,
+  onReload,
   showFallback,
 }: {
   isAnime: boolean;
   isLoading: boolean;
   onSwitchLanguage?: () => void;
+  player: PlayerChoice;
+  posterUrl?: string;
+  pressToPlay: boolean;
+  onPressToPlay?: () => void;
+  onSwitchPlayer: (choice: PlayerChoice) => void;
+  onReload: () => void;
   showFallback: boolean;
 }) {
-  if (!isLoading && !showFallback) {
+  if (!pressToPlay && !isLoading && !showFallback) {
     return null;
   }
 
+  const showPressToPlay = pressToPlay && Boolean(posterUrl);
+  const showPlayerStrip = !isAnime && !showPressToPlay;
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55 px-6 backdrop-blur-sm">
-      <div className="pointer-events-auto max-w-md rounded-2xl border border-white/10 bg-black/75 p-5 text-center shadow-2xl">
+    <div
+      className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6 backdrop-blur-sm ${
+        showPressToPlay ? 'bg-black/35' : 'bg-black/55'
+      }`}
+    >
+      {showPressToPlay && posterUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={posterUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-50"
+        />
+      ) : null}
+      <div
+        className={`pointer-events-auto relative max-w-md rounded-2xl border border-white/10 p-5 text-center shadow-2xl ${
+          showPressToPlay ? 'bg-black/80' : 'bg-black/75'
+        }`}
+      >
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
-          {showFallback ? 'Playback Check' : 'Loading Player'}
+          {showPressToPlay ? 'Ready to Play' : showFallback ? 'Playback Check' : 'Loading Player'}
         </p>
         <h2 className="mt-3 text-xl font-bold text-white">
-          {showFallback ? 'The embedded player did not finish loading.' : 'Preparing your stream...'}
+          {showPressToPlay
+            ? 'Press play to start the stream'
+            : showFallback
+              ? 'The embedded player did not finish loading.'
+              : 'Preparing your stream...'}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-          {showFallback
-            ? 'Reload this episode or switch the available playback option if the stream stays blank.'
-            : 'Opening the stream wrapper now.'}
+          {showPressToPlay
+            ? 'Streams start only when you ask. This avoids a long wait on first open.'
+            : showFallback
+              ? 'Reload this episode or switch the available playback option if the stream stays blank.'
+              : 'Opening the stream wrapper now.'}
         </p>
+
+        {showPressToPlay ? (
+          <button
+            type="button"
+            onClick={onPressToPlay}
+            className="mt-5 inline-flex items-center gap-2 rounded-full bg-netflix-red px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#f6121d] focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            <span className="ml-0.5 inline-block h-0 w-0 border-b-[6px] border-l-[10px] border-t-[6px] border-b-transparent border-t-transparent border-l-white" />
+            Press Play
+          </button>
+        ) : null}
+
         {showFallback && isAnime && onSwitchLanguage ? (
           <button
             type="button"
@@ -209,6 +260,36 @@ function LoadingOverlay({
           >
             Switch Sub/Dub
           </button>
+        ) : null}
+
+        {!showPressToPlay ? (
+          <button
+            type="button"
+            onClick={onReload}
+            className="mt-4 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Reload
+          </button>
+        ) : null}
+
+        {showPlayerStrip ? (
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {(['1', '2', '3', '4', '5', '6'] as const).map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                onClick={() => onSwitchPlayer(choice)}
+                title={`Switch to ${PLAYER_LABELS[choice]}`}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  player === choice
+                    ? 'border-netflix-red bg-netflix-red text-white'
+                    : 'border-white/15 bg-white/5 text-zinc-200 hover:bg-white/15'
+                }`}
+              >
+                P{choice} · {PLAYER_LABELS[choice]}
+              </button>
+            ))}
+          </div>
         ) : null}
       </div>
     </div>
@@ -273,14 +354,16 @@ export function WatchPlayer({
   const [isPlayerLoading, setIsPlayerLoading] = useState(true);
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
   const [animeLanguage, setAnimeLanguage] = useState(initialPlayback.language);
-  const { player } = usePlayerPreference();
-  const { provider: ezvidProvider, setProvider: setEzvidProvider } = useEzvidProviderPreference();
+  const [iframeReloadKey, setIframeReloadKey] = useState(0);
+  const [pressToPlay, setPressToPlay] = useState(false);
+  const { player, setPlayer } = usePlayerPreference();
   const { setLanguage: setStoredAnimeLanguage } = useAnimeLanguagePreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const vidsrcElapsedRef = useRef(0);
+  const hasStartedPlaybackRef = useRef<boolean | null>(null);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -326,7 +409,7 @@ export function WatchPlayer({
         : player === '3'
           ? buildVideasyEmbedUrl(entry, playbackOptions)
           : player === '5'
-            ? buildEzvidEmbedUrl(entry, playbackOptions, ezvidProvider)
+            ? buildEzvidEmbedUrl(entry, playbackOptions)
             : player === '6'
               ? buildFilmuEmbedUrl(entry, playbackOptions)
               : buildEmbedUrl(entry, playbackOptions);
@@ -336,15 +419,6 @@ export function WatchPlayer({
     setShowPlayerFallback(false);
     setEpisode(newEpisode);
   }, []);
-
-  const handleEzvidProviderChange = useCallback(
-    (provider: keyof typeof EZVID_PROVIDER_LABELS) => {
-      setIsPlayerLoading(true);
-      setShowPlayerFallback(false);
-      setEzvidProvider(provider);
-    },
-    [setEzvidProvider],
-  );
 
   useEffect(() => {
     const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
@@ -474,10 +548,77 @@ export function WatchPlayer({
     }, 3000);
   }, []);
 
+  const hideChrome = useCallback(() => {
+    if (chromeTimerRef.current) {
+      clearTimeout(chromeTimerRef.current);
+      chromeTimerRef.current = null;
+    }
+    setIsChromeVisible(false);
+    iframeRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     return () => {
       if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      // Don't hijack Escape when the user is typing in an input.
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      event.preventDefault();
+      requestHomeScrollRestore(experience.id);
+      router.push(experience.homeHref, { scroll: false });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [experience.homeHref, experience.id, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+    if (hasStartedPlaybackRef.current !== null) return;
+    hasStartedPlaybackRef.current = false;
+    let alreadyStarted = false;
+    try {
+      alreadyStarted = sessionStorage.getItem('papiflix-player-autostart-hint') === '1';
+    } catch {
+      // Treat storage failure as "first visit" so the gate still shows.
+    }
+    setPressToPlay(!alreadyStarted);
+  }, []);
+
+  const handleStartPlayback = useCallback(() => {
+    setPressToPlay(false);
+    hasStartedPlaybackRef.current = true;
+    try {
+      sessionStorage.setItem('papiflix-player-autostart-hint', '1');
+    } catch {
+      // Best-effort hint; the gate will simply re-show next session.
+    }
+  }, []);
+
+  const handleSwitchPlayer = useCallback(
+    (choice: PlayerChoice) => {
+      if (player === choice) {
+        return;
+      }
+      setIsPlayerLoading(true);
+      setShowPlayerFallback(false);
+      setPlayer(choice);
+    },
+    [player, setPlayer],
+  );
+
+  const handleReloadPlayer = useCallback(() => {
+    setIsPlayerLoading(true);
+    setShowPlayerFallback(false);
+    setIframeReloadKey((value) => value + 1);
   }, []);
 
   const handleSeasonChange = useCallback(
@@ -540,15 +681,19 @@ export function WatchPlayer({
   return (
     <div
       onMouseMove={revealChrome}
+      onPointerLeave={hideChrome}
       className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
     >
       <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[calc(env(safe-area-inset-top)+2px)] bg-gradient-to-b from-black/80 to-transparent" />
         <button
           type="button"
           onClick={handleBackToLibrary}
           aria-label="Back to library"
-          title="Back to library"
-          className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          title="Back to library (Esc)"
+          className={`absolute left-[calc(env(safe-area-inset-left)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition-opacity duration-300 hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+            isChromeVisible ? 'opacity-100' : 'opacity-40'
+          }`}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
@@ -564,30 +709,6 @@ export function WatchPlayer({
           >
             <Download className="h-5 w-5" />
           </a>
-        ) : null}
-
-        {player === '5' ? (
-          <label
-            className={`absolute left-[calc(env(safe-area-inset-left)+8rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 inline-flex h-12 items-center gap-2 rounded-full border border-white/15 bg-black/45 px-3 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-black/60 focus-within:ring-2 focus-within:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-          >
-            <span className="text-zinc-400">Server</span>
-            <select
-              value={ezvidProvider}
-              onChange={(event) => {
-                handleEzvidProviderChange(event.target.value as keyof typeof EZVID_PROVIDER_LABELS);
-                (event.target as HTMLSelectElement).blur();
-              }}
-              className="cursor-pointer bg-transparent text-xs font-bold text-white outline-none"
-              title="Select P5 server"
-              aria-label="Select P5 server"
-            >
-              {Object.entries(EZVID_PROVIDER_LABELS).map(([provider, label]) => (
-                <option key={provider} value={provider} className="bg-[#1a1a1a] text-white">
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
         ) : null}
 
         {isSeries && Number.parseInt(safeEpisode, 10) < safeEpisodeLimit ? (
@@ -607,25 +728,41 @@ export function WatchPlayer({
         ) : null}
 
         <div
-          className={`pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)] transition-opacity duration-300 ${
-            isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+          className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-30 flex justify-center transition-all duration-300 ${
+            isChromeVisible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
           }`}
         >
-          <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
+          <span className="line-clamp-1 max-w-[60vw] rounded-full bg-black/65 px-4 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-lg backdrop-blur-md sm:text-[12px]">
             {entry.title}
             {isSeries ? (isAnime ? ` EP ${safeEpisode.padStart(2, '0')}` : ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`) : ''}
           </span>
         </div>
 
+        {!isChromeVisible ? (
+          <button
+            type="button"
+            aria-label="Show player controls"
+            title="Show controls"
+            onClick={revealChrome}
+            className="absolute inset-0 z-[65] cursor-default bg-transparent focus:outline-none"
+          />
+        ) : null}
+
         <LoadingOverlay
           isAnime={isAnime}
           isLoading={isPlayerLoading}
           onSwitchLanguage={isAnime ? handleSwitchAnimeLanguage : undefined}
+          player={player}
+          posterUrl={entry.backdropUrl ?? entry.posterUrl}
+          pressToPlay={pressToPlay}
+          onPressToPlay={pressToPlay ? handleStartPlayback : undefined}
+          onSwitchPlayer={handleSwitchPlayer}
+          onReload={handleReloadPlayer}
           showFallback={showPlayerFallback}
         />
 
         <iframe
-          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${player === '5' ? ezvidProvider : ''}-${safeSeason}-${safeEpisode}`}
+          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
@@ -735,8 +872,14 @@ function EpisodeCardList({
   safeSeason: string;
   watchedEpisodeKeys: Set<string>;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEpisodeAutoScroll(containerRef, `${safeSeason}:${safeEpisode}`, [safeSeason]);
+
   return (
-    <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+    <div
+      ref={containerRef}
+      className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]"
+    >
       {cards.map((episode) => {
         const episodeNumber = String(episode.episodeNumber);
         const isActive = episodeNumber === safeEpisode;
@@ -746,6 +889,7 @@ function EpisodeCardList({
           <button
             key={episodeNumber}
             type="button"
+            data-episode-active={isActive ? 'true' : 'false'}
             onClick={() => onEpisodeChange(episodeNumber)}
             className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
               isActive ? 'bg-white/[0.08]' : isWatched ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]' : 'hover:bg-white/[0.05]'

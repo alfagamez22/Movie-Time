@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -17,6 +17,7 @@ import { AuthModal } from '@/components/auth/auth-modal';
 import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
+import { MatureToggle, filterMatureSections, useMatureUnlocked } from './mature-toggle';
 import { MediaDetailsModal } from './media-details-modal';
 
 interface HomePageProps {
@@ -249,6 +250,12 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   const featuredItems = getFeaturedItems(sections);
   const authPromptCopy = getAuthPromptCopy(authPromptReason);
+  const matureUnlocked = useMatureUnlocked();
+
+  const visibleSections = useMemo(
+    () => filterMatureSections(sections, matureUnlocked),
+    [matureUnlocked, sections],
+  );
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
@@ -277,6 +284,9 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                   {link.label}
                 </Link>
               ))}
+              <Link href="/categories" className="transition-colors hover:text-white">
+                Categories
+              </Link>
               {isAuthenticated ? (
                 <Link href="/bookmarks" className="transition-colors hover:text-white">
                   Bookmarks
@@ -284,6 +294,9 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
               ) : null}
             </nav>
             <div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+              <div className="hidden md:block">
+                <MatureToggle />
+              </div>
               <div className={showPlayerSwitcher ? 'hidden md:block' : 'hidden'}>
                 <PreferenceSwitcher experience={experience} />
               </div>
@@ -299,10 +312,15 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             </div>
           </div>
           {showPlayerSwitcher ? (
-            <div className="mt-3 flex justify-center md:hidden">
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
+              <MatureToggle />
               <PreferenceSwitcher experience={experience} />
             </div>
-          ) : null}
+          ) : (
+            <div className="mt-3 flex justify-center md:hidden">
+              <MatureToggle />
+            </div>
+          )}
         </div>
       </header>
 
@@ -390,7 +408,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             prioritizeLeadPoster
           />
         ) : null}
-        {sections.map((section, index) => (
+        {visibleSections.map((section, index) => (
           <BrowseRow
             anchorId={section.id}
             key={section.id}

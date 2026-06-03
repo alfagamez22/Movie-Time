@@ -2,15 +2,12 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-import { EZVID_PROVIDERS, isEzvidProvider, type EzvidProvider } from '@/lib/media/embed';
-
 export type PlayerChoice = '1' | '2' | '3' | '4' | '5' | '6';
 export type AnimeLanguageChoice = 'dub' | 'sub';
 export type AnimeServerChoice = 'aniwave';
 
 const PLAYER_STORAGE_VERSION = '3';
 const PLAYER_STORAGE_VERSION_KEY = 'papiflix-player-version';
-const DEFAULT_EZVID_PROVIDER: EzvidProvider = 'vidsrc';
 
 export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '1': 'VidFast',
@@ -19,17 +16,6 @@ export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '4': 'Vidking',
   '5': 'EZVid',
   '6': 'FilmU',
-};
-
-export const EZVID_PROVIDER_LABELS: Record<EzvidProvider, string> = {
-  dixsrc: 'DixSrc',
-  icefy: 'Icefy',
-  popr: 'Popr',
-  vidlink: 'VidLink',
-  vidnest: 'VidNest',
-  vidrock: 'VidRock',
-  vidsrc: 'VidSrc',
-  vidzee: 'VidZee',
 };
 
 export const ANIME_LANGUAGE_LABELS: Record<AnimeLanguageChoice, string> = {
@@ -89,14 +75,6 @@ const animeServerStore: ChoiceStore<AnimeServerChoice> = {
   memoryValue: null,
   normalize: () => 'aniwave' as const,
   storageKey: 'papianime-server',
-};
-
-const ezvidProviderStore: ChoiceStore<EzvidProvider> = {
-  changeEvent: 'papiflix-ezvid-provider-change',
-  defaultValue: DEFAULT_EZVID_PROVIDER,
-  memoryValue: null,
-  normalize: (value) => (isEzvidProvider(value) ? value : DEFAULT_EZVID_PROVIDER),
-  storageKey: 'papiflix-ezvid-provider',
 };
 
 function getChoiceSnapshot<T extends string>(store: ChoiceStore<T>): T {
@@ -176,9 +154,4 @@ export function usePlayerPreference() {
 export function useAnimeLanguagePreference() {
   const { setValue: setLanguage, value: language } = useStoredChoice(animeLanguageStore);
   return { language, setLanguage } as const;
-}
-
-export function useEzvidProviderPreference() {
-  const { setValue: setProvider, value: provider } = useStoredChoice(ezvidProviderStore);
-  return { provider, setProvider } as const;
 }

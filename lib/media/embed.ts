@@ -20,6 +20,7 @@ export const EZVID_PROVIDERS = [
 ] as const;
 
 export type EzvidProvider = (typeof EZVID_PROVIDERS)[number];
+export const DEFAULT_EZVID_PROVIDER: EzvidProvider = 'vidsrc';
 
 const DEFAULT_PLAYER_COLOR = 'e50914';
 const HEX_COLOR = /^[0-9a-fA-F]{6}$/;
@@ -231,7 +232,7 @@ export function isEzvidProvider(value: string | null | undefined): value is Ezvi
 export function buildEzvidEmbedUrl(
   entry: MediaEntry,
   options: PlaybackOptions,
-  provider: EzvidProvider,
+  provider: EzvidProvider = DEFAULT_EZVID_PROVIDER,
 ): string {
   const baseUrl = appConfig.ezvidEmbedBaseUrl;
   const path = isTvEntry(entry)

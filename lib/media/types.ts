@@ -95,10 +95,21 @@ export interface LibraryMediaEntry {
   year?: number;
 }
 
+export type LibrarySectionTier = 'default' | 'mature';
+export type LibrarySectionCategory =
+  | 'trending'
+  | 'discover'
+  | 'regional'
+  | 'genre'
+  | 'rating'
+  | 'mature';
+
 export interface LibrarySection {
+  category?: LibrarySectionCategory;
   description: string;
   entries: LibraryMediaEntry[];
   id: string;
+  tier?: LibrarySectionTier;
   title: string;
 }
 

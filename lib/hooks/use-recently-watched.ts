@@ -15,6 +15,13 @@ import {
   type ServerWatchHistoryEntry,
   type ServerWatchProgressEntry,
 } from '@/lib/hooks/recently-watched-merge';
+import {
+  addRecentlyWatchedTombstone,
+  buildTombstoneFilter,
+  clearRecentlyWatchedTombstone,
+  readRecentlyWatchedTombstones,
+  type RecentlyWatchedTombstone,
+} from '@/lib/hooks/recently-watched-tombstones';
 
 const MAX_COOKIE_LENGTH = 3800;
 const EMPTY_RECENTLY_WATCHED: RecentlyWatchedEntry[] = [];
@@ -236,10 +243,19 @@ function getRecentlyWatchedSnapshot(namespace: RecentlyWatchedNamespace): Recent
     return getCachedEntries(namespace);
   }
 
-  const entries = parseRecentlyWatched(rawValue);
+  const tombstones = readRecentlyWatchedTombstones(namespace);
+  const entries = applyTombstones(parseRecentlyWatched(rawValue), tombstones);
   setCachedRawValue(namespace, rawValue);
   setCachedEntries(namespace, entries);
   return entries;
+}
+
+function applyTombstones<T extends { id: string; provider: string; type: string }>(
+  list: ReadonlyArray<T>,
+  tombstones: ReadonlyArray<RecentlyWatchedTombstone>,
+): T[] {
+  if (tombstones.length === 0 || list.length === 0) return list.slice();
+  return list.filter(buildTombstoneFilter(tombstones));
 }
 
 function getServerRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
@@ -572,6 +588,10 @@ export function removeRecentlyWatched(
     return;
   }
 
+  // Always record a tombstone so a network failure or signed-out state
+  // doesn't quietly resurrect the entry on the next server fetch.
+  addRecentlyWatchedTombstone(entry, namespace);
+
   fetch('/api/watch-history/delete', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
@@ -580,7 +600,15 @@ export function removeRecentlyWatched(
       mediaProvider: entry.provider,
       mediaType: entry.type,
     }),
-  }).catch(() => {});
+  })
+    .then((response) => {
+      if (response.ok) {
+        clearRecentlyWatchedTombstone(entry, namespace);
+      }
+    })
+    .catch(() => {
+      // Tombstone remains so the next sync attempt re-tries the delete.
+    });
 }
 
 export function useRecentlyWatched(namespace: RecentlyWatchedNamespace = 'papiflix') {
@@ -627,6 +655,42 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
     }
   }, [namespace, userId]);
 
+  const flushTombstones = useCallback(async () => {
+    if (!userId || !isBrowser()) return;
+    const tombstones = readRecentlyWatchedTombstones(namespace);
+    if (tombstones.length === 0) return;
+
+    let remaining = tombstones.length;
+    await Promise.all(
+      tombstones.map(async (tomb) => {
+        try {
+          const response = await fetch('/api/watch-history/delete', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mediaId: tomb.id,
+              mediaProvider: tomb.provider,
+              mediaType: tomb.type,
+            }),
+          });
+          if (response.ok) {
+            clearRecentlyWatchedTombstone(tomb, namespace);
+            remaining -= 1;
+          }
+        } catch {
+          // Leave the tombstone in place for the next retry.
+        }
+      }),
+    );
+
+    if (remaining !== tombstones.length) {
+      // Bump the cache so consumers refetch with the now-cleared tombstones.
+      setCachedRawValue(namespace, '');
+      const keys = getNamespaceKeys(namespace);
+      window.dispatchEvent(new Event(keys.eventName));
+    }
+  }, [namespace, userId]);
+
   const fetchServer = useCallback(async () => {
     if (!userId) return;
     if (inFlightRef.current) return;
@@ -648,9 +712,12 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
         ? ((await progressResponse.json().catch(() => ({}))) as { progress?: ServerWatchProgressEntry[] })
         : { progress: [] });
 
-      const serverEntries = (historyJson.entries ?? [])
-        .map(serverEntryToClient)
-        .filter((entry): entry is RecentlyWatchedEntry => Boolean(entry));
+      const serverEntries = applyTombstones(
+        (historyJson.entries ?? [])
+          .map(serverEntryToClient)
+          .filter((entry): entry is RecentlyWatchedEntry => Boolean(entry)),
+        readRecentlyWatchedTombstones(namespace),
+      );
       const localEntries = getRecentlyWatchedSnapshot(namespace);
       const merged = mergeRecentlyWatched({ localEntries, preferServer: true, serverEntries });
 
@@ -704,11 +771,12 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
     if (fetchedRef.current !== fetchKey) {
       fetchedRef.current = fetchKey;
       void (async () => {
+        await flushTombstones();
         await pushLocalToServer();
         await fetchServer();
       })();
     }
-  }, [fetchKey, fetchServer, namespace, pushLocalToServer]);
+  }, [fetchKey, fetchServer, flushTombstones, namespace, pushLocalToServer]);
 
   useEffect(() => {
     if (!userId || !isBrowser()) return;

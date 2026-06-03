@@ -35,3 +35,6 @@ tsconfig.tsbuildinfo
 *.db-wal
 
 .playwright-mcp/
+
+# On-disk TMDB image cache (regenerated on first request)
+public/.img-cache/

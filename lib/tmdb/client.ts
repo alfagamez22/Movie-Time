@@ -162,22 +162,26 @@ interface MetadataRequestTarget {
 
 interface TmdbBrowseSectionDefinition {
   adultOnly?: boolean;
+  category: import('@/lib/media/types').LibrarySectionCategory;
   description: string;
   id: string;
   includeAdult?: boolean;
   pathname: string;
+  tier?: import('@/lib/media/types').LibrarySectionTier;
   type?: MediaType;
   title: string;
 }
 
 const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
   {
+    category: 'trending',
     description: 'The biggest titles picking up momentum across TMDB right now.',
     id: 'trending',
     pathname: '/trending/all/day',
     title: 'Trending Now',
   },
   {
+    category: 'discover',
     description: 'Popular movies from across the TMDB library.',
     id: 'movies',
     pathname: '/discover/movie?sort_by=popularity.desc',
@@ -185,6 +189,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'discover',
     description: 'Popular TV shows and series from across the TMDB library.',
     id: 'tv-shows',
     pathname: '/discover/tv?sort_by=popularity.desc',
@@ -192,6 +197,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
+    category: 'regional',
     description: 'Popular Filipino movies excluding TMDB titles produced by Vivamax.',
     id: 'filipino-movies',
     pathname: `/discover/movie?with_original_language=tl&region=PH&without_companies=${VIVAMAX_COMPANY_ID}&sort_by=popularity.desc`,
@@ -199,14 +205,17 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'mature',
     description: 'TMDB movies produced by Vivamax, separated from the general Filipino row.',
     id: 'vivamax-movies',
     includeAdult: true,
     pathname: `/discover/movie?with_companies=${VIVAMAX_COMPANY_ID}&sort_by=popularity.desc`,
+    tier: 'mature',
     title: 'Vivamax Movies',
     type: 'movie',
   },
   {
+    category: 'regional',
     description: 'Popular Japanese movies from the TMDB library.',
     id: 'japanese-movies',
     pathname: '/discover/movie?with_original_language=ja&region=JP&sort_by=popularity.desc',
@@ -214,6 +223,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'rating',
     description: 'Mature-rated movies using PH R-18 certification data while excluding adult-only TMDB titles.',
     id: 'r18-movies',
     pathname: '/discover/movie?certification_country=PH&certification=R-18&sort_by=popularity.desc',
@@ -222,7 +232,8 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
   },
   {
     adultOnly: true,
-    description: 'Adult-tagged TMDB movie results surfaced separately from the standard mature row.',
+    category: 'rating',
+    description: 'Adult-tagged TMDB movie results surfaced as a separate rating row.',
     id: 'adult-r18-movies',
     includeAdult: true,
     pathname: '/discover/movie?sort_by=popularity.desc',
@@ -230,6 +241,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'rating',
     description: 'Broad-audience movies with the strongest current pull.',
     id: 'popular-movies',
     pathname: '/movie/popular',
@@ -237,6 +249,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'rating',
     description: 'Series with the strongest ratings and long-tail binge value.',
     id: 'top-rated-series',
     pathname: '/tv/top_rated',
@@ -244,6 +257,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
+    category: 'rating',
     description: 'Highly rated movies across all time.',
     id: 'top-rated-movies',
     pathname: '/movie/top_rated',
@@ -251,6 +265,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'rating',
     description: 'TV shows dominating viewership right now.',
     id: 'popular-tv',
     pathname: '/tv/popular',
@@ -258,6 +273,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
+    category: 'rating',
     description: 'Newer theatrical releases and fresh movie arrivals.',
     id: 'now-playing',
     pathname: '/movie/now_playing',
@@ -265,6 +281,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'rating',
     description: 'Shows with active weekly release cycles and current audience attention.',
     id: 'on-the-air',
     pathname: '/tv/on_the_air',
@@ -272,6 +289,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
+    category: 'genre',
     description: 'High-octane action movies from around the world.',
     id: 'action-movies',
     pathname: '/discover/movie?with_genres=28&sort_by=popularity.desc',
@@ -279,6 +297,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'genre',
     description: 'Sci-fi and fantasy films pushing the limits of imagination.',
     id: 'scifi-movies',
     pathname: '/discover/movie?with_genres=878&sort_by=popularity.desc',
@@ -286,6 +305,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'genre',
     description: 'Horror films that keep you on the edge of your seat.',
     id: 'horror-movies',
     pathname: '/discover/movie?with_genres=27&sort_by=popularity.desc',
@@ -293,6 +313,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'genre',
     description: 'The funniest movies to lighten your mood.',
     id: 'comedy-movies',
     pathname: '/discover/movie?with_genres=35&sort_by=popularity.desc',
@@ -300,6 +321,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'genre',
     description: 'Gripping crime and thriller films.',
     id: 'crime-movies',
     pathname: '/discover/movie?with_genres=80&sort_by=popularity.desc',
@@ -307,6 +329,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'movie',
   },
   {
+    category: 'regional',
     description: 'The most popular K-Dramas and Korean series.',
     id: 'korean-tv',
     pathname: '/discover/tv?with_original_language=ko&sort_by=popularity.desc',
@@ -314,6 +337,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
+    category: 'regional',
     description: 'Top anime series from Japan.',
     id: 'anime',
     pathname: '/discover/tv?with_original_language=ja&with_genres=16&sort_by=popularity.desc',
@@ -321,6 +345,7 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     type: 'tv',
   },
   {
+    category: 'regional',
     description: 'Award-winning and acclaimed Spanish-language cinema.',
     id: 'spanish-movies',
     pathname: '/discover/movie?with_original_language=es&sort_by=popularity.desc',
@@ -391,7 +416,7 @@ export function isReleasedTmdbBrowseResult(result: TmdbBrowseResult, explicitTyp
   return releaseTimestamp === null || releaseTimestamp <= getUtcDayTimestamp(date);
 }
 
-function buildTmdbImageUrl(path: string | undefined, size: 'w300' | 'w780' = 'w780'): string | undefined {
+function buildTmdbImageUrl(path: string | undefined, size: 'w92' | 'w300' | 'w780' = 'w780'): string | undefined {
   if (!path) {
     return undefined;
   }
@@ -732,7 +757,7 @@ function mapCastMembers(cast: TmdbCastResult[] | undefined, limit = 10): MediaCa
       character: member.character?.trim() || undefined,
       id: member.id,
       name: member.name?.trim() as string,
-      profileUrl: buildTmdbImageUrl(member.profile_path, 'w300'),
+      profileUrl: buildTmdbImageUrl(member.profile_path, 'w92'),
     }));
 }
 
@@ -777,9 +802,11 @@ async function fetchBrowseSection(
   }
 
   return {
+    category: section.category,
     description: section.description,
     entries,
     id: section.id,
+    tier: section.tier ?? 'default',
     title: section.title,
   };
 }

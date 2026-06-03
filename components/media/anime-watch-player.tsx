@@ -6,6 +6,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
+import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import { useAnimeLanguagePreference } from '@/lib/hooks/use-player-preference';
 import {
   getRecentlyWatchedProgress,
@@ -269,8 +270,14 @@ function EpisodeCardList({
   onEpisodeChange: (episode: number) => void;
   watchedEpisodeKeys: Set<string>;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEpisodeAutoScroll(containerRef, String(currentEpisode));
+
   return (
-    <div className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+    <div
+      ref={containerRef}
+      className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]"
+    >
       {cards.map((episode) => {
         const isActive = episode.episodeNumber === currentEpisode;
         const isUpcoming = episode.isReleased === false;
@@ -281,6 +288,7 @@ function EpisodeCardList({
           <button
             key={`${episode.seasonNumber}-${episode.episodeNumber}`}
             type="button"
+            data-episode-active={isActive ? 'true' : 'false'}
             disabled={isUpcoming}
             onClick={() => onEpisodeChange(episode.episodeNumber)}
             className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
