@@ -5,6 +5,7 @@ import type { MediaEntry, SeasonDetails } from '@/lib/media/types';
 export interface WatchPlayerProps {
   entry: MediaEntry;
   experience: MediaExperienceConfig;
+  imdbId?: string | null;
   initialPlayback: PlaybackOptions;
   initialSeasonDetails?: SeasonDetails | null;
 }

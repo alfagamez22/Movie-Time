@@ -94,7 +94,7 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
     return null;
   }
 
-  // PapiFlix shows P1-P6 (VidFast, VidSrc, Videasy, Vidking, EZVid, FilmU).
+  // PapiFlix shows P1-P7 (VidFast, VidSrc, Videasy, Vidking, EZVid, FilmU, VidAPI).
   // PapiAnime uses a separate AnimePlayerSwitcher below — the global player
   // store is still consulted (it just renders an empty set on the /anime route).
   // PapiAnimev2 doesn't use multi-player switching.
@@ -104,7 +104,7 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
 
   return (
     <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-      {(['1', '2', '3', '4', '5', '6'] as const).map((choice) => (
+      {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
         <button
           key={choice}
           type="button"

@@ -13,6 +13,7 @@ import {
   buildEmbedUrl,
   buildEzvidEmbedUrl,
   buildFilmuEmbedUrl,
+  buildVidApiEmbedUrl,
   buildVidFastEmbedUrl,
   buildVideasyEmbedUrl,
   buildVidSrcEmbedUrl,
@@ -257,7 +258,7 @@ function LoadingOverlay({
 
         {!showPressToPlay ? (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            {(['1', '2', '3', '4', '5', '6'] as const).map((choice) => (
+            {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
               <button
                 key={choice}
                 type="button"
@@ -331,6 +332,7 @@ function EpisodeStillImage({
 export function WatchPlayer({
   entry,
   experience,
+  imdbId = null,
   initialPlayback,
   initialSeasonDetails = null,
 }: WatchPlayerProps) {
@@ -390,7 +392,7 @@ export function WatchPlayer({
     ...initialPlayback,
     episode: safeEpisode,
     language: initialPlayback.language,
-    progress: player === '4' || player === '5' || player === '6' ? null : initialPlayback.progress,
+    progress: player === '4' || player === '5' || player === '6' || player === '7' ? null : initialPlayback.progress,
     season: safeSeason,
   };
   const isVidFastPlayer = !isAnime && player === '1';
@@ -404,7 +406,9 @@ export function WatchPlayer({
             ? buildEzvidEmbedUrl(entry, playbackOptions)
             : player === '6'
               ? buildFilmuEmbedUrl(entry, playbackOptions)
-              : buildEmbedUrl(entry, playbackOptions);
+              : player === '7' && imdbId
+                ? buildVidApiEmbedUrl(entry, playbackOptions, imdbId)
+                : buildEmbedUrl(entry, playbackOptions);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);

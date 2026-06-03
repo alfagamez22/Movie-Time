@@ -196,6 +196,15 @@ export function buildFilmuEmbedUrl(entry: MediaEntry, options: PlaybackOptions):
   return new URL(path).toString();
 }
 
+export function buildVidApiEmbedUrl(entry: MediaEntry, options: PlaybackOptions, imdbId: string): string {
+  const baseUrl = appConfig.vidapiEmbedBaseUrl;
+  const path = isTvEntry(entry)
+    ? `${baseUrl}/tv/${encodeURIComponent(imdbId)}/${options.season}/${options.episode}`
+    : `${baseUrl}/movie/${encodeURIComponent(imdbId)}`;
+
+  return new URL(path).toString();
+}
+
 export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   const base = 'https://vidsrc-embed.ru/embed';
   const tmdbId = encodeURIComponent(entry.id);

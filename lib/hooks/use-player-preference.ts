@@ -2,11 +2,11 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-export type PlayerChoice = '1' | '2' | '3' | '4' | '5' | '6';
+export type PlayerChoice = '1' | '2' | '3' | '4' | '5' | '6' | '7';
 export type AnimeLanguageChoice = 'dub' | 'sub';
 export type AnimeServerChoice = 'aniwave';
 
-const PLAYER_STORAGE_VERSION = '3';
+const PLAYER_STORAGE_VERSION = '4';
 const PLAYER_STORAGE_VERSION_KEY = 'papiflix-player-version';
 
 export const PLAYER_LABELS: Record<PlayerChoice, string> = {
@@ -16,6 +16,7 @@ export const PLAYER_LABELS: Record<PlayerChoice, string> = {
   '4': 'Vidking',
   '5': 'EZVid',
   '6': 'FilmU',
+  '7': 'VidAPI',
 };
 
 export const ANIME_LANGUAGE_LABELS: Record<AnimeLanguageChoice, string> = {
@@ -42,7 +43,9 @@ function normalizePlayerChoice(value: string | null): PlayerChoice {
           ? '5'
           : value === '6'
             ? '6'
-            : '1';
+            : value === '7'
+              ? '7'
+              : '1';
 }
 
 function migratePlayerChoice(value: string | null, version: string | null): PlayerChoice {

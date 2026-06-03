@@ -37,13 +37,14 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
   return runtimeModule.exports;
 }
 
-const { buildEzvidEmbedUrl, buildFilmuEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
+const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildVidApiEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
   stubs: {
     '@/lib/config': {
       appConfig: {
         ezvidEmbedBaseUrl: 'https://ezvidapi.com/embed',
         filmuEmbedBaseUrl: 'https://embed.filmu.in',
         multiEmbedBaseUrl: 'https://multiembed.mov',
+        vidapiEmbedBaseUrl: 'https://vidapi.xyz/embed',
         vidfastEmbedBaseUrl: 'https://vidfast.net',
         vidkingEmbedBaseUrl: 'https://www.vidking.net/embed',
       },
@@ -131,4 +132,39 @@ test('buildEzvidEmbedUrl uses selected provider for TV episodes', () => {
   );
 
   assert.equal(url, 'https://ezvidapi.com/embed/tv/60625/9/2?provider=vidzee');
+});
+
+test('buildVidApiEmbedUrl uses IMDb ID for movies', () => {
+  const url = buildVidApiEmbedUrl(
+    {
+      id: '1726',
+      provider: 'tmdb',
+      title: 'Iron Man',
+      type: 'movie',
+    },
+    defaultPlayback,
+    'tt0371746',
+  );
+
+  assert.equal(url, 'https://vidapi.xyz/embed/movie/tt0371746');
+});
+
+test('buildVidApiEmbedUrl uses IMDb ID for TV with season and episode', () => {
+  const url = buildVidApiEmbedUrl(
+    {
+      id: '60625',
+      maxSeasons: 9,
+      provider: 'tmdb',
+      title: 'Rick and Morty',
+      type: 'tv',
+    },
+    {
+      ...defaultPlayback,
+      episode: '2',
+      season: '9',
+    },
+    'tt2861424',
+  );
+
+  assert.equal(url, 'https://vidapi.xyz/embed/tv/tt2861424/9/2');
 });

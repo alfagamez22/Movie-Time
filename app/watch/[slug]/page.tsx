@@ -7,6 +7,7 @@ import { resolvePlaybackOptions } from '@/lib/media/embed';
 import { papiflixExperience } from '@/lib/media/experience';
 import { resolveLiveMediaEntry } from '@/lib/media/resolve';
 import { buildWatchHref, parseMediaType } from '@/lib/media/routes';
+import { resolveStreamimdbId } from '@/lib/media/streamimdb-resolver';
 import { normalizeSlug } from '@/lib/slugs/media';
 import { lookupTmdbSeasonDetails } from '@/lib/tmdb/client';
 import { isTvEntry, type SeasonDetails } from '@/lib/media/types';
@@ -102,10 +103,15 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
     }
   }
 
+  const imdbId = resolvedEntry.entry.provider === 'tmdb'
+    ? await resolveStreamimdbId(resolvedEntry.entry.id, resolvedEntry.entry.type)
+    : null;
+
   return (
     <WatchPlayer
       entry={resolvedEntry.entry}
       experience={papiflixExperience}
+      imdbId={imdbId}
       initialPlayback={initialPlayback}
       initialSeasonDetails={initialSeasonDetails}
     />
