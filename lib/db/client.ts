@@ -18,14 +18,14 @@ function makePrisma() {
   //   url.searchParams.set('uselibpqcompat', 'true');
 
   const adapter = new PrismaPg({ connectionString: url.toString() });
-  const client = new PrismaClient({ adapter });
-  if (process.env.NODE_ENV !== 'production') {
-    (globalThis as unknown as { prisma?: PrismaClient }).prisma = client;
-  }
-  return client;
+  return new PrismaClient({ adapter });
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+function getClient(): PrismaClient {
+  return (globalForPrisma.prisma ??= makePrisma());
+}
 
 // Use a Proxy so that `makePrisma()` (and therefore `new URL(DATABASE_URL)`) is
 // only called the first time a Prisma method is actually invoked at request
@@ -33,7 +33,12 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 // is not available.
 export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    const client = globalForPrisma.prisma ?? (globalForPrisma.prisma = makePrisma());
-    return Reflect.get(client, prop);
+    return Reflect.get(getClient(), prop);
+  },
+  set(_target, prop, value) {
+    return Reflect.set(getClient(), prop, value);
+  },
+  has(_target, prop) {
+    return Reflect.has(getClient(), prop);
   },
 });
