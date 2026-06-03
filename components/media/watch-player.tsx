@@ -281,11 +281,13 @@ function LoadingOverlay({
 
 function EpisodeStillImage({
   alt,
+  episodeLabel,
   fallbackSrc,
   priority,
   src,
 }: {
   alt: string;
+  episodeLabel?: string;
   fallbackSrc?: string;
   priority: boolean;
   src?: string;
@@ -294,9 +296,19 @@ function EpisodeStillImage({
 
   const shouldUseFallback = Boolean(src && failedSrc === src);
   const resolvedSrc = shouldUseFallback ? fallbackSrc : src || fallbackSrc;
+  const usePlaceholder = !resolvedSrc || Boolean(src && fallbackSrc && src === fallbackSrc);
 
-  if (!resolvedSrc) {
-    return <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />;
+  if (usePlaceholder) {
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-[linear-gradient(135deg,#111827_0%,#171717_45%,#1f2937_100%)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(229,9,20,0.20),transparent_35%)]" />
+        <div className="absolute inset-x-0 bottom-0 p-2">
+          <span className="rounded-full border border-white/10 bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-100 shadow-lg backdrop-blur-sm">
+            {episodeLabel ?? 'Episode'}
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -677,22 +689,6 @@ export function WatchPlayer({
           </a>
         ) : null}
 
-        {isSeries && Number.parseInt(safeEpisode, 10) < safeEpisodeLimit ? (
-          <button
-            type="button"
-            onClick={() => {
-              handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1));
-              iframeRef.current?.focus();
-            }}
-            aria-label="Next episode"
-            title="Next episode"
-            className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/55 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-black/70 hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-          >
-            <span>Next Episode</span>
-            <SkipForward className="h-4 w-4" />
-          </button>
-        ) : null}
-
         <div
           className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-30 flex justify-center transition-all duration-300 ${
             isChromeVisible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
@@ -758,6 +754,10 @@ export function WatchPlayer({
             watchedEpisodeKeys={watchedEpisodeKeys}
             onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
             onEpisodeChange={handleEpisodeChange}
+            onNextEpisode={() => {
+              handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1));
+              iframeRef.current?.focus();
+            }}
           />
       ) : null}
     </div>
@@ -766,6 +766,7 @@ export function WatchPlayer({
 
 interface EpisodeSidebarProps {
   onEpisodeChange: (episode: string) => void;
+  onNextEpisode?: () => void;
   onSeasonChange: (season: string) => void;
   safeEpisode: string;
   safeEpisodeLimit: number;
@@ -786,6 +787,7 @@ function EpisodeSidebar({
   watchedEpisodeKeys,
   onSeasonChange,
   onEpisodeChange,
+  onNextEpisode,
 }: EpisodeSidebarProps) {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
@@ -803,7 +805,20 @@ function EpisodeSidebar({
             </option>
           ))}
         </select>
-        <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
+        <div className="flex items-center gap-2">
+          {onNextEpisode && safeEpisodeLimit > Number.parseInt(safeEpisode, 10) ? (
+            <button
+              type="button"
+              onClick={onNextEpisode}
+              aria-label="Next episode"
+              title="Next episode"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <SkipForward className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <span className="text-xs text-zinc-500">{safeEpisodeLimit} Episodes</span>
+        </div>
       </div>
 
       <EpisodeCardList
@@ -869,6 +884,7 @@ function EpisodeCardList({
               ) : null}
               <EpisodeStillImage
                 alt=""
+                episodeLabel={`E${episodeNumber.padStart(2, '0')}`}
                 fallbackSrc={episode.fallbackStillUrl}
                 priority={isActive}
                 src={episode.stillUrl}

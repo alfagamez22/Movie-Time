@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, SkipForward } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import {
@@ -223,11 +223,13 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
 
 function EpisodeStillImage({
   alt,
+  episodeLabel,
   fallbackSrc,
   priority,
   src,
 }: {
   alt: string;
+  episodeLabel?: string;
   fallbackSrc?: string;
   priority: boolean;
   src?: string;
@@ -242,8 +244,19 @@ function EpisodeStillImage({
         ? fallbackSrc
         : undefined;
 
-  if (!resolvedSrc) {
-    return <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />;
+  const usePlaceholder = !resolvedSrc || Boolean(src && fallbackSrc && src === fallbackSrc);
+
+  if (usePlaceholder) {
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-[linear-gradient(135deg,#111827_0%,#171717_45%,#1f2937_100%)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(229,9,20,0.22),transparent_35%)]" />
+        <div className="absolute inset-x-0 bottom-0 p-2">
+          <span className="rounded-full border border-white/10 bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-100 shadow-lg backdrop-blur-sm">
+            {episodeLabel ?? 'Episode'}
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -318,6 +331,7 @@ function EpisodeCardList({
               ) : null}
               <EpisodeStillImage
                 alt=""
+                episodeLabel={`E${String(episode.episodeNumber).padStart(2, '0')}`}
                 fallbackSrc={episode.fallbackStillUrl}
                 priority={isActive}
                 src={episode.stillUrl}
@@ -410,7 +424,20 @@ function SidebarControls({
       <div className="space-y-3 border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-white">Episode List</span>
-          <span className="text-xs text-zinc-500">{episodeLimit} Episodes</span>
+          <div className="flex items-center gap-2">
+            {currentEpisode < episodeLimit ? (
+              <button
+                type="button"
+                onClick={() => onEpisodeChange(currentEpisode + 1)}
+                aria-label="Next episode"
+                title="Next episode"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                <SkipForward className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            <span className="text-xs text-zinc-500">{episodeLimit} Episodes</span>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">

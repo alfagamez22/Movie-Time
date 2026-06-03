@@ -68,8 +68,9 @@ export function useEpisodeAutoScroll(
         return;
       }
       active.scrollIntoView({
-        block: 'center',
+        block: 'nearest',
         behavior: reducedMotion ? 'auto' : 'smooth',
+        inline: 'nearest',
       });
     };
 
