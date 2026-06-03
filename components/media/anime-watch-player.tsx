@@ -99,7 +99,7 @@ function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
     return [
       {
         episodeNumber: 1,
-        fallbackStillUrl: props.entry.backdropUrl ?? props.entry.posterUrl,
+        fallbackStillUrl: props.entry.posterUrl,
         name: props.entry.title,
         overview: props.entry.synopsis,
         seasonNumber: 1,
@@ -119,7 +119,7 @@ function getEpisodeCards(props: WatchPlayerProps): EpisodePreview[] {
 
     return {
       episodeNumber,
-      fallbackStillUrl: props.entry.backdropUrl ?? props.entry.posterUrl,
+      fallbackStillUrl: props.entry.posterUrl,
       name: `Episode ${String(episodeNumber).padStart(2, '0')}`,
       overview: '',
       seasonNumber: 1,
@@ -232,10 +232,15 @@ function EpisodeStillImage({
   priority: boolean;
   src?: string;
 }) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
 
-  const shouldUseFallback = Boolean(src && failedSrc === src);
-  const resolvedSrc = shouldUseFallback ? fallbackSrc : src || fallbackSrc;
+  const primary = src || fallbackSrc;
+  const resolvedSrc =
+    primary && !failedUrls.has(primary)
+      ? primary
+      : fallbackSrc && fallbackSrc !== primary && !failedUrls.has(fallbackSrc)
+        ? fallbackSrc
+        : undefined;
 
   if (!resolvedSrc) {
     return <div className="h-full w-full bg-[radial-gradient(circle_at_center,rgba(229,9,20,0.15),transparent)]" />;
@@ -250,9 +255,12 @@ function EpisodeStillImage({
       className="object-cover"
       priority={priority}
       onError={() => {
-        if (src && !shouldUseFallback && fallbackSrc && fallbackSrc !== resolvedSrc) {
-          setFailedSrc(src);
-        }
+        setFailedUrls((prev) => {
+          if (prev.has(resolvedSrc)) return prev;
+          const next = new Set(prev);
+          next.add(resolvedSrc);
+          return next;
+        });
       }}
     />
   );
@@ -670,8 +678,8 @@ export function AnimeWatchPlayer({
       return;
     }
 
-    startTransition(() => router.replace(href, { scroll: false }));
-  }, [autoNextEnabled, currentEpisode, currentLanguage, entry, experience.watchBasePath, initialPlayback.autoPlay, router]);
+    window.history.replaceState(null, '', href);
+  }, [autoNextEnabled, currentEpisode, currentLanguage, entry, experience.watchBasePath, initialPlayback.autoPlay]);
 
   const handleBackToLibrary = () => {
     requestHomeScrollRestore(experience.id);

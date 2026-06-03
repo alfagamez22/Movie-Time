@@ -144,7 +144,7 @@ function buildSeasonDetails(media: AnilistMedia): SeasonDetails | null {
       const episodeNumber = index + 1;
       return {
         episodeNumber,
-        fallbackStillUrl: getBackdropUrl(media) || getPosterUrl(media),
+        fallbackStillUrl: getPosterUrl(media),
         isReleased: upcomingEpisodeBoundary > 0 ? episodeNumber <= upcomingEpisodeBoundary : episodeNumber <= releasedEpisodeCount,
         name: getFallbackEpisodeName(episodeNumber),
         overview: '',
