@@ -8,6 +8,19 @@ import {
   type PlaybackLanguage,
 } from './types';
 
+export const EZVID_PROVIDERS = [
+  'vidrock',
+  'vidsrc',
+  'vidzee',
+  'icefy',
+  'vidlink',
+  'vidnest',
+  'dixsrc',
+  'popr',
+] as const;
+
+export type EzvidProvider = (typeof EZVID_PROVIDERS)[number];
+
 const DEFAULT_PLAYER_COLOR = 'e50914';
 const HEX_COLOR = /^[0-9a-fA-F]{6}$/;
 
@@ -211,21 +224,22 @@ export function buildAnimepaheEmbedUrl(
   return url.toString();
 }
 
-export function buildMultiEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
-  const base = appConfig.multiEmbedBaseUrl;
-  const url = new URL(base);
+export function isEzvidProvider(value: string | null | undefined): value is EzvidProvider {
+  return EZVID_PROVIDERS.includes(value as EzvidProvider);
+}
 
-  url.searchParams.set('video_id', entry.id);
-  url.searchParams.set('tmdb', '1');
+export function buildEzvidEmbedUrl(
+  entry: MediaEntry,
+  options: PlaybackOptions,
+  provider: EzvidProvider,
+): string {
+  const baseUrl = appConfig.ezvidEmbedBaseUrl;
+  const path = isTvEntry(entry)
+    ? `${baseUrl}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${baseUrl}/movie/${encodeURIComponent(entry.id)}`;
 
-  if (isTvEntry(entry)) {
-    url.searchParams.set('s', options.season);
-    url.searchParams.set('e', options.episode);
-  }
-
-  if (options.autoPlay) {
-    url.searchParams.set('autoplay', 'true');
-  }
+  const url = new URL(path);
+  url.searchParams.set('provider', provider);
 
   return url.toString();
 }

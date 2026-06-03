@@ -37,10 +37,11 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
   return runtimeModule.exports;
 }
 
-const { buildFilmuEmbedUrl, buildMultiEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
+const { buildEzvidEmbedUrl, buildFilmuEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
   stubs: {
     '@/lib/config': {
       appConfig: {
+        ezvidEmbedBaseUrl: 'https://ezvidapi.com/embed',
         filmuEmbedBaseUrl: 'https://embed.filmu.in',
         multiEmbedBaseUrl: 'https://multiembed.mov',
         vidfastEmbedBaseUrl: 'https://vidfast.net',
@@ -97,8 +98,8 @@ test('buildFilmuEmbedUrl uses FilmU TV wrapper by TMDB season and episode', () =
   assert.equal(url, 'https://embed.filmu.in/tv/132117/2/4');
 });
 
-test('buildMultiEmbedUrl uses direct TMDB IDs for movies', () => {
-  const url = buildMultiEmbedUrl(
+test('buildEzvidEmbedUrl uses selected provider for movies', () => {
+  const url = buildEzvidEmbedUrl(
     {
       id: '1726',
       provider: 'tmdb',
@@ -106,26 +107,28 @@ test('buildMultiEmbedUrl uses direct TMDB IDs for movies', () => {
       type: 'movie',
     },
     defaultPlayback,
+    'vidrock',
   );
 
-  assert.equal(url, 'https://multiembed.mov/?video_id=1726&tmdb=1&autoplay=true');
+  assert.equal(url, 'https://ezvidapi.com/embed/movie/1726?provider=vidrock');
 });
 
-test('buildMultiEmbedUrl uses direct TMDB IDs for TV episodes', () => {
-  const url = buildMultiEmbedUrl(
+test('buildEzvidEmbedUrl uses selected provider for TV episodes', () => {
+  const url = buildEzvidEmbedUrl(
     {
-      id: '1399',
-      maxSeasons: 8,
+      id: '60625',
+      maxSeasons: 9,
       provider: 'tmdb',
-      title: 'Game of Thrones',
+      title: 'Rick and Morty',
       type: 'tv',
     },
     {
       ...defaultPlayback,
       episode: '2',
-      season: '1',
+      season: '9',
     },
+    'vidzee',
   );
 
-  assert.equal(url, 'https://multiembed.mov/?video_id=1399&tmdb=1&s=1&e=2&autoplay=true');
+  assert.equal(url, 'https://ezvidapi.com/embed/tv/60625/9/2?provider=vidzee');
 });

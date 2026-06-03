@@ -90,6 +90,41 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  async headers() {
+    const securityHeaders = [
+      { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+      {
+        key: 'Permissions-Policy',
+        value: [
+          'popups=()',
+          'notifications=()',
+          'microphone=()',
+          'camera=()',
+          'payment=()',
+          'usb=()',
+          'serial=()',
+          'bluetooth=()',
+          'midi=()',
+          'accelerometer=()',
+          'gyroscope=()',
+          'magnetometer=()',
+          'encrypted-media=*',
+          'autoplay=*',
+          'fullscreen=*',
+          'picture-in-picture=*',
+        ].join(', '),
+      },
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+    ];
+
+    return [
+      {
+        source: '/:path*',
+        headers: securityHeaders,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

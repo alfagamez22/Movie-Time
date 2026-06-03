@@ -9,15 +9,17 @@ import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import {
   buildEmbedUrl,
+  buildEzvidEmbedUrl,
   buildFilmuEmbedUrl,
-  buildMultiEmbedUrl,
   buildVidFastEmbedUrl,
   buildVideasyEmbedUrl,
   buildVidSrcEmbedUrl,
   type PlaybackOptions,
 } from '@/lib/media/embed';
 import {
+  EZVID_PROVIDER_LABELS,
   useAnimeLanguagePreference,
+  useEzvidProviderPreference,
   usePlayerPreference,
   type AnimeLanguageChoice,
 } from '@/lib/hooks/use-player-preference';
@@ -272,6 +274,7 @@ export function WatchPlayer({
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
   const [animeLanguage, setAnimeLanguage] = useState(initialPlayback.language);
   const { player } = usePlayerPreference();
+  const { provider: ezvidProvider, setProvider: setEzvidProvider } = useEzvidProviderPreference();
   const { setLanguage: setStoredAnimeLanguage } = useAnimeLanguagePreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -323,7 +326,7 @@ export function WatchPlayer({
         : player === '3'
           ? buildVideasyEmbedUrl(entry, playbackOptions)
           : player === '5'
-            ? buildMultiEmbedUrl(entry, playbackOptions)
+            ? buildEzvidEmbedUrl(entry, playbackOptions, ezvidProvider)
             : player === '6'
               ? buildFilmuEmbedUrl(entry, playbackOptions)
               : buildEmbedUrl(entry, playbackOptions);
@@ -333,6 +336,15 @@ export function WatchPlayer({
     setShowPlayerFallback(false);
     setEpisode(newEpisode);
   }, []);
+
+  const handleEzvidProviderChange = useCallback(
+    (provider: keyof typeof EZVID_PROVIDER_LABELS) => {
+      setIsPlayerLoading(true);
+      setShowPlayerFallback(false);
+      setEzvidProvider(provider);
+    },
+    [setEzvidProvider],
+  );
 
   useEffect(() => {
     const trackingEntry = isAnime ? { ...entry, defaultLanguage: effectiveLanguage } : entry;
@@ -367,7 +379,7 @@ export function WatchPlayer({
       return;
     }
 
-    const expectedOrigin = new URL(embedUrl).origin;
+    const expectedOrigin = new URL(embedUrl, window.location.origin).origin;
 
     const onMessage = (event: MessageEvent) => {
       const isTrackedSource = event.source === iframeRef.current?.contentWindow;
@@ -456,7 +468,10 @@ export function WatchPlayer({
   const revealChrome = useCallback(() => {
     setIsChromeVisible(true);
     if (chromeTimerRef.current) clearTimeout(chromeTimerRef.current);
-    chromeTimerRef.current = setTimeout(() => setIsChromeVisible(false), 3000);
+    chromeTimerRef.current = setTimeout(() => {
+      setIsChromeVisible(false);
+      iframeRef.current?.focus();
+    }, 3000);
   }, []);
 
   useEffect(() => {
@@ -551,10 +566,37 @@ export function WatchPlayer({
           </a>
         ) : null}
 
+        {player === '5' ? (
+          <label
+            className={`absolute left-[calc(env(safe-area-inset-left)+8rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 inline-flex h-12 items-center gap-2 rounded-full border border-white/15 bg-black/45 px-3 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-black/60 focus-within:ring-2 focus-within:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          >
+            <span className="text-zinc-400">Server</span>
+            <select
+              value={ezvidProvider}
+              onChange={(event) => {
+                handleEzvidProviderChange(event.target.value as keyof typeof EZVID_PROVIDER_LABELS);
+                (event.target as HTMLSelectElement).blur();
+              }}
+              className="cursor-pointer bg-transparent text-xs font-bold text-white outline-none"
+              title="Select P5 server"
+              aria-label="Select P5 server"
+            >
+              {Object.entries(EZVID_PROVIDER_LABELS).map(([provider, label]) => (
+                <option key={provider} value={provider} className="bg-[#1a1a1a] text-white">
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
         {isSeries && Number.parseInt(safeEpisode, 10) < safeEpisodeLimit ? (
           <button
             type="button"
-            onClick={() => handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1))}
+            onClick={() => {
+              handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1));
+              iframeRef.current?.focus();
+            }}
             aria-label="Next episode"
             title="Next episode"
             className={`absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/55 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-black/70 hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
@@ -583,7 +625,7 @@ export function WatchPlayer({
         />
 
         <iframe
-          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${safeSeason}-${safeEpisode}`}
+          key={`${entry.provider}-${isAnime ? effectiveLanguage : player}-${player === '5' ? ezvidProvider : ''}-${safeSeason}-${safeEpisode}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
@@ -599,7 +641,7 @@ export function WatchPlayer({
             setIsPlayerLoading(false);
             setShowPlayerFallback(false);
           }}
-          referrerPolicy="strict-origin-when-cross-origin"
+          referrerPolicy={player === '5' ? 'origin' : 'no-referrer'}
           title={`Watch ${entry.title}`}
         />
       </div>

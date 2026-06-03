@@ -66,6 +66,7 @@ export const appConfig = {
   description:
     process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
     'Search-driven movie and series library with native playback controls.',
+  ezvidEmbedBaseUrl: readUrlEnv('EZVID_EMBED_BASE_URL', 'https://ezvidapi.com/embed'),
   filmuEmbedBaseUrl: readUrlEnv('FILMU_EMBED_BASE_URL', 'https://embed.filmu.in'),
   multiEmbedBaseUrl: readUrlEnv('MULTIEMBED_BASE_URL', 'https://multiembed.mov'),
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
