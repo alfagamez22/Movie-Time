@@ -37,7 +37,7 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
   return runtimeModule.exports;
 }
 
-const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildVidApiEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
+const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildPlayerEmbedUrl, buildVidApiEmbedUrl, buildVidSrcEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
   stubs: {
     '@/lib/config': {
       appConfig: {
@@ -45,6 +45,7 @@ const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildVidApiEmbedUrl } = loadTsMo
         filmuEmbedBaseUrl: 'https://embed.filmu.in',
         multiEmbedBaseUrl: 'https://multiembed.mov',
         vidapiEmbedBaseUrl: 'https://vidapi.xyz/embed',
+        vidsrcEmbedBaseUrl: 'https://vidsrc.to/embed',
         vidfastEmbedBaseUrl: 'https://vidfast.net',
         vidkingEmbedBaseUrl: 'https://www.vidking.net/embed',
       },
@@ -147,6 +148,52 @@ test('buildVidApiEmbedUrl uses IMDb ID for movies', () => {
   );
 
   assert.equal(url, 'https://vidapi.xyz/embed/movie/tt0371746');
+});
+
+test('buildVidSrcEmbedUrl uses vidsrc.to movie wrapper by TMDB ID', () => {
+  const url = buildVidSrcEmbedUrl(
+    {
+      id: '1726',
+      provider: 'tmdb',
+      title: 'Iron Man',
+      type: 'movie',
+    },
+    defaultPlayback,
+  );
+
+  assert.equal(url, 'https://vidsrc.to/embed/movie/1726');
+});
+
+test('buildVidSrcEmbedUrl uses vidsrc.to TV wrapper by TMDB season and episode', () => {
+  const url = buildVidSrcEmbedUrl(
+    {
+      id: '1399',
+      maxSeasons: 8,
+      provider: 'tmdb',
+      title: 'Game of Thrones',
+      type: 'tv',
+    },
+    {
+      ...defaultPlayback,
+      episode: '3',
+      season: '1',
+    },
+  );
+
+  assert.equal(url, 'https://vidsrc.to/embed/tv/1399/1/3');
+});
+
+test('buildPlayerEmbedUrl selects the requested player and falls back when VidAPI has no IMDb ID', () => {
+  const entry = {
+    id: '1726',
+    provider: 'tmdb',
+    title: 'Iron Man',
+    type: 'movie',
+  };
+
+  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '6'), 'https://embed.filmu.in/movie/1726');
+  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '7'), 'https://www.vidking.net/embed/movie/1726?color=e50914&autoPlay=true');
+  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '7', 'tt0371746'), 'https://vidapi.xyz/embed/movie/tt0371746');
 });
 
 test('buildVidApiEmbedUrl uses IMDb ID for TV with season and episode', () => {

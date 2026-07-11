@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
-import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, SkipForward } from 'lucide-react';
 
@@ -21,6 +21,7 @@ import {
 } from '@/lib/media/types';
 
 import type { WatchPlayerProps } from './watch-player.types';
+import { PlayerViewControls } from './player-view-controls';
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 const VIDNEST_ORIGIN = 'https://vidnest.fun';
@@ -396,28 +397,35 @@ function SidebarControls({
     start: defaultGroupStart,
   }));
 
-  const episodeGroups = Array.from({ length: Math.ceil(episodeLimit / ANIME_EPISODE_GROUP_SIZE) }, (_, index) => {
-    const startEpisode = index * ANIME_EPISODE_GROUP_SIZE + 1;
-    const endEpisode = Math.min(episodeLimit, startEpisode + ANIME_EPISODE_GROUP_SIZE - 1);
+  const episodeGroups = useMemo(
+    () =>
+      Array.from({ length: Math.ceil(episodeLimit / ANIME_EPISODE_GROUP_SIZE) }, (_, index) => {
+        const startEpisode = index * ANIME_EPISODE_GROUP_SIZE + 1;
+        const endEpisode = Math.min(episodeLimit, startEpisode + ANIME_EPISODE_GROUP_SIZE - 1);
 
-    return {
-      endEpisode,
-      label: `${startEpisode}-${endEpisode}`,
-      value: startEpisode,
-    };
-  });
+        return {
+          endEpisode,
+          label: `${startEpisode}-${endEpisode}`,
+          value: startEpisode,
+        };
+      }),
+    [episodeLimit],
+  );
 
   const activeGroupStart = selectedRange.episodeAnchor === currentEpisode ? selectedRange.start : defaultGroupStart;
 
-  const visibleEpisodeCards =
-    episodeGroups.length > 1
-      ? episodeCards.filter((episode) => {
-          return (
-            episode.episodeNumber >= activeGroupStart &&
-            episode.episodeNumber < activeGroupStart + ANIME_EPISODE_GROUP_SIZE
-          );
-        })
-      : episodeCards;
+  const visibleEpisodeCards = useMemo(
+    () =>
+      episodeGroups.length > 1
+        ? episodeCards.filter((episode) => {
+            return (
+              episode.episodeNumber >= activeGroupStart &&
+              episode.episodeNumber < activeGroupStart + ANIME_EPISODE_GROUP_SIZE
+            );
+          })
+        : episodeCards,
+    [activeGroupStart, episodeCards, episodeGroups.length],
+  );
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#101014] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
@@ -524,7 +532,10 @@ export function AnimeWatchPlayer({
   const isSeries = entry.type === 'tv';
   const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
-  const episodeCards = getEpisodeCards({ entry, experience, initialPlayback, initialSeasonDetails });
+  const episodeCards = useMemo(
+    () => getEpisodeCards({ entry, experience, initialPlayback, initialSeasonDetails }),
+    [entry, experience, initialPlayback, initialSeasonDetails],
+  );
   const playableEpisodeLimit = isSeries
     ? (initialSeasonDetails?.releasedEpisodeCount ?? getEpisodeLimit(entry, 1))
     : 1;
@@ -538,7 +549,9 @@ export function AnimeWatchPlayer({
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState<string | null>(null);
   const [savedStartAt, setSavedStartAt] = useState<number | null>(initialPlayback.progress ?? null);
+  const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const playerShellRef = useRef<HTMLDivElement>(null);
   const lastProgressWriteRef = useRef(0);
   const lastEventTypeRef = useRef<string | null>(null);
   const savedProgressRef = useRef<PapiProgressPayload | null>(null);
@@ -731,8 +744,15 @@ export function AnimeWatchPlayer({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row">
-      <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
+    <div
+      ref={playerShellRef}
+      className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
+    >
+      <div
+        className={`relative w-full bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1 ${
+          isSeries && isEpisodeListVisible ? 'aspect-video shrink-0' : 'min-h-0 flex-1'
+        }`}
+      >
         <button
           type="button"
           onClick={handleBackToLibrary}
@@ -742,6 +762,13 @@ export function AnimeWatchPlayer({
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
+
+        <PlayerViewControls
+          targetRef={playerShellRef}
+          episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
+          onToggleEpisodeList={isSeries ? () => setIsEpisodeListVisible((visible) => !visible) : undefined}
+          className="absolute right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex items-center gap-2"
+        />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)]">
           <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
@@ -792,7 +819,7 @@ export function AnimeWatchPlayer({
         />
       </div>
 
-      {isSeries ? (
+      {isSeries && isEpisodeListVisible ? (
         <SidebarControls
           autoNextEnabled={autoNextEnabled}
           currentEpisode={currentEpisode}

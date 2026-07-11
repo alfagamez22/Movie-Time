@@ -70,6 +70,7 @@ export const appConfig = {
   filmuEmbedBaseUrl: readUrlEnv('FILMU_EMBED_BASE_URL', 'https://embed.filmu.in'),
   multiEmbedBaseUrl: readUrlEnv('MULTIEMBED_BASE_URL', 'https://multiembed.mov'),
   vidapiEmbedBaseUrl: readUrlEnv('VIDAPI_EMBED_BASE_URL', 'https://vidapi.xyz/embed'),
+  vidsrcEmbedBaseUrl: readUrlEnv('VIDSRC_EMBED_BASE_URL', 'https://vidsrc.to/embed'),
   vidfastEmbedBaseUrl: readUrlEnv('VIDFAST_EMBED_BASE_URL', 'https://vidfast.net'),
   vidkingEmbedBaseUrl: readUrlEnv('VIDKING_EMBED_BASE_URL', 'https://www.vidking.net/embed'),
   siteUrl: readSiteUrl(),

@@ -2,23 +2,14 @@
 
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
-import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download, SkipForward } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
-import {
-  buildEmbedUrl,
-  buildEzvidEmbedUrl,
-  buildFilmuEmbedUrl,
-  buildVidApiEmbedUrl,
-  buildVidFastEmbedUrl,
-  buildVideasyEmbedUrl,
-  buildVidSrcEmbedUrl,
-  type PlaybackOptions,
-} from '@/lib/media/embed';
+import { buildPlayerEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
 import {
   PLAYER_LABELS,
   usePlayerPreference,
@@ -39,6 +30,7 @@ import {
   type SeasonDetails,
 } from '@/lib/media/types';
 import { AnimeWatchPlayer } from './anime-watch-player';
+import { PlayerViewControls } from './player-view-controls';
 import type { WatchPlayerProps } from './watch-player.types';
 
 interface NormalizedPlayerProgress {
@@ -47,7 +39,6 @@ interface NormalizedPlayerProgress {
   progressSeconds: number;
 }
 
-const ANIME_EPISODE_GROUP_SIZE = 50;
 const VIDFAST_ALLOWED_ORIGINS = new Set([
   'https://vidfast.pro',
   'https://vidfast.in',
@@ -231,7 +222,9 @@ function LoadingOverlay({
           {showPressToPlay
             ? 'Streams start only when you ask. This avoids a long wait on first open.'
             : showFallback
-              ? 'Reload this episode or switch the available playback option if the stream stays blank.'
+              ? player === '2'
+                ? 'VidSrc may not be supported on your browser. Try P1 (VidFast) or P3 (Videasy) instead.'
+                : 'Reload this episode or switch the available playback option if the stream stays blank.'
               : 'Opening the stream wrapper now.'}
         </p>
 
@@ -329,7 +322,15 @@ function EpisodeStillImage({
   );
 }
 
-export function WatchPlayer({
+export function WatchPlayer(props: WatchPlayerProps) {
+  if (isAnimeProvider(props.entry.provider)) {
+    return <AnimeWatchPlayer {...props} />;
+  }
+
+  return <StandardWatchPlayer {...props} />;
+}
+
+function StandardWatchPlayer({
   entry,
   experience,
   imdbId = null,
@@ -338,7 +339,6 @@ export function WatchPlayer({
 }: WatchPlayerProps) {
   const { data: session } = useSession();
   const router = useRouter();
-  const isAnime = isAnimeProvider(entry.provider);
   const isSeries = isTvEntry(entry);
   const canSyncWatchHistory = Boolean(session?.user?.id);
   const watchedEpisodeKeys = useWatchedEpisodes(entry, experience.id);
@@ -352,9 +352,11 @@ export function WatchPlayer({
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [pressToPlay, setPressToPlay] = useState(false);
+  const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const { player, setPlayer } = usePlayerPreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const playerShellRef = useRef<HTMLDivElement>(null);
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const vidsrcElapsedRef = useRef(0);
@@ -367,26 +369,29 @@ export function WatchPlayer({
     ? (activeSeasonDetails?.episodeCount ?? getEpisodeLimit(entry, safeSeason))
     : 1;
   const safeEpisode = String(Math.min(Math.max(1, Number.parseInt(episode, 10)), safeEpisodeLimit));
+  const maxSeasons = isTvEntry(entry) ? entry.maxSeasons : 1;
 
-  const seasonOptions = !isAnime && isSeries
-    ? Array.from({ length: entry.maxSeasons }, (_, index) => String(index + 1))
-    : [];
-  const episodeOptions = isSeries
-    ? Array.from({ length: safeEpisodeLimit }, (_, index) => String(index + 1))
-    : [];
+  const seasonOptions = useMemo(
+    () => (isSeries ? Array.from({ length: maxSeasons }, (_, index) => String(index + 1)) : []),
+    [isSeries, maxSeasons],
+  );
+  const seasonEpisodeCards = useMemo<EpisodePreview[]>(() => {
+    if (activeSeasonDetails?.episodes?.length) {
+      return activeSeasonDetails.episodes;
+    }
 
-  const seasonEpisodeCards: EpisodePreview[] = (activeSeasonDetails?.episodes ?? []).length > 0
-      ? activeSeasonDetails?.episodes ?? []
-      : episodeOptions.map((episodeNumber) => ({
+    return Array.from({ length: safeEpisodeLimit }, (_, index) => {
+      const episodeNumber = String(index + 1);
+      return {
         airDate: undefined,
         episodeNumber: Number.parseInt(episodeNumber, 10),
-        fallbackStillUrl: isAnime ? entry.backdropUrl ?? entry.posterUrl : undefined,
         name: `Episode ${episodeNumber.padStart(2, '0')}`,
         overview: '',
         runtime: undefined,
-        seasonNumber: isAnime ? 1 : Number.parseInt(safeSeason, 10),
-        stillUrl: isAnime ? entry.backdropUrl ?? entry.posterUrl : undefined,
-      }));
+        seasonNumber: Number.parseInt(safeSeason, 10),
+      };
+    });
+  }, [activeSeasonDetails, safeEpisodeLimit, safeSeason]);
 
   const playbackOptions = {
     ...initialPlayback,
@@ -395,20 +400,8 @@ export function WatchPlayer({
     progress: player === '4' || player === '5' || player === '6' || player === '7' ? null : initialPlayback.progress,
     season: safeSeason,
   };
-  const isVidFastPlayer = !isAnime && player === '1';
-  const embedUrl = player === '1'
-      ? buildVidFastEmbedUrl(entry, playbackOptions)
-      : player === '2'
-        ? buildVidSrcEmbedUrl(entry, playbackOptions)
-        : player === '3'
-          ? buildVideasyEmbedUrl(entry, playbackOptions)
-          : player === '5'
-            ? buildEzvidEmbedUrl(entry, playbackOptions)
-            : player === '6'
-              ? buildFilmuEmbedUrl(entry, playbackOptions)
-              : player === '7' && imdbId
-                ? buildVidApiEmbedUrl(entry, playbackOptions, imdbId)
-                : buildEmbedUrl(entry, playbackOptions);
+  const isVidFastPlayer = player === '1';
+  const embedUrl = buildPlayerEmbedUrl(entry, playbackOptions, player, imdbId);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
@@ -417,17 +410,16 @@ export function WatchPlayer({
   }, []);
 
   useEffect(() => {
-    const trackingEntry = isAnime ? { ...entry, defaultLanguage: initialPlayback.language } : entry;
     trackRecentlyWatched(
-      trackingEntry,
+      entry,
       {
         episode: isSeries ? safeEpisode : undefined,
-        season: !isAnime && isSeries ? safeSeason : undefined,
+        season: isSeries ? safeSeason : undefined,
       },
       experience.id,
       canSyncWatchHistory,
     );
-  }, [canSyncWatchHistory, initialPlayback.language, entry, experience.id, isAnime, isSeries, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
     if (!embedUrl) {
@@ -439,10 +431,10 @@ export function WatchPlayer({
       if (hasIframeLoadedRef.current) return;
       setIsPlayerLoading(false);
       setShowPlayerFallback(true);
-    }, isAnime ? 20000 : 12000);
+    }, 12_000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [embedUrl, isAnime]);
+  }, [embedUrl]);
 
   useEffect(() => {
     if (!embedUrl) {
@@ -467,15 +459,14 @@ export function WatchPlayer({
       if (now - lastProgressWriteRef.current < 5_000 && progress.progressPercent !== 100) return;
       lastProgressWriteRef.current = now;
 
-      const trackingEntry = isAnime ? { ...entry, defaultLanguage: initialPlayback.language } : entry;
       trackRecentlyWatched(
-        trackingEntry,
+        entry,
         {
           durationSeconds: progress.durationSeconds,
           episode: isSeries ? safeEpisode : undefined,
           progressPercent: progress.progressPercent,
           progressSeconds: progress.progressSeconds,
-          season: !isAnime && isSeries ? safeSeason : undefined,
+          season: isSeries ? safeSeason : undefined,
         },
         experience.id,
         canSyncWatchHistory,
@@ -484,12 +475,12 @@ export function WatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [canSyncWatchHistory, initialPlayback.language, embedUrl, entry, experience.id, isAnime, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, embedUrl, entry, experience.id, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
 
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
   useEffect(() => {
-    if (player !== '2' || isAnime || isPlayerLoading || showPlayerFallback) return;
+    if (player !== '2' || isPlayerLoading || showPlayerFallback) return;
 
     vidsrcElapsedRef.current = 0;
     const intervalId = setInterval(() => {
@@ -507,11 +498,9 @@ export function WatchPlayer({
     }, 10_000);
 
     return () => clearInterval(intervalId);
-  }, [canSyncWatchHistory, player, isAnime, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, player, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
-    if (isAnime) return;
-
     const href = buildWatchHref(entry, {
       autoPlay: initialPlayback.autoPlay,
       basePath: experience.watchBasePath,
@@ -529,7 +518,6 @@ export function WatchPlayer({
     experience.watchBasePath,
     initialPlayback.autoPlay,
     initialPlayback.color,
-    isAnime,
     router,
     safeEpisode,
     safeSeason,
@@ -619,10 +607,6 @@ export function WatchPlayer({
 
   const handleSeasonChange = useCallback(
     async (newSeason: string) => {
-      if (isAnime) {
-        return;
-      }
-
       setIsPlayerLoading(true);
       setShowPlayerFallback(false);
       setSeason(newSeason);
@@ -641,7 +625,7 @@ export function WatchPlayer({
         setSeasonDetailsError('Could not load episode list for this season.');
       }
     },
-    [entry.id, entry.slug, entry.type, isAnime],
+    [entry.id, entry.slug, entry.type],
   );
 
   const handleBackToLibrary = useCallback(() => {
@@ -649,24 +633,18 @@ export function WatchPlayer({
     router.push(experience.homeHref, { scroll: false });
   }, [experience.homeHref, experience.id, router]);
 
-  if (isAnime) {
-    return (
-      <AnimeWatchPlayer
-        entry={entry}
-        experience={experience}
-        initialPlayback={initialPlayback}
-        initialSeasonDetails={initialSeasonDetails}
-      />
-    );
-  }
-
   return (
     <div
+      ref={playerShellRef}
       onMouseMove={revealChrome}
       onPointerLeave={hideChrome}
       className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
     >
-      <div className="relative aspect-video w-full shrink-0 bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1">
+      <div
+        className={`relative w-full bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1 ${
+          isSeries && isEpisodeListVisible ? 'aspect-video shrink-0' : 'min-h-0 flex-1'
+        }`}
+      >
         <div className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[calc(env(safe-area-inset-top)+2px)] bg-gradient-to-b from-black/80 to-transparent" />
         <button
           type="button"
@@ -693,6 +671,15 @@ export function WatchPlayer({
           </a>
         ) : null}
 
+        <PlayerViewControls
+          targetRef={playerShellRef}
+          episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
+          onToggleEpisodeList={isSeries ? () => setIsEpisodeListVisible((visible) => !visible) : undefined}
+          className={`absolute right-[calc(env(safe-area-inset-right)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex items-center gap-2 transition-opacity duration-300 ${
+            isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        />
+
         <div
           className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-30 flex justify-center transition-all duration-300 ${
             isChromeVisible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
@@ -700,7 +687,7 @@ export function WatchPlayer({
         >
           <span className="line-clamp-1 max-w-[60vw] rounded-full bg-black/65 px-4 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-lg backdrop-blur-md sm:text-[12px]">
             {entry.title}
-            {isSeries ? (isAnime ? ` EP ${safeEpisode.padStart(2, '0')}` : ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}`) : ''}
+            {isSeries ? ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}` : ''}
           </span>
         </div>
 
@@ -726,7 +713,7 @@ export function WatchPlayer({
         />
 
         <iframe
-          key={`${entry.provider}-${isAnime ? initialPlayback.language : player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
+          key={`${entry.provider}-${player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
@@ -747,7 +734,7 @@ export function WatchPlayer({
         />
       </div>
 
-      {isSeries ? (
+      {isSeries && isEpisodeListVisible ? (
           <EpisodeSidebar
             safeSeason={safeSeason}
             safeEpisode={safeEpisode}

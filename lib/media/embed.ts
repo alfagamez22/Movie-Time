@@ -206,15 +206,36 @@ export function buildVidApiEmbedUrl(entry: MediaEntry, options: PlaybackOptions,
 }
 
 export function buildVidSrcEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
-  const base = 'https://vidsrc-embed.ru/embed';
-  const tmdbId = encodeURIComponent(entry.id);
-  const url = new URL(isTvEntry(entry) ? `${base}/tv` : `${base}/movie`);
-  url.searchParams.set('tmdb', tmdbId);
-  if (isTvEntry(entry)) {
-    url.searchParams.set('season', options.season);
-    url.searchParams.set('episode', options.episode);
+  const baseUrl = appConfig.vidsrcEmbedBaseUrl;
+  const path = isTvEntry(entry)
+    ? `${baseUrl}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    : `${baseUrl}/movie/${encodeURIComponent(entry.id)}`;
+
+  return new URL(path).toString();
+}
+
+export function buildPlayerEmbedUrl(
+  entry: MediaEntry,
+  options: PlaybackOptions,
+  player: string,
+  imdbId?: string | null,
+): string {
+  switch (player) {
+    case '1':
+      return buildVidFastEmbedUrl(entry, options);
+    case '2':
+      return buildVidSrcEmbedUrl(entry, options);
+    case '3':
+      return buildVideasyEmbedUrl(entry, options);
+    case '5':
+      return buildEzvidEmbedUrl(entry, options);
+    case '6':
+      return buildFilmuEmbedUrl(entry, options);
+    case '7':
+      return imdbId ? buildVidApiEmbedUrl(entry, options, imdbId) : buildEmbedUrl(entry, options);
+    default:
+      return buildEmbedUrl(entry, options);
   }
-  return url.toString();
 }
 
 export function buildAnimepaheEmbedUrl(
