@@ -312,14 +312,14 @@ function EpisodeCardList({
             data-episode-active={isActive ? 'true' : 'false'}
             disabled={isUpcoming}
             onClick={() => onEpisodeChange(episode.episodeNumber)}
-            className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
+            className={`flex w-full touch-manipulation select-none gap-3 border-b border-white/5 p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
               isActive
                 ? 'bg-white/[0.08]'
                 : isUpcoming
                   ? 'cursor-not-allowed bg-white/[0.015] opacity-55'
                   : isWatched
                     ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]'
-                    : 'hover:bg-white/[0.05]'
+                    : 'hover:bg-white/[0.05] active:bg-white/[0.1]'
             }`}
           >
             <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
@@ -439,7 +439,7 @@ function SidebarControls({
                 onClick={() => onEpisodeChange(currentEpisode + 1)}
                 aria-label="Next episode"
                 title="Next episode"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="inline-flex h-11 w-11 touch-manipulation select-none items-center justify-center rounded-full border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/15"
               >
                 <SkipForward className="h-3.5 w-3.5" />
               </button>
@@ -459,8 +459,9 @@ function SidebarControls({
                     key={season}
                     type="button"
                     onClick={() => onSeasonChange(season)}
-                    className={`flex-1 rounded-full px-3 py-1 text-center font-medium transition-colors ${
-                      currentSeason === season ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white'
+                    aria-pressed={currentSeason === season}
+                    className={`min-h-11 flex-1 touch-manipulation select-none rounded-full px-3 text-center font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                      currentSeason === season ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white active:bg-white/10'
                     }`}
                   >
                     S{season}
@@ -474,7 +475,7 @@ function SidebarControls({
               <button
                 type="button"
                 onClick={onToggleAutoNext}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors ${
+                className={`min-h-11 touch-manipulation select-none rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
                   autoNextEnabled ? 'border-netflix-red/40 bg-netflix-red/15 text-white' : 'border-white/10 bg-white/5 text-zinc-300'
                 }`}
               >
@@ -498,7 +499,7 @@ function SidebarControls({
                   start: Number.parseInt(event.target.value, 10),
                 })
               }
-              className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/20"
+              className="min-h-11 w-full touch-manipulation cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/20"
               aria-label="Select episode range"
             >
               {episodeGroups.map((group) => (
@@ -758,7 +759,7 @@ export function AnimeWatchPlayer({
           onClick={handleBackToLibrary}
           aria-label="Back to library"
           title="Back to library"
-          className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>

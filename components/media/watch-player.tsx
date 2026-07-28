@@ -636,8 +636,12 @@ function StandardWatchPlayer({
   return (
     <div
       ref={playerShellRef}
-      onMouseMove={revealChrome}
-      onPointerLeave={hideChrome}
+      onPointerMove={(event) => {
+        if (event.pointerType === 'mouse') revealChrome();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === 'mouse') hideChrome();
+      }}
       className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
     >
       <div
@@ -651,7 +655,7 @@ function StandardWatchPlayer({
           onClick={handleBackToLibrary}
           aria-label="Back to library"
           title="Back to library (Esc)"
-          className={`absolute left-[calc(env(safe-area-inset-left)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition-opacity duration-300 hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+          className={`absolute left-[calc(env(safe-area-inset-left)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition-opacity duration-300 hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20 ${
             isChromeVisible ? 'opacity-100' : 'opacity-40'
           }`}
         >
@@ -690,16 +694,6 @@ function StandardWatchPlayer({
             {isSeries ? ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}` : ''}
           </span>
         </div>
-
-        {!isChromeVisible ? (
-          <button
-            type="button"
-            aria-label="Show player controls"
-            title="Show controls"
-            onClick={revealChrome}
-            className="absolute inset-0 z-[65] cursor-default bg-transparent focus:outline-none"
-          />
-        ) : null}
 
         <LoadingOverlay
           isLoading={isPlayerLoading}
@@ -782,28 +776,36 @@ function EpisodeSidebar({
 }: EpisodeSidebarProps) {
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
-      <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <select
-          value={safeSeason}
-          onChange={(event) => onSeasonChange(event.target.value)}
-          className="cursor-pointer bg-transparent text-sm font-semibold text-white outline-none"
-          title="Select season"
+      <div className="flex shrink-0 items-center gap-2 border-b border-white/5 px-3 py-2 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+        <div
+          role="group"
           aria-label="Select season"
+          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {seasonOptions.map((season) => (
-            <option key={season} value={season} className="bg-[#1a1a1a] text-white">
+            <button
+              key={season}
+              type="button"
+              onClick={() => onSeasonChange(season)}
+              aria-pressed={season === safeSeason}
+              className={`min-h-11 shrink-0 touch-manipulation select-none rounded-full border px-4 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                season === safeSeason
+                  ? 'border-white/25 bg-white/15 text-white'
+                  : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white active:bg-white/15'
+              }`}
+            >
               Season {season}
-            </option>
+            </button>
           ))}
-        </select>
-        <div className="flex items-center gap-2">
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
           {onNextEpisode && safeEpisodeLimit > Number.parseInt(safeEpisode, 10) ? (
             <button
               type="button"
               onClick={onNextEpisode}
               aria-label="Next episode"
               title="Next episode"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="inline-flex h-11 w-11 touch-manipulation select-none items-center justify-center rounded-full border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/15"
             >
               <SkipForward className="h-3.5 w-3.5" />
             </button>
@@ -861,8 +863,8 @@ function EpisodeCardList({
             type="button"
             data-episode-active={isActive ? 'true' : 'false'}
             onClick={() => onEpisodeChange(episodeNumber)}
-            className={`flex w-full gap-3 border-b border-white/5 p-3 text-left transition-colors ${
-              isActive ? 'bg-white/[0.08]' : isWatched ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]' : 'hover:bg-white/[0.05]'
+            className={`flex w-full touch-manipulation select-none gap-3 border-b border-white/5 p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
+              isActive ? 'bg-white/[0.08]' : isWatched ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]' : 'hover:bg-white/[0.05] active:bg-white/[0.1]'
             }`}
           >
             <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
