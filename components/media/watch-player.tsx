@@ -1,15 +1,11 @@
 'use client';
 
-import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download, SkipForward } from 'lucide-react';
+import { ArrowLeft, SkipForward } from 'lucide-react';
 
-import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
-
-import type { MediaExperienceConfig } from '@/lib/media/experience';
-import { buildPlayerEmbedUrl, type PlaybackOptions } from '@/lib/media/embed';
+import { buildPlayerEmbedUrl } from '@/lib/media/embed';
 import {
   PLAYER_LABELS,
   usePlayerPreference,
@@ -167,90 +163,46 @@ function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
 function LoadingOverlay({
   isLoading,
   player,
-  posterUrl,
-  pressToPlay,
-  onPressToPlay,
   onSwitchPlayer,
   onReload,
   showFallback,
 }: {
   isLoading: boolean;
   player: PlayerChoice;
-  posterUrl?: string;
-  pressToPlay: boolean;
-  onPressToPlay?: () => void;
   onSwitchPlayer: (choice: PlayerChoice) => void;
   onReload: () => void;
   showFallback: boolean;
 }) {
-  if (!pressToPlay && !isLoading && !showFallback) {
+  if (!isLoading && !showFallback) {
     return null;
   }
 
-  const showPressToPlay = pressToPlay && Boolean(posterUrl);
-
   return (
-    <div
-      className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-6 backdrop-blur-sm ${
-        showPressToPlay ? 'bg-black/35' : 'bg-black/55'
-      }`}
-    >
-      {showPressToPlay && posterUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={posterUrl}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-50"
-        />
-      ) : null}
-      <div
-        className={`pointer-events-auto relative max-w-md rounded-2xl border border-white/10 p-5 text-center shadow-2xl ${
-          showPressToPlay ? 'bg-black/80' : 'bg-black/75'
-        }`}
-      >
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/55 px-6 backdrop-blur-sm">
+      <div className="pointer-events-auto relative max-w-md rounded-2xl border border-white/10 bg-black/75 p-5 text-center shadow-2xl">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
-          {showPressToPlay ? 'Ready to Play' : showFallback ? 'Playback Check' : 'Loading Player'}
+          {showFallback ? 'Playback Check' : 'Loading Player'}
         </p>
         <h2 className="mt-3 text-xl font-bold text-white">
-          {showPressToPlay
-            ? 'Press play to start the stream'
-            : showFallback
-              ? 'The embedded player did not finish loading.'
-              : 'Preparing your stream...'}
+          {showFallback ? 'The embedded player did not finish loading.' : 'Preparing your stream...'}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-          {showPressToPlay
-            ? 'Streams start only when you ask. This avoids a long wait on first open.'
-            : showFallback
-              ? player === '2'
-                ? 'VidSrc may not be supported on your browser. Try P1 (VidFast) or P3 (Videasy) instead.'
-                : 'Reload this episode or switch the available playback option if the stream stays blank.'
-              : 'Opening the stream wrapper now.'}
+          {showFallback
+            ? player === '2'
+              ? 'VidSrc may not be supported on your browser. Try P1 (VidFast) or P3 (Videasy) instead.'
+              : 'Reload this episode or switch the available playback option if the stream stays blank.'
+            : 'Opening the stream wrapper now.'}
         </p>
 
-        {showPressToPlay ? (
-          <button
-            type="button"
-            onClick={onPressToPlay}
-            className="mt-5 inline-flex items-center gap-2 rounded-full bg-netflix-red px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#f6121d] focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          >
-            <span className="ml-0.5 inline-block h-0 w-0 border-b-[6px] border-l-[10px] border-t-[6px] border-b-transparent border-t-transparent border-l-white" />
-            Press Play
-          </button>
-        ) : null}
-
-        {!showPressToPlay ? (
-          <button
+        <button
             type="button"
             onClick={onReload}
             className="mt-4 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
           >
             Reload
           </button>
-        ) : null}
 
-        {!showPressToPlay ? (
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
               <button
                 key={choice}
@@ -266,59 +218,9 @@ function LoadingOverlay({
                 P{choice} · {PLAYER_LABELS[choice]}
               </button>
             ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function EpisodeStillImage({
-  alt,
-  episodeLabel,
-  fallbackSrc,
-  priority,
-  src,
-}: {
-  alt: string;
-  episodeLabel?: string;
-  fallbackSrc?: string;
-  priority: boolean;
-  src?: string;
-}) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-
-  const shouldUseFallback = Boolean(src && failedSrc === src);
-  const resolvedSrc = shouldUseFallback ? fallbackSrc : src || fallbackSrc;
-  const usePlaceholder = !resolvedSrc || Boolean(src && fallbackSrc && src === fallbackSrc);
-
-  if (usePlaceholder) {
-    return (
-      <div className="relative h-full w-full overflow-hidden bg-[linear-gradient(135deg,#111827_0%,#171717_45%,#1f2937_100%)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(229,9,20,0.20),transparent_35%)]" />
-        <div className="absolute inset-x-0 bottom-0 p-2">
-          <span className="rounded-full border border-white/10 bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-100 shadow-lg backdrop-blur-sm">
-            {episodeLabel ?? 'Episode'}
-          </span>
         </div>
       </div>
-    );
-  }
-
-  return (
-    <Image
-      src={resolvedSrc}
-      alt={alt}
-      fill
-      sizes="112px"
-      className="object-cover"
-      priority={priority}
-      onError={() => {
-        if (src && !shouldUseFallback && fallbackSrc && fallbackSrc !== resolvedSrc) {
-          setFailedSrc(src);
-        }
-      }}
-    />
+    </div>
   );
 }
 
@@ -351,7 +253,6 @@ function StandardWatchPlayer({
   const [isPlayerLoading, setIsPlayerLoading] = useState(true);
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
-  const [pressToPlay, setPressToPlay] = useState(false);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const { player, setPlayer } = usePlayerPreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -360,7 +261,6 @@ function StandardWatchPlayer({
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const vidsrcElapsedRef = useRef(0);
-  const hasStartedPlaybackRef = useRef<boolean | null>(null);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -564,28 +464,7 @@ function StandardWatchPlayer({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [experience.homeHref, experience.id, router]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
-    if (hasStartedPlaybackRef.current !== null) return;
-    hasStartedPlaybackRef.current = false;
-    let alreadyStarted = false;
-    try {
-      alreadyStarted = sessionStorage.getItem('papiflix-player-autostart-hint') === '1';
-    } catch {
-      // Treat storage failure as "first visit" so the gate still shows.
-    }
-    setPressToPlay(!alreadyStarted);
-  }, []);
 
-  const handleStartPlayback = useCallback(() => {
-    setPressToPlay(false);
-    hasStartedPlaybackRef.current = true;
-    try {
-      sessionStorage.setItem('papiflix-player-autostart-hint', '1');
-    } catch {
-      // Best-effort hint; the gate will simply re-show next session.
-    }
-  }, []);
 
   const handleSwitchPlayer = useCallback(
     (choice: PlayerChoice) => {
@@ -662,19 +541,6 @@ function StandardWatchPlayer({
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        {embedUrl ? (
-          <a
-            href={embedUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Download video"
-            title="Open stream in new tab to download"
-            className={`absolute left-[calc(env(safe-area-inset-left)+4.5rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
-          >
-            <Download className="h-5 w-5" />
-          </a>
-        ) : null}
-
         <PlayerViewControls
           targetRef={playerShellRef}
           episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
@@ -698,9 +564,6 @@ function StandardWatchPlayer({
         <LoadingOverlay
           isLoading={isPlayerLoading}
           player={player}
-          posterUrl={entry.backdropUrl ?? entry.posterUrl}
-          pressToPlay={pressToPlay}
-          onPressToPlay={pressToPlay ? handleStartPlayback : undefined}
           onSwitchPlayer={handleSwitchPlayer}
           onReload={handleReloadPlayer}
           showFallback={showPlayerFallback}
@@ -713,6 +576,7 @@ function StandardWatchPlayer({
           className="h-full w-full border-0"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-storage-access-by-user-activation"
           onError={() => {
             hasIframeLoadedRef.current = false;
             setIsPlayerLoading(false);
@@ -775,29 +639,21 @@ function EpisodeSidebar({
   onNextEpisode,
 }: EpisodeSidebarProps) {
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
-      <div className="flex shrink-0 items-center gap-2 border-b border-white/5 px-3 py-2 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <div
-          role="group"
+    <div className="flex w-full shrink-0 flex-col border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(16rem,26vw,20rem)] landscape:border-l landscape:border-t-0">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+        <select
+          value={safeSeason}
+          onChange={(event) => onSeasonChange(event.target.value)}
+          className="min-h-11 min-w-0 flex-1 touch-manipulation cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 text-sm font-semibold text-white outline-none transition focus:border-white/25"
+          title="Select season"
           aria-label="Select season"
-          className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           {seasonOptions.map((season) => (
-            <button
-              key={season}
-              type="button"
-              onClick={() => onSeasonChange(season)}
-              aria-pressed={season === safeSeason}
-              className={`min-h-11 shrink-0 touch-manipulation select-none rounded-full border px-4 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
-                season === safeSeason
-                  ? 'border-white/25 bg-white/15 text-white'
-                  : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white active:bg-white/15'
-              }`}
-            >
+            <option key={season} value={season} className="bg-[#1a1a1a] text-white">
               Season {season}
-            </button>
+            </option>
           ))}
-        </div>
+        </select>
         <div className="flex shrink-0 items-center gap-2">
           {onNextEpisode && safeEpisodeLimit > Number.parseInt(safeEpisode, 10) ? (
             <button
@@ -844,63 +700,28 @@ function EpisodeCardList({
   safeSeason: string;
   watchedEpisodeKeys: Set<string>;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  useEpisodeAutoScroll(containerRef, `${safeSeason}:${safeEpisode}`, [safeSeason]);
-
   return (
-    <div
-      ref={containerRef}
-      className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]"
-    >
-      {cards.map((episode) => {
-        const episodeNumber = String(episode.episodeNumber);
-        const isActive = episodeNumber === safeEpisode;
-        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(safeSeason, episodeNumber));
-
-        return (
-          <button
-            key={episodeNumber}
-            type="button"
-            data-episode-active={isActive ? 'true' : 'false'}
-            onClick={() => onEpisodeChange(episodeNumber)}
-            className={`flex w-full touch-manipulation select-none gap-3 border-b border-white/5 p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
-              isActive ? 'bg-white/[0.08]' : isWatched ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]' : 'hover:bg-white/[0.05] active:bg-white/[0.1]'
-            }`}
-          >
-            <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
-              {isActive ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white">
-                    <div className="ml-0.5 border-b-[5px] border-l-[8px] border-t-[5px] border-b-transparent border-t-transparent border-l-white" />
-                  </div>
-                </div>
-              ) : null}
-              <EpisodeStillImage
-                alt=""
-                episodeLabel={`E${episodeNumber.padStart(2, '0')}`}
-                fallbackSrc={episode.fallbackStillUrl}
-                priority={isActive}
-                src={episode.stillUrl}
-              />
-            </div>
-            <div className="min-w-0 flex-1 py-0.5">
-              <p className="mb-0.5 text-[11px] text-zinc-400">
-                E{episodeNumber}
-                {episode.runtime != null ? ` · ${episode.runtime}m` : ''}
-              </p>
-              <p className="line-clamp-1 text-xs font-medium text-white">{episode.name}</p>
-              {isWatched && !isActive ? (
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  Watched
-                </p>
-              ) : null}
-              {episode.overview ? (
-                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">{episode.overview}</p>
-              ) : null}
-            </div>
-          </button>
-        );
-      })}
+    <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3">
+      <label htmlFor="episode-selector" className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+        Episode
+      </label>
+      <select
+        id="episode-selector"
+        value={safeEpisode}
+        onChange={(event) => onEpisodeChange(event.target.value)}
+        className="min-h-11 w-full touch-manipulation cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white outline-none transition focus:border-white/25"
+        aria-label="Select episode"
+      >
+        {cards.map((episode) => {
+          const episodeNumber = String(episode.episodeNumber);
+          const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(safeSeason, episodeNumber));
+          return (
+            <option key={episodeNumber} value={episodeNumber} className="bg-[#111] text-white">
+              E{episodeNumber.padStart(2, '0')} · {episode.name}{isWatched ? ' · Watched' : ''}
+            </option>
+          );
+        })}
+      </select>
     </div>
   );
 }

@@ -3,6 +3,15 @@
 import { Maximize2, Minimize2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 
+interface WebkitDocument extends Document {
+  webkitExitFullscreen?: () => Promise<void> | void;
+  webkitFullscreenElement?: Element | null;
+}
+
+interface WebkitHTMLElement extends HTMLElement {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+}
+
 interface PlayerViewControlsProps {
   className: string;
   episodeListVisible?: boolean;
@@ -19,20 +28,45 @@ export function PlayerViewControls({
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    const syncFullscreenState = () => setIsFullscreen(document.fullscreenElement !== null);
+    const webkitDocument = document as WebkitDocument;
+    const syncFullscreenState = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement ?? webkitDocument.webkitFullscreenElement));
+    };
 
     syncFullscreenState();
     document.addEventListener('fullscreenchange', syncFullscreenState);
-    return () => document.removeEventListener('fullscreenchange', syncFullscreenState);
-  }, [targetRef]);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      document.removeEventListener('webkitfullscreenchange', syncFullscreenState);
+    };
+  }, []);
 
-  const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => undefined);
+  const toggleFullscreen = useCallback(async () => {
+    const webkitDocument = document as WebkitDocument;
+    if (document.fullscreenElement ?? webkitDocument.webkitFullscreenElement) {
+      try {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else {
+          await webkitDocument.webkitExitFullscreen?.();
+        }
+      } catch {
+        // Keep the embed's native fullscreen control available as the fallback.
+      }
       return;
     }
 
-    void targetRef.current?.requestFullscreen().catch(() => undefined);
+    const target = targetRef.current as WebkitHTMLElement | null;
+    try {
+      if (target?.requestFullscreen) {
+        await target.requestFullscreen();
+      } else {
+        await target?.webkitRequestFullscreen?.();
+      }
+    } catch {
+      // Some TV browsers only support the embedded player's own fullscreen API.
+    }
   }, [targetRef]);
 
   return (
@@ -55,7 +89,7 @@ export function PlayerViewControls({
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen player'}
         aria-pressed={isFullscreen}
         title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen player'}
-        className="flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20"
+        className="hidden h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20 lg:flex"
       >
         {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
       </button>

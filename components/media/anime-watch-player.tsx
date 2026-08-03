@@ -1,12 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, SkipForward } from 'lucide-react';
 
-import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import {
   getRecentlyWatchedProgress,
   requestHomeScrollRestore,
@@ -222,63 +220,7 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
   };
 }
 
-function EpisodeStillImage({
-  alt,
-  episodeLabel,
-  fallbackSrc,
-  priority,
-  src,
-}: {
-  alt: string;
-  episodeLabel?: string;
-  fallbackSrc?: string;
-  priority: boolean;
-  src?: string;
-}) {
-  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
 
-  const primary = src || fallbackSrc;
-  const resolvedSrc =
-    primary && !failedUrls.has(primary)
-      ? primary
-      : fallbackSrc && fallbackSrc !== primary && !failedUrls.has(fallbackSrc)
-        ? fallbackSrc
-        : undefined;
-
-  const usePlaceholder = !resolvedSrc || Boolean(src && fallbackSrc && src === fallbackSrc);
-
-  if (usePlaceholder) {
-    return (
-      <div className="relative h-full w-full overflow-hidden bg-[linear-gradient(135deg,#111827_0%,#171717_45%,#1f2937_100%)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(229,9,20,0.22),transparent_35%)]" />
-        <div className="absolute inset-x-0 bottom-0 p-2">
-          <span className="rounded-full border border-white/10 bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-100 shadow-lg backdrop-blur-sm">
-            {episodeLabel ?? 'Episode'}
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <Image
-      src={resolvedSrc}
-      alt={alt}
-      fill
-      sizes="112px"
-      className="object-cover"
-      priority={priority}
-      onError={() => {
-        setFailedUrls((prev) => {
-          if (prev.has(resolvedSrc)) return prev;
-          const next = new Set(prev);
-          next.add(resolvedSrc);
-          return next;
-        });
-      }}
-    />
-  );
-}
 
 function EpisodeCardList({
   cards,
@@ -291,76 +233,35 @@ function EpisodeCardList({
   onEpisodeChange: (episode: number) => void;
   watchedEpisodeKeys: Set<string>;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  useEpisodeAutoScroll(containerRef, String(currentEpisode));
-
   return (
-    <div
-      ref={containerRef}
-      className="thin-scrollbar flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]"
-    >
-      {cards.map((episode) => {
-        const isActive = episode.episodeNumber === currentEpisode;
-        const isUpcoming = episode.isReleased === false;
-        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(episode.seasonNumber, episode.episodeNumber));
-        const upcomingLabel = formatUpcomingEpisodeLabel(episode);
-
-        return (
-          <button
-            key={`${episode.seasonNumber}-${episode.episodeNumber}`}
-            type="button"
-            data-episode-active={isActive ? 'true' : 'false'}
-            disabled={isUpcoming}
-            onClick={() => onEpisodeChange(episode.episodeNumber)}
-            className={`flex w-full touch-manipulation select-none gap-3 border-b border-white/5 p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
-              isActive
-                ? 'bg-white/[0.08]'
-                : isUpcoming
-                  ? 'cursor-not-allowed bg-white/[0.015] opacity-55'
-                  : isWatched
-                    ? 'bg-black/30 opacity-80 hover:bg-white/[0.045]'
-                    : 'hover:bg-white/[0.05] active:bg-white/[0.1]'
-            }`}
-          >
-            <div className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg bg-black/40 landscape:h-16 landscape:w-28">
-              {isActive ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white">
-                    <div className="ml-0.5 border-b-[5px] border-l-[8px] border-t-[5px] border-b-transparent border-t-transparent border-l-white" />
-                  </div>
-                </div>
-              ) : null}
-              <EpisodeStillImage
-                alt=""
-                episodeLabel={`E${String(episode.episodeNumber).padStart(2, '0')}`}
-                fallbackSrc={episode.fallbackStillUrl}
-                priority={isActive}
-                src={episode.stillUrl}
-              />
-            </div>
-            <div className="min-w-0 flex-1 py-0.5">
-              <p className="mb-0.5 text-[11px] text-zinc-400">
-                E{String(episode.episodeNumber).padStart(2, '0')}
-                {episode.runtime != null ? ` · ${episode.runtime}m` : ''}
-              </p>
-              <p className="line-clamp-1 text-xs font-medium text-white">{episode.name}</p>
-              {isUpcoming && upcomingLabel ? (
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-300">
-                  {upcomingLabel}
-                </p>
-              ) : null}
-              {isWatched && !isActive && !isUpcoming ? (
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-                  Watched
-                </p>
-              ) : null}
-              {episode.overview ? (
-                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-zinc-500">{episode.overview}</p>
-              ) : null}
-            </div>
-          </button>
-        );
-      })}
+    <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3">
+      <label htmlFor="anime-episode-selector" className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+        Episode
+      </label>
+      <select
+        id="anime-episode-selector"
+        value={currentEpisode}
+        onChange={(event) => onEpisodeChange(Number.parseInt(event.target.value, 10))}
+        className="min-h-11 w-full touch-manipulation cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white outline-none transition focus:border-white/25"
+        aria-label="Select episode"
+      >
+        {cards.map((episode) => {
+          const isUpcoming = episode.isReleased === false;
+          const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(episode.seasonNumber, episode.episodeNumber));
+          const upcomingLabel = formatUpcomingEpisodeLabel(episode);
+          return (
+            <option
+              key={`${episode.seasonNumber}-${episode.episodeNumber}`}
+              value={episode.episodeNumber}
+              disabled={isUpcoming}
+              className="bg-[#111] text-white"
+            >
+              E{String(episode.episodeNumber).padStart(2, '0')} · {episode.name}
+              {isUpcoming ? ` · ${upcomingLabel ?? 'Upcoming'}` : isWatched ? ' · Watched' : ''}
+            </option>
+          );
+        })}
+      </select>
     </div>
   );
 }
@@ -428,7 +329,7 @@ function SidebarControls({
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#101014] landscape:h-full landscape:w-[clamp(16rem,30vw,21rem)] landscape:flex-none landscape:shrink-0 landscape:border-l landscape:border-t-0">
+    <div className="flex w-full shrink-0 flex-col border-t border-white/5 bg-[#101014] landscape:h-full landscape:w-[clamp(16rem,26vw,20rem)] landscape:border-l landscape:border-t-0">
       <div className="space-y-3 border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-white">Episode List</span>
@@ -450,23 +351,26 @@ function SidebarControls({
 
         <div className="flex flex-col gap-2">
           {Object.keys(episodesBySeason).length > 1 ? (
-            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-              {Object.keys(episodesBySeason)
-                .map(Number)
-                .sort((a, b) => a - b)
-                .map((season) => (
-                  <button
-                    key={season}
-                    type="button"
-                    onClick={() => onSeasonChange(season)}
-                    aria-pressed={currentSeason === season}
-                    className={`min-h-11 flex-1 touch-manipulation select-none rounded-full px-3 text-center font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
-                      currentSeason === season ? 'bg-white/15 text-white' : 'text-zinc-400 hover:text-white active:bg-white/10'
-                    }`}
-                  >
-                    S{season}
-                  </button>
-                ))}
+            <div className="space-y-1">
+              <label htmlFor="anime-season-selector" className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+                Season
+              </label>
+              <select
+                id="anime-season-selector"
+                value={currentSeason}
+                onChange={(event) => onSeasonChange(Number.parseInt(event.target.value, 10))}
+                className="min-h-11 w-full touch-manipulation cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-white/25"
+                aria-label="Select season"
+              >
+                {Object.keys(episodesBySeason)
+                  .map(Number)
+                  .sort((a, b) => a - b)
+                  .map((season) => (
+                    <option key={season} value={season} className="bg-[#111] text-white">
+                      Season {season}
+                    </option>
+                  ))}
+              </select>
             </div>
           ) : null}
 
@@ -807,6 +711,7 @@ export function AnimeWatchPlayer({
           className="h-full w-full"
           allow="autoplay; fullscreen; encrypted-media"
           allowFullScreen
+          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-storage-access-by-user-activation"
           onLoad={() => {
             setIsIframeLoading(false);
             setIframeError(null);
