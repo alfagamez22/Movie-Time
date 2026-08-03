@@ -91,19 +91,19 @@ export function MatureToggle() {
       title={label}
       aria-label={label}
       aria-checked={unlocked}
-      className="group inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/35 py-1 pl-2.5 pr-1 text-xs font-semibold text-zinc-200 backdrop-blur-sm transition hover:border-white/30 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      className="group inline-flex h-6 items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-2 py-0.5 text-[10px] font-semibold text-zinc-200 backdrop-blur-sm transition hover:border-white/30 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
     >
-      <Lock className={`h-3.5 w-3.5 transition-colors ${unlocked ? 'text-netflix-red' : 'text-zinc-400'}`} />
+      <Lock className={`h-3 w-3 transition-colors ${unlocked ? 'text-netflix-red' : 'text-zinc-400'}`} />
       <span className="tracking-[0.12em]">VMX</span>
       <span
         aria-hidden="true"
-        className={`relative h-5 w-9 rounded-full transition-colors duration-200 ${
+        className={`relative h-3.5 w-6 rounded-full transition-colors duration-200 ${
           unlocked ? 'bg-netflix-red' : 'bg-zinc-600'
         }`}
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-            unlocked ? 'translate-x-4.5' : 'translate-x-0.5'
+          className={`absolute top-0.75 h-2.5 w-2.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+            unlocked ? 'translate-x-3.25' : 'translate-x-0.75'
           }`}
         />
       </span>

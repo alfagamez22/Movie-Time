@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, SkipForward } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Check, SkipForward } from 'lucide-react';
 
 import { buildPlayerEmbedUrl } from '@/lib/media/embed';
 import {
@@ -202,24 +202,81 @@ function LoadingOverlay({
             Reload
           </button>
 
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                onClick={() => onSwitchPlayer(choice)}
-                title={`Switch to ${PLAYER_LABELS[choice]}`}
-                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  player === choice
-                    ? 'border-netflix-red bg-netflix-red text-white'
-                    : 'border-white/15 bg-white/5 text-zinc-200 hover:bg-white/15'
-                }`}
-              >
-                P{choice} · {PLAYER_LABELS[choice]}
-              </button>
-            ))}
+        <div className="mt-5">
+          <PlayerSelect player={player} onSwitchPlayer={onSwitchPlayer} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function PlayerSelect({
+  player,
+  onSwitchPlayer,
+}: {
+  player: PlayerChoice;
+  onSwitchPlayer: (choice: PlayerChoice) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [open]);
+
+  const selectedLabel = `P${player} · ${PLAYER_LABELS[player]}`;
+
+  return (
+    <div ref={containerRef} className="relative inline-block w-full max-w-[16rem] text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full min-h-11 items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+      >
+        <span>{selectedLabel}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open ? (
+        <ul
+          role="listbox"
+          aria-label="Select player"
+          className="absolute z-50 mt-1.5 w-full min-w-[16rem] overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] py-1 shadow-2xl"
+        >
+          {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => {
+            const isSelected = player === choice;
+            return (
+              <li key={choice} role="option" aria-selected={isSelected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSwitchPlayer(choice);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition ${
+                    isSelected
+                      ? 'bg-netflix-red text-white'
+                      : 'text-zinc-200 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <span className="font-medium">P{choice} · {PLAYER_LABELS[choice]}</span>
+                  {isSelected ? <Check className="h-4 w-4" /> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }
