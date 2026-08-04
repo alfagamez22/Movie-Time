@@ -633,13 +633,6 @@ function StandardWatchPlayer({
           className="h-full w-full border-0"
           allowFullScreen
           allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-          // NOTE: no `sandbox` attribute — providers detect and reject it.
-          // Popup-ad blocking is intentionally NOT attempted from the parent:
-          // same-origin policy prevents reaching into a cross-origin iframe,
-          // and proxying the embed HTML onto this origin would expose
-          // app cookies/storage/credentials to untrusted scripts.
-          // The real fix is a hard reverse proxy on a dedicated origin
-          // (see docs/player-popup-protection.md).
           onError={() => {
             hasIframeLoadedRef.current = false;
             setIsPlayerLoading(false);

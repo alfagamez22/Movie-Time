@@ -96,18 +96,6 @@ const nextConfig: NextConfig = {
       {
         key: 'Permissions-Policy',
         value: [
-          'popups=()',
-          'notifications=()',
-          'microphone=()',
-          'camera=()',
-          'payment=()',
-          'usb=()',
-          'serial=()',
-          'bluetooth=()',
-          'midi=()',
-          'accelerometer=()',
-          'gyroscope=()',
-          'magnetometer=()',
           'encrypted-media=*',
           'autoplay=*',
           'fullscreen=*',

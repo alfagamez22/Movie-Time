@@ -711,9 +711,6 @@ export function AnimeWatchPlayer({
           className="h-full w-full"
           allow="autoplay; fullscreen; encrypted-media"
           allowFullScreen
-          // NOTE: no `sandbox` attribute — providers detect and reject it.
-          // See watch-player.tsx for the rationale; popup blocking requires
-          // a dedicated-origin reverse proxy, not a parent-side hook.
           onLoad={() => {
             setIsIframeLoading(false);
             setIframeError(null);
