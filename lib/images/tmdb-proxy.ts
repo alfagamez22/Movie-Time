@@ -1,20 +1,9 @@
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
 import sharp from 'sharp';
-
-import {
-  DEFAULT_DISK_CACHE_CONFIG,
-  findCacheEntry,
-  groomCache,
-  writeCacheEntry,
-  type DiskCacheConfig,
-  type DiskCacheFormat,
-} from '@/lib/images/disk-cache';
 
 const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL?.trim() || 'https://image.tmdb.org/t/p';
 
 type SupportedSize = 'w92' | 'w300' | 'w780';
-type OutputFormat = DiskCacheFormat;
+type OutputFormat = 'avif' | 'webp' | 'jpeg';
 
 const IMAGE_VARIANTS: Record<SupportedSize, { outputWidth: number; upstreamSize: string }> = {
   w92: {
@@ -86,42 +75,7 @@ function getContentType(format: OutputFormat): string {
   }
 }
 
-function getCacheConfig(): DiskCacheConfig {
-  return DEFAULT_DISK_CACHE_CONFIG;
-}
 
-async function streamCachedFile(filePath: string, format: OutputFormat): Promise<Response | null> {
-  try {
-    const stats = await stat(filePath);
-    if (!stats.isFile() || stats.size <= 0) {
-      return null;
-    }
-    const nodeStream = createReadStream(filePath);
-    const webStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        nodeStream.on('data', (chunk) => {
-          controller.enqueue(chunk instanceof Buffer ? new Uint8Array(chunk) : new TextEncoder().encode(String(chunk)));
-        });
-        nodeStream.on('end', () => controller.close());
-        nodeStream.on('error', (err) => controller.error(err));
-      },
-      cancel() {
-        nodeStream.destroy();
-      },
-    });
-
-    return new Response(webStream, {
-      headers: {
-        'Cache-Control': `public, max-age=${YEAR_IN_SECONDS}, s-maxage=${YEAR_IN_SECONDS}, immutable`,
-        'Content-Length': String(stats.size),
-        'Content-Type': getContentType(format),
-        Vary: 'Accept, Save-Data',
-      },
-    });
-  } catch {
-    return null;
-  }
-}
 
 export async function handleTmdbImageRequest(
   imagePath: string,
@@ -137,19 +91,6 @@ export async function handleTmdbImageRequest(
   const variant = IMAGE_VARIANTS[size];
   const saveData = isSaveDataEnabled(acceptHeader);
   const outputFormat = selectOutputFormat(acceptHeader, saveData);
-  const cacheConfig = getCacheConfig();
-
-  const cachedFile = findCacheEntry(cacheConfig, {
-    format: outputFormat,
-    imagePath,
-    size,
-  });
-  if (cachedFile) {
-    const cached = await streamCachedFile(cachedFile, outputFormat);
-    if (cached) {
-      return cached;
-    }
-  }
 
   const upstreamUrl = `${TMDB_IMAGE_BASE_URL}/${variant.upstreamSize}${imagePath}`;
 
@@ -170,24 +111,6 @@ export async function handleTmdbImageRequest(
 
   try {
     const optimizedBuffer = await transformImage(sourceBuffer, variant.outputWidth, outputFormat, saveData).toBuffer();
-
-    let persistedPath: string | null = null;
-    try {
-      persistedPath = await writeCacheEntry(
-        cacheConfig,
-        { format: outputFormat, imagePath, size },
-        optimizedBuffer,
-      );
-    } catch {
-      // Disk persistence is best-effort; serve from memory even if write fails.
-    }
-
-    if (persistedPath) {
-      const cached = await streamCachedFile(persistedPath, outputFormat);
-      if (cached) {
-        return cached;
-      }
-    }
 
     const cacheControl = cacheLong
       ? `public, max-age=${YEAR_IN_SECONDS}, s-maxage=${YEAR_IN_SECONDS}, stale-while-revalidate=${DAY_IN_SECONDS}`
@@ -213,8 +136,4 @@ export async function handleTmdbImageRequest(
       },
     });
   }
-}
-
-export async function groomImageCache(): Promise<void> {
-  await groomCache(DEFAULT_DISK_CACHE_CONFIG);
 }

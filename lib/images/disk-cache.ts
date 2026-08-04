@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export type DiskCacheFormat = 'avif' | 'webp' | 'jpeg';
 
@@ -11,8 +12,11 @@ export interface DiskCacheConfig {
 }
 
 export const DEFAULT_DISK_CACHE_CONFIG: DiskCacheConfig = {
-  cacheRoot: resolve(process.cwd(), 'public', '.img-cache'),
-  maxBytes: 500 * 1024 * 1024,
+  // Serverless filesystems are read-only outside the OS temp directory. Keeping
+  // this path outside the project root also prevents Next's output file tracer
+  // from bundling generated cache files into the image proxy function.
+  cacheRoot: join(tmpdir(), 'papiflix-img-cache'),
+  maxBytes: 128 * 1024 * 1024,
 };
 
 const FORMAT_TO_EXT: Record<DiskCacheFormat, string> = {
