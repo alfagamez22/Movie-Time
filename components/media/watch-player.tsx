@@ -1,10 +1,12 @@
 'use client';
 
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChevronDown, Check, SkipForward } from 'lucide-react';
 
+import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import { buildPlayerEmbedUrl } from '@/lib/media/embed';
 import {
   PLAYER_LABELS,
@@ -334,7 +336,10 @@ function StandardWatchPlayer({
   );
   const seasonEpisodeCards = useMemo<EpisodePreview[]>(() => {
     if (activeSeasonDetails?.episodes?.length) {
-      return activeSeasonDetails.episodes;
+      return activeSeasonDetails.episodes.map((episode) => ({
+        ...episode,
+        fallbackStillUrl: episode.fallbackStillUrl ?? entry.backdropUrl ?? entry.posterUrl,
+      }));
     }
 
     return Array.from({ length: safeEpisodeLimit }, (_, index) => {
@@ -343,12 +348,13 @@ function StandardWatchPlayer({
         airDate: undefined,
         episodeNumber: Number.parseInt(episodeNumber, 10),
         name: `Episode ${episodeNumber.padStart(2, '0')}`,
+        fallbackStillUrl: entry.backdropUrl ?? entry.posterUrl,
         overview: '',
         runtime: undefined,
         seasonNumber: Number.parseInt(safeSeason, 10),
       };
     });
-  }, [activeSeasonDetails, safeEpisodeLimit, safeSeason]);
+  }, [activeSeasonDetails, entry.backdropUrl, entry.posterUrl, safeEpisodeLimit, safeSeason]);
 
   const playbackOptions = {
     ...initialPlayback,
@@ -695,7 +701,7 @@ function EpisodeSidebar({
   onNextEpisode,
 }: EpisodeSidebarProps) {
   return (
-    <div className="flex w-full shrink-0 flex-col border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(16rem,26vw,20rem)] landscape:border-l landscape:border-t-0">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-t border-white/5 bg-[#111] landscape:h-full landscape:w-[clamp(18rem,30vw,23rem)] landscape:flex-none landscape:border-l landscape:border-t-0">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-4 py-3 landscape:pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <select
           value={safeSeason}
@@ -756,28 +762,103 @@ function EpisodeCardList({
   safeSeason: string;
   watchedEpisodeKeys: Set<string>;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEpisodeAutoScroll(containerRef, `${safeSeason}:${safeEpisode}`, [safeSeason]);
+
   return (
-    <div className="px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-3">
-      <label htmlFor="episode-selector" className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500">
-        Episode
-      </label>
-      <select
-        id="episode-selector"
-        value={safeEpisode}
-        onChange={(event) => onEpisodeChange(event.target.value)}
-        className="min-h-11 w-full touch-manipulation cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white outline-none transition focus:border-white/25"
-        aria-label="Select episode"
-      >
-        {cards.map((episode) => {
-          const episodeNumber = String(episode.episodeNumber);
-          const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(safeSeason, episodeNumber));
-          return (
-            <option key={episodeNumber} value={episodeNumber} className="bg-[#111] text-white">
-              E{episodeNumber.padStart(2, '0')} · {episode.name}{isWatched ? ' · Watched' : ''}
-            </option>
-          );
-        })}
-      </select>
+    <div ref={containerRef} className="thin-scrollbar min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+      {cards.map((episode) => {
+        const episodeNumber = String(episode.episodeNumber);
+        const isActive = episodeNumber === safeEpisode;
+        const isWatched = watchedEpisodeKeys.has(buildEpisodeHistoryKey(safeSeason, episodeNumber));
+
+        return (
+          <button
+            key={episodeNumber}
+            type="button"
+            data-episode-active={isActive ? 'true' : 'false'}
+            onClick={() => onEpisodeChange(episodeNumber)}
+            className={`group flex w-full touch-manipulation select-none gap-3 border-b border-white/5 p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white ${
+              isActive
+                ? 'bg-white/10'
+                : isWatched
+                  ? 'bg-black/20 opacity-80 hover:bg-white/6'
+                  : 'hover:bg-white/6 active:bg-white/10'
+            }`}
+          >
+            <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-md bg-zinc-900 sm:w-36 landscape:w-32">
+              <EpisodeStillImage
+                alt={`${episode.name} episode still`}
+                episodeLabel={`E${episodeNumber.padStart(2, '0')}`}
+                fallbackSrc={episode.fallbackStillUrl}
+                priority={isActive}
+                src={episode.stillUrl}
+              />
+              {isActive ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/35">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-black/20">
+                    <div className="ml-0.5 border-b-[5px] border-l-8 border-t-[5px] border-b-transparent border-t-transparent border-l-white" />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="min-w-0 flex-1 py-0.5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="line-clamp-1 text-sm font-semibold text-white">{episode.name}</p>
+                <span className="shrink-0 text-[11px] text-zinc-500">
+                  {episode.runtime != null ? `${episode.runtime}m` : `E${episodeNumber}`}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-zinc-400">
+                Episode {episodeNumber}{isWatched && !isActive ? ' · Watched' : ''}
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-zinc-400">
+                {episode.overview || 'Episode details are not available yet.'}
+              </p>
+            </div>
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+function EpisodeStillImage({
+  alt,
+  episodeLabel,
+  fallbackSrc,
+  priority,
+  src,
+}: {
+  alt: string;
+  episodeLabel: string;
+  fallbackSrc?: string;
+  priority: boolean;
+  src?: string;
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const resolvedSrc = src && failedSrc !== src ? src : fallbackSrc;
+
+  if (!resolvedSrc) {
+    return (
+      <div className="flex h-full w-full items-end bg-[linear-gradient(135deg,#18181b,#09090b)] p-2">
+        <span className="rounded bg-black/70 px-1.5 py-1 text-[10px] font-semibold text-white">{episodeLabel}</span>
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      src={resolvedSrc}
+      alt={alt}
+      fill
+      sizes="(max-width: 640px) 128px, 144px"
+      className="object-cover transition duration-300 group-hover:scale-[1.03]"
+      priority={priority}
+      onError={() => {
+        if (src && resolvedSrc === src) setFailedSrc(src);
+      }}
+    />
   );
 }
