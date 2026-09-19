@@ -1,27 +1,45 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/lib/generated/prisma/client';
 
-function makePrisma() {
-  const raw = process.env.DATABASE_URL!;
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+
+function makePrisma(): PrismaClient {
+  const raw = process.env.DATABASE_URL?.trim();
+  if (!raw) {
+    throw new Error('DATABASE_URL is not configured.');
+  }
 
   // pg-connection-string v2.13.0 emits a one-time SECURITY WARNING on startup
   // when sslmode is set to 'prefer', 'require', or 'verify-ca'.
-  // Normalise to 'verify-full' — this is a no-op if already set and
-  // does NOT trigger the warning. Zero runtime overhead (string ops only).
+  // Normalise to 'verify-full' only when the client is actually needed.
   const url = new URL(raw);
   url.searchParams.set('sslmode', 'verify-full');
   url.searchParams.delete('uselibpqcompat');
-
-  // Fallback if Prisma's pooled endpoint rejects verify-full:
-  //   url.searchParams.set('sslmode', 'require');
-  //   url.searchParams.set('uselibpqcompat', 'true');
 
   const adapter = new PrismaPg({ connectionString: url.toString() });
   return new PrismaClient({ adapter });
 }
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+function getPrisma(): PrismaClient {
+  if (globalForPrisma.prisma) {
+    return globalForPrisma.prisma;
+  }
 
-export const prisma = globalForPrisma.prisma ?? makePrisma();
+  const client = makePrisma();
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+  if (process.env.NODE_ENV !== 'production') {
+    globalForPrisma.prisma = client;
+  }
+
+  return client;
+}
+
+// Avoid connecting to or even parsing DATABASE_URL during Next.js module discovery.
+// The real Prisma client is created on first database operation at request time.
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    const client = getPrisma();
+    const value = Reflect.get(client, property, client);
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});
