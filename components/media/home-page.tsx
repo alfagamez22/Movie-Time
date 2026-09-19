@@ -321,7 +321,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 <MatureToggle />
               </div>
               <div className={showPlayerSwitcher ? 'hidden md:block' : 'hidden'}>
-                <PreferenceSwitcher experience={experience} compact />
+                <PreferenceSwitcher experience={experience} />
               </div>
               <UserMenu onSignInClick={() => openAuthModal('default')} />
               <button
@@ -337,7 +337,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           {showPlayerSwitcher ? (
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
               <MatureToggle />
-              <PreferenceSwitcher experience={experience} />
+              <PreferenceSwitcher experience={experience} compact />
             </div>
           ) : (
             <div className="mt-3 flex justify-center md:hidden">
