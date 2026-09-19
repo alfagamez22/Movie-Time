@@ -7,5 +7,11 @@ export async function GET(request: Request) {
   const imagePath = requestUrl.searchParams.get('path');
   const size = requestUrl.searchParams.get('size');
 
-  return handleTmdbImageRequest(imagePath ?? '', size, request.headers.get('accept'), false);
+  return handleTmdbImageRequest(
+    imagePath ?? '',
+    size,
+    request.headers.get('accept'),
+    request.headers.get('save-data'),
+    false,
+  );
 }
