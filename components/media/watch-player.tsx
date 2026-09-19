@@ -37,6 +37,13 @@ interface NormalizedPlayerProgress {
   progressSeconds: number;
 }
 
+const PLAYER_CHOICES: PlayerChoice[] = ['1', '2', '3', '4', '5', '6', '7'];
+
+function getNextPlayerChoice(player: PlayerChoice): PlayerChoice {
+  const currentIndex = PLAYER_CHOICES.indexOf(player);
+  return PLAYER_CHOICES[(currentIndex + 1) % PLAYER_CHOICES.length] ?? '1';
+}
+
 const VIDFAST_ALLOWED_ORIGINS = new Set([
   'https://vidfast.pro',
   'https://vidfast.in',
@@ -196,13 +203,22 @@ function LoadingOverlay({
             : 'Opening the stream wrapper now.'}
         </p>
 
-        <button
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <button
             type="button"
             onClick={onReload}
-            className="mt-4 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
           >
             Reload
           </button>
+          <button
+            type="button"
+            onClick={() => onSwitchPlayer(getNextPlayerChoice(player))}
+            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Try next player
+          </button>
+        </div>
 
         <div className="mt-5">
           <PlayerSelect player={player} onSwitchPlayer={onSwitchPlayer} />
@@ -215,9 +231,11 @@ function LoadingOverlay({
 function PlayerSelect({
   player,
   onSwitchPlayer,
+  compact = false,
 }: {
   player: PlayerChoice;
   onSwitchPlayer: (choice: PlayerChoice) => void;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -229,23 +247,32 @@ function PlayerSelect({
       }
     };
     if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener('pointerdown', handleClickOutside);
+      return () => document.removeEventListener('pointerdown', handleClickOutside);
     }
   }, [open]);
 
   const selectedLabel = `P${player} · ${PLAYER_LABELS[player]}`;
 
   return (
-    <div ref={containerRef} className="relative inline-block w-full max-w-[16rem] text-left">
+    <div
+      ref={containerRef}
+      className={compact ? 'relative inline-block text-left' : 'relative inline-block w-full max-w-[16rem] text-left'}
+    >
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full min-h-11 items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        aria-label={compact ? `Select player, currently ${selectedLabel}` : undefined}
+        title={compact ? selectedLabel : undefined}
+        className={
+          compact
+            ? 'flex h-12 min-w-12 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-black/45 px-3 text-sm font-bold text-white backdrop-blur-md transition hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20'
+            : 'flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white'
+        }
       >
-        <span>{selectedLabel}</span>
+        <span>{compact ? `P${player}` : selectedLabel}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -253,9 +280,11 @@ function PlayerSelect({
         <ul
           role="listbox"
           aria-label="Select player"
-          className="absolute z-50 mt-1.5 w-full min-w-[16rem] overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] py-1 shadow-2xl"
+          className={`absolute z-50 mt-1.5 overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] py-1 shadow-2xl ${
+            compact ? 'right-0 w-[min(16rem,calc(100vw-1.5rem))]' : 'w-full min-w-[16rem]'
+          }`}
         >
-          {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => {
+          {PLAYER_CHOICES.map((choice) => {
             const isSelected = player === choice;
             return (
               <li key={choice} role="option" aria-selected={isSelected}>
@@ -604,14 +633,19 @@ function StandardWatchPlayer({
           <ArrowLeft className="h-5 w-5" />
         </button>
 
-        <PlayerViewControls
-          targetRef={playerShellRef}
-          episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
-          onToggleEpisodeList={isSeries ? () => setIsEpisodeListVisible((visible) => !visible) : undefined}
+        <div
           className={`absolute right-[calc(env(safe-area-inset-right)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex items-center gap-2 transition-opacity duration-300 ${
             isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
-        />
+        >
+          <PlayerSelect player={player} onSwitchPlayer={handleSwitchPlayer} compact />
+          <PlayerViewControls
+            targetRef={playerShellRef}
+            episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
+            onToggleEpisodeList={isSeries ? () => setIsEpisodeListVisible((visible) => !visible) : undefined}
+            className="flex items-center gap-2"
+          />
+        </div>
 
         <div
           className={`pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+0.5rem)] z-30 flex justify-center transition-all duration-300 ${
