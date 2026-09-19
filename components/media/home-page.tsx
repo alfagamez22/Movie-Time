@@ -287,7 +287,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
         }`}
       >
-        <div className="mx-auto max-w-7xl px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:px-6 md:px-12 md:py-0">
+        <div className="safe-page-x mx-auto max-w-7xl pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] md:py-0">
           <div className="flex items-center justify-between gap-3 md:h-16">
             <Link
               href={experience.homeHref}
@@ -356,7 +356,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             transition={{ duration: 0.18 }}
             className="fixed inset-0 z-[80] flex flex-col bg-black/95 backdrop-blur-lg"
           >
-            <div className="border-b border-white/8 px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:px-6 md:px-12">
+            <div className="safe-page-x border-b border-white/8 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
               <div className="mx-auto flex max-w-4xl items-center gap-4">
                 <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                 <input
@@ -377,7 +377,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-12">
+            <div className="safe-page-x flex-1 overflow-y-auto py-5 sm:py-6">
               <div className="mx-auto max-w-4xl">
                 {!debouncedQuery ? (
                   <p className="mt-10 text-center text-sm text-zinc-600">{experience.emptySearchText}</p>
