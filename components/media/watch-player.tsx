@@ -652,7 +652,7 @@ function StandardWatchPlayer({
             isChromeVisible ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
           }`}
         >
-          <span className="line-clamp-1 max-w-[60vw] rounded-full bg-black/65 px-4 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-lg backdrop-blur-md sm:text-[12px]">
+          <span className="hidden max-w-[48vw] rounded-full bg-black/65 px-4 py-1.5 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-lg backdrop-blur-md sm:line-clamp-1 sm:block sm:text-[12px] lg:max-w-[60vw]">
             {entry.title}
             {isSeries ? ` S${safeSeason.padStart(2, '0')}E${safeEpisode.padStart(2, '0')}` : ''}
           </span>
