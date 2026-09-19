@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/lib/generated/prisma/client';
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+let prismaInstance = globalForPrisma.prisma;
 
 function makePrisma(): PrismaClient {
   const raw = process.env.DATABASE_URL?.trim();
@@ -21,17 +22,17 @@ function makePrisma(): PrismaClient {
 }
 
 function getPrisma(): PrismaClient {
-  if (globalForPrisma.prisma) {
-    return globalForPrisma.prisma;
+  if (prismaInstance) {
+    return prismaInstance;
   }
 
-  const client = makePrisma();
+  prismaInstance = makePrisma();
 
   if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = client;
+    globalForPrisma.prisma = prismaInstance;
   }
 
-  return client;
+  return prismaInstance;
 }
 
 // Avoid connecting to or even parsing DATABASE_URL during Next.js module discovery.
