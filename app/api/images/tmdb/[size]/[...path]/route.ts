@@ -9,5 +9,11 @@ export async function GET(
 ) {
   const { size, path } = await params;
   const imagePath = '/' + path.join('/');
-  return handleTmdbImageRequest(imagePath, size, request.headers.get('accept'), true);
+  return handleTmdbImageRequest(
+    imagePath,
+    size,
+    request.headers.get('accept'),
+    request.headers.get('save-data'),
+    true,
+  );
 }
