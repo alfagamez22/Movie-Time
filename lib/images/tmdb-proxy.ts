@@ -28,9 +28,8 @@ function isSupportedSize(value: string | null): value is SupportedSize {
   return value === 'w92' || value === 'w300' || value === 'w780';
 }
 
-function isSaveDataEnabled(acceptHeader: string | null): boolean {
-  if (!acceptHeader) return false;
-  return /save-data/i.test(acceptHeader);
+function isSaveDataEnabled(saveDataHeader: string | null): boolean {
+  return saveDataHeader?.trim().toLowerCase() === 'on';
 }
 
 function selectOutputFormat(acceptHeader: string | null, saveData: boolean): OutputFormat {
@@ -81,6 +80,7 @@ export async function handleTmdbImageRequest(
   imagePath: string,
   requestedSize: string | null,
   acceptHeader: string | null,
+  saveDataHeader: string | null,
   cacheLong: boolean,
 ): Promise<Response> {
   if (!TMDB_IMAGE_PATH_PATTERN.test(imagePath)) {
@@ -89,7 +89,7 @@ export async function handleTmdbImageRequest(
 
   const size = isSupportedSize(requestedSize) ? requestedSize : 'w780';
   const variant = IMAGE_VARIANTS[size];
-  const saveData = isSaveDataEnabled(acceptHeader);
+  const saveData = isSaveDataEnabled(saveDataHeader);
   const outputFormat = selectOutputFormat(acceptHeader, saveData);
 
   const upstreamUrl = `${TMDB_IMAGE_BASE_URL}/${variant.upstreamSize}${imagePath}`;
