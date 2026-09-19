@@ -27,6 +27,22 @@
   .player-canvas {
     background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
   }
+  .safe-page-x {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  @media (min-width: 640px) {
+    .safe-page-x {
+      padding-left: max(1.5rem, env(safe-area-inset-left));
+      padding-right: max(1.5rem, env(safe-area-inset-right));
+    }
+  }
+  @media (min-width: 768px) {
+    .safe-page-x {
+      padding-left: max(3rem, env(safe-area-inset-left));
+      padding-right: max(3rem, env(safe-area-inset-right));
+    }
+  }
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
