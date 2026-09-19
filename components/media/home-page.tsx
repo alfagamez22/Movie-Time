@@ -87,7 +87,13 @@ function SearchResultCard({
   );
 }
 
-function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
+function PreferenceSwitcher({
+  experience,
+  compact = false,
+}: {
+  experience: MediaExperienceConfig;
+  compact?: boolean;
+}) {
   const { player, setPlayer } = usePlayerPreference();
 
   if (experience.preferenceMode !== 'player') {
@@ -100,6 +106,25 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
   // PapiAnimev2 doesn't use multi-player switching.
   if (experience.id === 'papianime') {
     return null;
+  }
+
+  if (compact) {
+    return (
+      <select
+        id="papiflix-mobile-player"
+        value={player}
+        onChange={(event) => setPlayer(event.target.value as keyof typeof PLAYER_LABELS)}
+        aria-label="Select playback source"
+        title={`P${player} · ${PLAYER_LABELS[player]}`}
+        className="h-9 max-w-[9.5rem] touch-manipulation rounded-full border border-white/10 bg-black/60 px-3 text-xs font-semibold text-white outline-none backdrop-blur-md focus:border-white/25 focus:ring-2 focus:ring-white/70"
+      >
+        {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
+          <option key={choice} value={choice} className="bg-[#111] text-white">
+            P{choice} · {PLAYER_LABELS[choice]}
+          </option>
+        ))}
+      </select>
+    );
   }
 
   return (
@@ -296,7 +321,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 <MatureToggle />
               </div>
               <div className={showPlayerSwitcher ? 'hidden md:block' : 'hidden'}>
-                <PreferenceSwitcher experience={experience} />
+                <PreferenceSwitcher experience={experience} compact />
               </div>
               <UserMenu onSignInClick={() => openAuthModal('default')} />
               <button
