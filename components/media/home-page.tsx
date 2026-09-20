@@ -87,7 +87,13 @@ function SearchResultCard({
   );
 }
 
-function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
+function PreferenceSwitcher({
+  experience,
+  compact = false,
+}: {
+  experience: MediaExperienceConfig;
+  compact?: boolean;
+}) {
   const { player, setPlayer } = usePlayerPreference();
 
   if (experience.preferenceMode !== 'player') {
@@ -100,6 +106,25 @@ function PreferenceSwitcher({ experience }: { experience: MediaExperienceConfig 
   // PapiAnimev2 doesn't use multi-player switching.
   if (experience.id === 'papianime') {
     return null;
+  }
+
+  if (compact) {
+    return (
+      <select
+        id="papiflix-mobile-player"
+        value={player}
+        onChange={(event) => setPlayer(event.target.value as keyof typeof PLAYER_LABELS)}
+        aria-label="Select playback source"
+        title={`P${player} · ${PLAYER_LABELS[player]}`}
+        className="h-9 max-w-[9.5rem] touch-manipulation rounded-full border border-white/10 bg-black/60 px-3 text-xs font-semibold text-white outline-none backdrop-blur-md focus:border-white/25 focus:ring-2 focus:ring-white/70"
+      >
+        {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
+          <option key={choice} value={choice} className="bg-[#111] text-white">
+            P{choice} · {PLAYER_LABELS[choice]}
+          </option>
+        ))}
+      </select>
+    );
   }
 
   return (
@@ -262,7 +287,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
         }`}
       >
-        <div className="mx-auto max-w-7xl px-3 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:px-6 md:px-12 md:py-0">
+        <div className="safe-page-x mx-auto max-w-7xl pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] md:py-0">
           <div className="flex items-center justify-between gap-3 md:h-16">
             <Link
               href={experience.homeHref}
@@ -312,7 +337,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           {showPlayerSwitcher ? (
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
               <MatureToggle />
-              <PreferenceSwitcher experience={experience} />
+              <PreferenceSwitcher experience={experience} compact />
             </div>
           ) : (
             <div className="mt-3 flex justify-center md:hidden">
@@ -331,7 +356,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             transition={{ duration: 0.18 }}
             className="fixed inset-0 z-[80] flex flex-col bg-black/95 backdrop-blur-lg"
           >
-            <div className="border-b border-white/8 px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] sm:px-6 md:px-12">
+            <div className="safe-page-x border-b border-white/8 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
               <div className="mx-auto flex max-w-4xl items-center gap-4">
                 <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                 <input
@@ -352,7 +377,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-12">
+            <div className="safe-page-x flex-1 overflow-y-auto py-5 sm:py-6">
               <div className="mx-auto max-w-4xl">
                 {!debouncedQuery ? (
                   <p className="mt-10 text-center text-sm text-zinc-600">{experience.emptySearchText}</p>

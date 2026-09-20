@@ -89,7 +89,7 @@ export function PlayerViewControls({
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen player'}
         aria-pressed={isFullscreen}
         title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen player'}
-        className="hidden h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20 lg:flex"
+        className="flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20"
       >
         {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
       </button>
