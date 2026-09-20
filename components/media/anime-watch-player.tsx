@@ -238,13 +238,6 @@ function EpisodeCardList({
   const containerRef = useRef<HTMLDivElement>(null);
   useEpisodeAutoScroll(containerRef, String(currentEpisode));
 
-  const handleReloadPlayer = useCallback(() => {
-    hasIframeLoadedRef.current = false;
-    setIsIframeLoading(true);
-    setIframeError(null);
-    setIframeReloadKey((value) => value + 1);
-  }, []);
-
   return (
     <div ref={containerRef} className="thin-scrollbar min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
       {cards.map((episode) => {
@@ -741,6 +734,13 @@ export function AnimeWatchPlayer({
     setCurrentEpisode(1);
     setSavedStartAt(0);
   };
+
+  const handleReloadPlayer = useCallback(() => {
+    hasIframeLoadedRef.current = false;
+    setIsIframeLoading(true);
+    setIframeError(null);
+    setIframeReloadKey((value) => value + 1);
+  }, []);
 
   return (
     <div
