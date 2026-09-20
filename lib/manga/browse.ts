@@ -26,62 +26,62 @@ export interface MangaBrowseResult {
 
 async function loadMangaBrowse(): Promise<MangaBrowseResult> {
   const [popular, latest, recent] = await Promise.all([
-      getMangaDexPopular(24),
-      getMangaDexLatest(24),
-      getMangaDexRecentlyAdded(18),
-    ]);
+    getMangaDexPopular(24),
+    getMangaDexLatest(24),
+    getMangaDexRecentlyAdded(18),
+  ]);
 
-    const sections: LibrarySection[] = [];
+  const sections: LibrarySection[] = [];
 
-    if (popular.data.length) {
-      sections.push({
-        description: 'Top-rated manga on MangaDex right now.',
-        entries: popular.data.map(mangaDexToLibraryEntry),
-        id: 'popular',
-        title: 'Popular',
-      });
-    }
+  if (popular.data.length) {
+    sections.push({
+      description: 'Top-rated manga on MangaDex right now.',
+      entries: popular.data.map(mangaDexToLibraryEntry),
+      id: 'popular',
+      title: 'Popular',
+    });
+  }
 
-    if (latest.data.length) {
-      sections.push({
-        description: 'Recently updated manga on MangaDex.',
-        entries: latest.data.map(mangaDexToLibraryEntry),
-        id: 'latest',
-        title: 'Latest Updates',
-      });
-    }
+  if (latest.data.length) {
+    sections.push({
+      description: 'Recently updated manga on MangaDex.',
+      entries: latest.data.map(mangaDexToLibraryEntry),
+      id: 'latest',
+      title: 'Latest Updates',
+    });
+  }
 
-    if (recent.data.length) {
-      sections.push({
-        description: 'Manga newly added to MangaDex.',
-        entries: recent.data.map(mangaDexToLibraryEntry),
-        id: 'recently-added',
-        title: 'Recently Added',
-      });
-    }
+  if (recent.data.length) {
+    sections.push({
+      description: 'Manga newly added to MangaDex.',
+      entries: recent.data.map(mangaDexToLibraryEntry),
+      id: 'recently-added',
+      title: 'Recently Added',
+    });
+  }
 
-    const genreResults = await Promise.all(
-      Object.entries(GENRE_TAGS).map(async ([key, tagId]) => {
-        try {
-          const result = await getMangaDexByTag(tagId, 18);
-          return { key, entries: result.data.map(mangaDexToLibraryEntry) };
-        } catch {
-          return { key, entries: [] as LibraryMediaEntry[] };
-        }
-      }),
-    );
-
-    for (const { key, entries } of genreResults) {
-      if (entries.length) {
-        const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
-        sections.push({
-          description: `Popular ${label.toLowerCase()} manga.`,
-          entries,
-          id: `genre-${key}`,
-          title: label,
-        });
+  const genreResults = await Promise.all(
+    Object.entries(GENRE_TAGS).map(async ([key, tagId]) => {
+      try {
+        const result = await getMangaDexByTag(tagId, 18);
+        return { key, entries: result.data.map(mangaDexToLibraryEntry) };
+      } catch {
+        return { key, entries: [] as LibraryMediaEntry[] };
       }
+    }),
+  );
+
+  for (const { key, entries } of genreResults) {
+    if (entries.length) {
+      const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+      sections.push({
+        description: `Popular ${label.toLowerCase()} manga.`,
+        entries,
+        id: `genre-${key}`,
+        title: label,
+      });
     }
+  }
 
   return { error: null, sections };
 }
