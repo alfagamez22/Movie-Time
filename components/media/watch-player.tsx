@@ -408,6 +408,10 @@ function StandardWatchPlayer({
     });
   }, [activeSeasonDetails, entry.backdropUrl, entry.posterUrl, safeEpisodeLimit, safeSeason]);
 
+  const availablePlayerChoices = useMemo(() => getAvailablePlayerChoices(imdbId), [imdbId]);
+  const effectivePlayer = availablePlayerChoices.includes(player)
+    ? player
+    : (availablePlayerChoices[0] ?? '1');
   const playbackOptions = {
     ...initialPlayback,
     episode: safeEpisode,
@@ -418,10 +422,6 @@ function StandardWatchPlayer({
         : initialPlayback.progress,
     season: safeSeason,
   };
-  const availablePlayerChoices = useMemo(() => getAvailablePlayerChoices(imdbId), [imdbId]);
-  const effectivePlayer = availablePlayerChoices.includes(player)
-    ? player
-    : (availablePlayerChoices[0] ?? '1');
   const isVidFastPlayer = effectivePlayer === '1';
   const embedUrl = buildPlayerEmbedUrl(entry, playbackOptions, effectivePlayer, imdbId);
 
