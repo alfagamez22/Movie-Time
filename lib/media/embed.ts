@@ -1,4 +1,5 @@
 import { appConfig } from '@/lib/config';
+import { toTmdbEpisodeCoordinates } from './season-layout';
 
 import {
   getEpisodeLimit,
@@ -102,6 +103,7 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
   if (isTvEntry(entry)) {
     const season = clampPositiveInteger(getFirstParam(searchParams.s), entry.maxSeasons);
     return {
+      autoNext,
       autoPlay,
       color,
       episode: clampPositiveInteger(getFirstParam(searchParams.e), getEpisodeLimit(entry, season)),
@@ -124,8 +126,9 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
 export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
   // https://videasy.ws/docs.html
   const base = 'https://player.videasy.ws/embed';
+  const episode = toTmdbEpisodeCoordinates(entry, options.season, options.episode);
   const path = isTvEntry(entry)
-    ? `${base}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
+    ? `${base}/tv/${encodeURIComponent(entry.id)}/${episode.season}/${episode.episode}`
     : `${base}/movie/${encodeURIComponent(entry.id)}`;
 
   const url = new URL(path);

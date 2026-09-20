@@ -16,6 +16,7 @@ interface PlayerViewControlsProps {
   className: string;
   episodeListVisible?: boolean;
   onToggleEpisodeList?: () => void;
+  showFullscreenButton?: boolean;
   targetRef: RefObject<HTMLElement | null>;
 }
 
@@ -23,6 +24,7 @@ export function PlayerViewControls({
   className,
   episodeListVisible,
   onToggleEpisodeList,
+  showFullscreenButton = true,
   targetRef,
 }: PlayerViewControlsProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -83,7 +85,7 @@ export function PlayerViewControls({
           {episodeListVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
         </button>
       ) : null}
-      <button
+      {showFullscreenButton ? <button
         type="button"
         onClick={toggleFullscreen}
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen player'}
@@ -92,7 +94,7 @@ export function PlayerViewControls({
         className="flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20"
       >
         {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-      </button>
+      </button> : null}
     </div>
   );
 }

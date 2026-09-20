@@ -4,6 +4,7 @@ import { resolveLiveMediaEntry } from '@/lib/media/resolve';
 import { parseMediaType } from '@/lib/media/routes';
 import { lookupTmdbSeasonDetails } from '@/lib/tmdb/client';
 import { isTvEntry } from '@/lib/media/types';
+import { toPapiflixSeasonDetails, toTmdbSeasonNumber } from '@/lib/media/season-layout';
 
 interface SeasonRouteContext {
   params: Promise<{ season: string; slug: string }>;
@@ -26,13 +27,20 @@ export async function GET(request: Request, context: SeasonRouteContext) {
     return NextResponse.json({ error: 'TV series entry not found.' }, { status: 404 });
   }
 
-  const tmdbSeasonLookup = await lookupTmdbSeasonDetails(resolvedEntry.entry.id, seasonNumber);
+  if (seasonNumber > resolvedEntry.entry.maxSeasons) {
+    return NextResponse.json({ error: 'Season was not found.' }, { status: 404 });
+  }
+
+  const tmdbSeasonLookup = await lookupTmdbSeasonDetails(
+    resolvedEntry.entry.id,
+    toTmdbSeasonNumber(resolvedEntry.entry, seasonNumber),
+  );
   if (!tmdbSeasonLookup.ok) {
     return NextResponse.json({ error: tmdbSeasonLookup.message }, { status: tmdbSeasonLookup.status });
   }
 
   return NextResponse.json({
-    data: tmdbSeasonLookup.data,
+    data: toPapiflixSeasonDetails(resolvedEntry.entry, seasonNumber, tmdbSeasonLookup.data),
     id: resolvedEntry.entry.id,
   });
 }

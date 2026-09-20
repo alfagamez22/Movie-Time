@@ -37,8 +37,18 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
   return runtimeModule.exports;
 }
 
-const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildPlayerEmbedUrl, buildVidApiEmbedUrl, buildVidSrcEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
+const seasonLayout = loadTsModuleWithRequire('lib/media/season-layout.ts', {
   stubs: {
+    './types': {
+      getEpisodeLimit: (entry, season) => entry.episodesBySeason?.[String(season)] ?? entry.maxEpisodes,
+      isTvEntry: (entry) => entry.type === 'tv',
+    },
+  },
+});
+
+const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildPlayerEmbedUrl, buildVidApiEmbedUrl, buildVidSrcEmbedUrl, buildVideasyEmbedUrl } = loadTsModuleWithRequire('lib/media/embed.ts', {
+  stubs: {
+    './season-layout': seasonLayout,
     '@/lib/config': {
       appConfig: {
         ezvidEmbedBaseUrl: 'https://ezvidapi.com/embed',
@@ -56,6 +66,27 @@ const { buildEzvidEmbedUrl, buildFilmuEmbedUrl, buildPlayerEmbedUrl, buildVidApi
       isTvEntry: (entry) => entry.type === 'tv',
     },
   },
+});
+
+test('Re:Zero exposes four broadcast seasons and maps season 4 to TMDB episode 67', () => {
+  const entry = seasonLayout.withPapiflixSeasonLayout({
+    id: '65942', provider: 'tmdb', title: 'Re:Zero', type: 'tv',
+    maxSeasons: 1, maxEpisodes: 85, episodesBySeason: { '1': 85 },
+  });
+
+  assert.equal(entry.maxSeasons, 4);
+  assert.deepEqual(entry.episodesBySeason, { '1': 25, '2': 25, '3': 16, '4': 19 });
+  assert.deepEqual(seasonLayout.fromTmdbEpisodeCoordinates(entry, '1', '67'), { season: '4', episode: '1' });
+  assert.equal(buildVideasyEmbedUrl(entry, { ...defaultPlayback, season: '4', episode: '1' }),
+    'https://player.videasy.ws/embed/tv/65942/1/67?autoplay=1&ds_lang=en');
+
+  const details = seasonLayout.toPapiflixSeasonDetails(entry, 4, {
+    episodeCount: 85, name: 'Season 1', overview: '', seasonNumber: 1,
+    episodes: [{ episodeNumber: 67, seasonNumber: 1, name: 'Overcome Sand Time', overview: '' }],
+  });
+  assert.equal(details.episodeCount, 19);
+  assert.equal(details.episodes[0].episodeNumber, 1);
+  assert.equal(details.episodes[0].seasonNumber, 4);
 });
 
 const defaultPlayback = {

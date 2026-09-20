@@ -2,6 +2,7 @@ import 'server-only';
 
 import { normalizeSlug } from '@/lib/slugs/media';
 import { lookupTmdbMediaEntry, searchTmdbLibrary } from '@/lib/tmdb/client';
+import { withPapiflixSeasonLayout } from './season-layout';
 
 import type { MediaEntry, MediaType } from './types';
 
@@ -13,7 +14,7 @@ export interface ResolvedLiveMediaEntry {
 async function lookupById(tmdbId: string, typeHint?: MediaType): Promise<MediaEntry | null> {
   if (typeHint) {
     const lookup = await lookupTmdbMediaEntry(tmdbId, typeHint);
-    return lookup.ok ? lookup.entry : null;
+    return lookup.ok ? withPapiflixSeasonLayout(lookup.entry) : null;
   }
 
   const [movieLookup, tvLookup] = await Promise.all([
@@ -22,11 +23,11 @@ async function lookupById(tmdbId: string, typeHint?: MediaType): Promise<MediaEn
   ]);
 
   if (movieLookup.ok) {
-    return movieLookup.entry;
+    return withPapiflixSeasonLayout(movieLookup.entry);
   }
 
   if (tvLookup.ok) {
-    return tvLookup.entry;
+    return withPapiflixSeasonLayout(tvLookup.entry);
   }
 
   return null;

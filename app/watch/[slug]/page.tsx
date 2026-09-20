@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { WatchPlayer } from '@/components/media/watch-player';
 import { resolvePlaybackOptions } from '@/lib/media/embed';
 import { papiflixExperience } from '@/lib/media/experience';
+import { toPapiflixSeasonDetails, toTmdbSeasonNumber } from '@/lib/media/season-layout';
 import { resolveLiveMediaEntry } from '@/lib/media/resolve';
 import { buildWatchHref, parseMediaType } from '@/lib/media/routes';
 import { normalizeSlug } from '@/lib/slugs/media';
@@ -95,10 +96,14 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
   if (isTvEntry(resolvedEntry.entry)) {
     const seasonDetailsLookup = await lookupTmdbSeasonDetails(
       resolvedEntry.entry.id,
-      Number.parseInt(initialPlayback.season, 10),
+      toTmdbSeasonNumber(resolvedEntry.entry, Number.parseInt(initialPlayback.season, 10)),
     );
     if (seasonDetailsLookup.ok) {
-      initialSeasonDetails = seasonDetailsLookup.data;
+      initialSeasonDetails = toPapiflixSeasonDetails(
+        resolvedEntry.entry,
+        Number.parseInt(initialPlayback.season, 10),
+        seasonDetailsLookup.data,
+      );
     }
   }
 

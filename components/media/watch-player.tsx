@@ -8,6 +8,7 @@ import { ArrowLeft, SkipForward } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import { buildVideasyEmbedUrl } from '@/lib/media/embed';
+import { fromTmdbEpisodeCoordinates } from '@/lib/media/season-layout';
 import {
   requestHomeScrollRestore,
   trackRecentlyWatched,
@@ -155,6 +156,20 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
     progressPercent: clampedPercent,
     progressSeconds,
   };
+}
+
+function extractPlayerEpisode(data: unknown, tmdbId: string): { season: string; episode: string } | null {
+  const parsed = parseMessageData(data);
+  if (!isRecord(parsed) || parsed.type !== 'PLAYER_EVENT' || !isRecord(parsed.data) ||
+      !isRecord(parsed.data.player_info)) return null;
+
+  const info = parsed.data.player_info;
+  if (String(info.tmdb) !== tmdbId) return null;
+
+  const season = readNumber([info], ['season']);
+  const episode = readNumber([info], ['episode']);
+  if (!season || !episode || !Number.isInteger(season) || !Number.isInteger(episode)) return null;
+  return { season: String(season), episode: String(episode) };
 }
 
 
@@ -338,6 +353,7 @@ function StandardWatchPlayer({
 
   const [season, setSeason] = useState(initialPlayback.season);
   const [episode, setEpisode] = useState(initialPlayback.episode);
+  const [embedPlayback, setEmbedPlayback] = useState({ season: initialPlayback.season, episode: initialPlayback.episode });
   const [activeSeasonDetails, setActiveSeasonDetails] = useState<SeasonDetails | null>(initialSeasonDetails);
   const [seasonDetailsError, setSeasonDetailsError] = useState<string | null>(null);
   const [isChromeVisible, setIsChromeVisible] = useState(true);
@@ -393,10 +409,11 @@ function StandardWatchPlayer({
   */
   const playbackOptions = {
     ...initialPlayback,
-    episode: safeEpisode,
+    episode: embedPlayback.episode,
     language: initialPlayback.language,
-    progress: initialPlayback.progress,
-    season: safeSeason,
+    progress: embedPlayback.season === initialPlayback.season && embedPlayback.episode === initialPlayback.episode
+      ? initialPlayback.progress : null,
+    season: embedPlayback.season,
   };
   const embedUrl = buildVideasyEmbedUrl(entry, playbackOptions);
 
@@ -404,7 +421,8 @@ function StandardWatchPlayer({
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
     setEpisode(newEpisode);
-  }, []);
+    setEmbedPlayback({ season: safeSeason, episode: newEpisode });
+  }, [safeSeason]);
 
   useEffect(() => {
     trackRecentlyWatched(
@@ -449,6 +467,23 @@ function StandardWatchPlayer({
       setIsPlayerLoading(false);
       setShowPlayerFallback(false);
 
+      const playerEpisode = extractPlayerEpisode(event.data, entry.id);
+      const currentEpisode = playerEpisode
+        ? fromTmdbEpisodeCoordinates(entry, playerEpisode.season, playerEpisode.episode)
+        : null;
+      if (currentEpisode && isTvEntry(entry) && currentEpisode.season !== safeSeason &&
+          Number(currentEpisode.season) <= entry.maxSeasons) {
+        setSeason(currentEpisode.season);
+        setEpisode(currentEpisode.episode);
+        setActiveSeasonDetails(null);
+        void fetch(`/api/media/${encodeURIComponent(entry.slug)}/seasons/${currentEpisode.season}?type=${entry.type}&id=${entry.id}`)
+          .then((response) => response.ok ? response.json() : null)
+          .then((json: { data: SeasonDetails } | null) => { if (json) setActiveSeasonDetails(json.data); })
+          .catch(() => setSeasonDetailsError('Could not load episode list for this season.'));
+      } else if (currentEpisode && currentEpisode.season === safeSeason && currentEpisode.episode !== safeEpisode) {
+        setEpisode(currentEpisode.episode);
+      }
+
       const progress = extractPlayerProgress(event.data);
       if (!progress) return;
 
@@ -460,10 +495,10 @@ function StandardWatchPlayer({
         entry,
         {
           durationSeconds: progress.durationSeconds,
-          episode: isSeries ? safeEpisode : undefined,
+          episode: isSeries ? currentEpisode?.episode ?? safeEpisode : undefined,
           progressPercent: progress.progressPercent,
           progressSeconds: progress.progressSeconds,
-          season: isSeries ? safeSeason : undefined,
+          season: isSeries ? currentEpisode?.season ?? safeSeason : undefined,
         },
         experience.id,
         canSyncWatchHistory,
@@ -591,6 +626,7 @@ function StandardWatchPlayer({
       setShowPlayerFallback(false);
       setSeason(newSeason);
       setEpisode('1');
+      setEmbedPlayback({ season: newSeason, episode: '1' });
       setActiveSeasonDetails(null);
       setSeasonDetailsError(null);
 
@@ -649,6 +685,7 @@ function StandardWatchPlayer({
         >
           <PlayerViewControls
             targetRef={playerShellRef}
+            showFullscreenButton={false}
             episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
             onToggleEpisodeList={isSeries ? () => setIsEpisodeListVisible((visible) => !visible) : undefined}
             className="flex items-center gap-2"
@@ -673,7 +710,7 @@ function StandardWatchPlayer({
         />
 
         <iframe
-          key={`${entry.provider}-videasy-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
+          key={`${entry.provider}-videasy-${embedPlayback.season}-${embedPlayback.episode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
