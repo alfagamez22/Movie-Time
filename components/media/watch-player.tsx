@@ -425,7 +425,7 @@ function StandardWatchPlayer({
   const isVidFastPlayer = effectivePlayer === '1';
   const embedUrl =
     buildPlayerEmbedUrl(entry, playbackOptions, effectivePlayer, imdbId) ??
-    buildPlayerEmbedUrl(entry, playbackOptions, '1', imdbId);
+    buildPlayerEmbedUrl(entry, playbackOptions, '1', imdbId)!;
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
