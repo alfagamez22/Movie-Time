@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Info, Search, X } from 'lucide-react';
@@ -84,6 +85,32 @@ function SearchResultCard({
         ) : null}
       </div>
     </button>
+  );
+}
+
+function ExperienceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
+  const router = useRouter();
+
+  const currentHref =
+    experience.id === 'papianime' ? '/anime' : experience.id === 'papimanga' ? '/manga' : '/';
+
+  return (
+    <select
+      value={currentHref}
+      onChange={(event) => {
+        const nextHref = event.target.value;
+        if (nextHref !== currentHref) {
+          router.push(nextHref);
+        }
+      }}
+      aria-label="Switch Papi experience"
+      title="Switch between PapiFlix, PapiAnime, and PapiManga"
+      className="h-9 max-w-[7.75rem] touch-manipulation rounded-full border border-white/10 bg-black/60 px-3 text-xs font-semibold text-white outline-none backdrop-blur-md focus:border-white/25 focus:ring-2 focus:ring-white/70"
+    >
+      <option value="/" className="bg-[#111] text-white">PapiFlix</option>
+      <option value="/anime" className="bg-[#111] text-white">PapiAnime</option>
+      <option value="/manga" className="bg-[#111] text-white">PapiManga</option>
+    </select>
   );
 }
 
@@ -334,16 +361,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
               </button>
             </div>
           </div>
-          {showPlayerSwitcher ? (
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
-              <MatureToggle />
-              <PreferenceSwitcher experience={experience} compact />
-            </div>
-          ) : (
-            <div className="mt-3 flex justify-center md:hidden">
-              <MatureToggle />
-            </div>
-          )}
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
+            <ExperienceSwitcher experience={experience} />
+            <MatureToggle />
+            {showPlayerSwitcher ? <PreferenceSwitcher experience={experience} compact /> : null}
+          </div>
         </div>
       </header>
 
