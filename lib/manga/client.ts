@@ -3,15 +3,25 @@ import 'server-only';
 import { appConfig } from '@/lib/config';
 
 const MANGADEX_RATE_LIMIT_MS = 250;
-let lastRequestTime = 0;
+let nextRequestAt = 0;
+let requestStartQueue: Promise<void> = Promise.resolve();
+
+function reserveRequestStart(): Promise<void> {
+  const slot = requestStartQueue.then(async () => {
+    const waitMs = Math.max(0, nextRequestAt - Date.now());
+    if (waitMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+    nextRequestAt = Date.now() + MANGADEX_RATE_LIMIT_MS;
+  });
+
+  requestStartQueue = slot.catch(() => undefined);
+  return slot;
+}
 
 async function rateLimitedFetch(url: string, init?: RequestInit): Promise<Response> {
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
-  if (elapsed < MANGADEX_RATE_LIMIT_MS) {
-    await new Promise((resolve) => setTimeout(resolve, MANGADEX_RATE_LIMIT_MS - elapsed));
-  }
-  lastRequestTime = Date.now();
+  await reserveRequestStart();
+
   return fetch(url, {
     ...init,
     headers: {
