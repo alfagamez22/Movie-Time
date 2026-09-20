@@ -423,7 +423,9 @@ function StandardWatchPlayer({
     season: safeSeason,
   };
   const isVidFastPlayer = effectivePlayer === '1';
-  const embedUrl = buildPlayerEmbedUrl(entry, playbackOptions, effectivePlayer, imdbId);
+  const embedUrl =
+    buildPlayerEmbedUrl(entry, playbackOptions, effectivePlayer, imdbId) ??
+    buildPlayerEmbedUrl(entry, playbackOptions, '1', imdbId);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
@@ -703,7 +705,7 @@ function StandardWatchPlayer({
         />
 
         <iframe
-          key={`${entry.provider}-${player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
+          key={`${entry.provider}-${effectivePlayer}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
@@ -719,7 +721,7 @@ function StandardWatchPlayer({
             setIsPlayerLoading(false);
             setShowPlayerFallback(false);
           }}
-          referrerPolicy={player === '5' ? 'origin' : 'no-referrer'}
+          referrerPolicy={effectivePlayer === '5' ? 'origin' : 'no-referrer'}
           title={`Watch ${entry.title}`}
         />
       </div>
