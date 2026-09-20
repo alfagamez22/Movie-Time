@@ -642,6 +642,7 @@ export function AnimeWatchPlayer({
         if (!isDescendant) return;
       }
 
+      hasIframeLoadedRef.current = true;
       setIsIframeLoading(false);
       setIframeError(null);
 
