@@ -238,6 +238,13 @@ function EpisodeCardList({
   const containerRef = useRef<HTMLDivElement>(null);
   useEpisodeAutoScroll(containerRef, String(currentEpisode));
 
+  const handleReloadPlayer = useCallback(() => {
+    hasIframeLoadedRef.current = false;
+    setIsIframeLoading(true);
+    setIframeError(null);
+    setIframeReloadKey((value) => value + 1);
+  }, []);
+
   return (
     <div ref={containerRef} className="thin-scrollbar min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
       {cards.map((episode) => {
@@ -529,10 +536,12 @@ export function AnimeWatchPlayer({
   const [autoNextEnabled, setAutoNextEnabled] = useState(initialPlayback.autoNext ?? false);
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState<string | null>(null);
+  const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [savedStartAt, setSavedStartAt] = useState<number | null>(initialPlayback.progress ?? null);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerShellRef = useRef<HTMLDivElement>(null);
+  const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const lastEventTypeRef = useRef<string | null>(null);
   const savedProgressRef = useRef<PapiProgressPayload | null>(null);
@@ -661,11 +670,20 @@ export function AnimeWatchPlayer({
   }, [embedUrl, autoNextEnabled, isSeries, currentEpisode, playableEpisodeLimit, saveProgress]);
 
   useEffect(() => {
+    hasIframeLoadedRef.current = false;
     startTransition(() => {
       setIsIframeLoading(true);
       setIframeError(null);
     });
-  }, [embedUrl]);
+
+    const timeoutId = window.setTimeout(() => {
+      if (hasIframeLoadedRef.current) return;
+      setIsIframeLoading(false);
+      setIframeError('The anime player is taking too long to load. Retry the player without leaving this episode.');
+    }, 12_000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [embedUrl, iframeReloadKey]);
 
   useEffect(() => {
     const trackingEntry = { ...entry, defaultLanguage: currentLanguage };
@@ -752,48 +770,61 @@ export function AnimeWatchPlayer({
         />
 
         <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex h-[calc(env(safe-area-inset-top)+3rem)] items-start justify-center bg-gradient-to-b from-black/80 to-transparent px-16 pt-[calc(env(safe-area-inset-top)+0.8rem)]">
-          <span className="line-clamp-1 text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:text-[13px]">
+          <span className="hidden max-w-[48vw] text-center text-[12px] font-semibold uppercase tracking-widest text-white sm:line-clamp-1 sm:block sm:text-[13px] lg:max-w-[60vw]">
             {entry.title} EP {String(currentEpisode).padStart(2, '0')}
           </span>
         </div>
 
-        {isIframeLoading ? (
+        {isIframeLoading || iframeError ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 px-6 backdrop-blur-sm">
-            <div className="max-w-md rounded-2xl border border-white/10 bg-black/75 p-5 text-center shadow-2xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">Loading Player</p>
-              <h2 className="mt-3 text-xl font-bold text-white">Preparing your stream...</h2>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-300">Loading the anime player now.</p>
+            <div className="pointer-events-auto max-w-md rounded-2xl border border-white/10 bg-black/80 p-5 text-center shadow-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-400">
+                {iframeError ? 'Playback Check' : 'Loading Player'}
+              </p>
+              <h2 className="mt-3 text-xl font-bold text-white">
+                {iframeError ? 'The anime player did not finish loading.' : 'Preparing your stream...'}
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+                {iframeError ?? 'Loading the anime player now.'}
+              </p>
+              {iframeError ? (
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleReloadPlayer}
+                    className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+                  >
+                    Retry player
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBackToLibrary}
+                    className="rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+                  >
+                    Back to library
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
 
-        {iframeError && !isIframeLoading ? (
-          <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] z-30 flex max-w-sm items-start gap-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 backdrop-blur-sm">
-            <p className="flex-1 text-xs leading-relaxed text-amber-100">{iframeError}</p>
-            <button
-              type="button"
-              onClick={() => setIframeError(null)}
-              aria-label="Dismiss"
-              className="text-amber-200 transition hover:text-white"
-            >
-              ×
-            </button>
-          </div>
-        ) : null}
-
         <iframe
+          key={`${anilistId}-${currentEpisode}-${currentLanguage}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
-          className="h-full w-full"
+          className="h-full w-full border-0"
           allow="autoplay; fullscreen; encrypted-media"
           allowFullScreen
           onLoad={() => {
+            hasIframeLoadedRef.current = true;
             setIsIframeLoading(false);
             setIframeError(null);
           }}
           onError={() => {
+            hasIframeLoadedRef.current = false;
             setIsIframeLoading(false);
-            setIframeError('The player failed to load. Try refreshing the page.');
+            setIframeError('The anime player failed to load. Retry the player without leaving this episode.');
           }}
           referrerPolicy="no-referrer"
           title={`Watch ${entry.title}`}
