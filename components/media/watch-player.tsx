@@ -39,9 +39,17 @@ interface NormalizedPlayerProgress {
 
 const PLAYER_CHOICES: PlayerChoice[] = ['1', '2', '3', '4', '5', '6', '7'];
 
-function getNextPlayerChoice(player: PlayerChoice): PlayerChoice {
-  const currentIndex = PLAYER_CHOICES.indexOf(player);
-  return PLAYER_CHOICES[(currentIndex + 1) % PLAYER_CHOICES.length] ?? '1';
+function getAvailablePlayerChoices(imdbId: string | null): PlayerChoice[] {
+  return imdbId ? PLAYER_CHOICES : PLAYER_CHOICES.filter((choice) => choice !== '7');
+}
+
+function getNextPlayerChoice(player: PlayerChoice, availableChoices: PlayerChoice[]): PlayerChoice {
+  if (availableChoices.length === 0) {
+    return '1';
+  }
+
+  const currentIndex = availableChoices.indexOf(player);
+  return availableChoices[(currentIndex + 1 + availableChoices.length) % availableChoices.length] ?? availableChoices[0] ?? '1';
 }
 
 const VIDFAST_ALLOWED_ORIGINS = new Set([
@@ -173,11 +181,13 @@ function LoadingOverlay({
   isLoading,
   player,
   onSwitchPlayer,
+  availableChoices,
   onReload,
   showFallback,
 }: {
   isLoading: boolean;
   player: PlayerChoice;
+  availableChoices: PlayerChoice[];
   onSwitchPlayer: (choice: PlayerChoice) => void;
   onReload: () => void;
   showFallback: boolean;
@@ -213,7 +223,7 @@ function LoadingOverlay({
           </button>
           <button
             type="button"
-            onClick={() => onSwitchPlayer(getNextPlayerChoice(player))}
+            onClick={() => onSwitchPlayer(getNextPlayerChoice(player, availableChoices))}
             className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
           >
             Try next player
@@ -221,7 +231,7 @@ function LoadingOverlay({
         </div>
 
         <div className="mt-5">
-          <PlayerSelect player={player} onSwitchPlayer={onSwitchPlayer} />
+          <PlayerSelect player={player} availableChoices={availableChoices} onSwitchPlayer={onSwitchPlayer} />
         </div>
       </div>
     </div>
@@ -230,10 +240,12 @@ function LoadingOverlay({
 
 function PlayerSelect({
   player,
+  availableChoices = PLAYER_CHOICES,
   onSwitchPlayer,
   compact = false,
 }: {
   player: PlayerChoice;
+  availableChoices?: PlayerChoice[];
   onSwitchPlayer: (choice: PlayerChoice) => void;
   compact?: boolean;
 }) {
@@ -286,22 +298,33 @@ function PlayerSelect({
         >
           {PLAYER_CHOICES.map((choice) => {
             const isSelected = player === choice;
+            const isAvailable = availableChoices.includes(choice);
             return (
-              <li key={choice} role="option" aria-selected={isSelected}>
+              <li key={choice} role="option" aria-selected={isSelected} aria-disabled={!isAvailable}>
                 <button
                   type="button"
+                  disabled={!isAvailable}
                   onClick={() => {
+                    if (!isAvailable) return;
                     onSwitchPlayer(choice);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition ${
-                    isSelected
-                      ? 'bg-netflix-red text-white'
-                      : 'text-zinc-200 hover:bg-white/10 hover:text-white'
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition ${
+                    !isAvailable
+                      ? 'cursor-not-allowed text-zinc-600'
+                      : isSelected
+                        ? 'bg-netflix-red text-white'
+                        : 'text-zinc-200 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <span className="font-medium">P{choice} · {PLAYER_LABELS[choice]}</span>
-                  {isSelected ? <Check className="h-4 w-4" /> : null}
+                  {!isAvailable && choice === '7' ? (
+                    <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-600">
+                      No IMDb ID
+                    </span>
+                  ) : isSelected ? (
+                    <Check className="h-4 w-4 shrink-0" />
+                  ) : null}
                 </button>
               </li>
             );
@@ -385,15 +408,24 @@ function StandardWatchPlayer({
     });
   }, [activeSeasonDetails, entry.backdropUrl, entry.posterUrl, safeEpisodeLimit, safeSeason]);
 
+  const availablePlayerChoices = useMemo(() => getAvailablePlayerChoices(imdbId), [imdbId]);
+  const effectivePlayer = availablePlayerChoices.includes(player)
+    ? player
+    : (availablePlayerChoices[0] ?? '1');
   const playbackOptions = {
     ...initialPlayback,
     episode: safeEpisode,
     language: initialPlayback.language,
-    progress: player === '4' || player === '5' || player === '6' || player === '7' ? null : initialPlayback.progress,
+    progress:
+      effectivePlayer === '4' || effectivePlayer === '5' || effectivePlayer === '6' || effectivePlayer === '7'
+        ? null
+        : initialPlayback.progress,
     season: safeSeason,
   };
-  const isVidFastPlayer = player === '1';
-  const embedUrl = buildPlayerEmbedUrl(entry, playbackOptions, player, imdbId);
+  const isVidFastPlayer = effectivePlayer === '1';
+  const embedUrl =
+    buildPlayerEmbedUrl(entry, playbackOptions, effectivePlayer, imdbId) ??
+    buildPlayerEmbedUrl(entry, playbackOptions, '1', imdbId)!;
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
@@ -472,7 +504,7 @@ function StandardWatchPlayer({
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
   useEffect(() => {
-    if (player !== '2' || isPlayerLoading || showPlayerFallback) return;
+    if (effectivePlayer !== '2' || isPlayerLoading || showPlayerFallback) return;
 
     vidsrcElapsedRef.current = 0;
     const intervalId = setInterval(() => {
@@ -490,7 +522,7 @@ function StandardWatchPlayer({
     }, 10_000);
 
     return () => clearInterval(intervalId);
-  }, [canSyncWatchHistory, player, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, effectivePlayer, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
   useEffect(() => {
     const href = buildWatchHref(entry, {
@@ -638,7 +670,12 @@ function StandardWatchPlayer({
             isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
-          <PlayerSelect player={player} onSwitchPlayer={handleSwitchPlayer} compact />
+          <PlayerSelect
+            player={effectivePlayer}
+            availableChoices={availablePlayerChoices}
+            onSwitchPlayer={handleSwitchPlayer}
+            compact
+          />
           <PlayerViewControls
             targetRef={playerShellRef}
             episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
@@ -660,14 +697,15 @@ function StandardWatchPlayer({
 
         <LoadingOverlay
           isLoading={isPlayerLoading}
-          player={player}
+          player={effectivePlayer}
+          availableChoices={availablePlayerChoices}
           onSwitchPlayer={handleSwitchPlayer}
           onReload={handleReloadPlayer}
           showFallback={showPlayerFallback}
         />
 
         <iframe
-          key={`${entry.provider}-${player}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
+          key={`${entry.provider}-${effectivePlayer}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
@@ -683,7 +721,7 @@ function StandardWatchPlayer({
             setIsPlayerLoading(false);
             setShowPlayerFallback(false);
           }}
-          referrerPolicy={player === '5' ? 'origin' : 'no-referrer'}
+          referrerPolicy={effectivePlayer === '5' ? 'origin' : 'no-referrer'}
           title={`Watch ${entry.title}`}
         />
       </div>
