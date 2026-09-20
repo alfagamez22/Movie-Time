@@ -219,7 +219,7 @@ export function buildPlayerEmbedUrl(
   options: PlaybackOptions,
   player: string,
   imdbId?: string | null,
-): string {
+): string | null {
   switch (player) {
     case '1':
       return buildVidFastEmbedUrl(entry, options);
@@ -232,7 +232,7 @@ export function buildPlayerEmbedUrl(
     case '6':
       return buildFilmuEmbedUrl(entry, options);
     case '7':
-      return imdbId ? buildVidApiEmbedUrl(entry, options, imdbId) : buildEmbedUrl(entry, options);
+      return imdbId ? buildVidApiEmbedUrl(entry, options, imdbId) : null;
     default:
       return buildEmbedUrl(entry, options);
   }
