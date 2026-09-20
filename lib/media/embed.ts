@@ -122,21 +122,20 @@ export function resolvePlaybackOptions(entry: MediaEntry, searchParams: SearchPa
 }
 
 export function buildVideasyEmbedUrl(entry: MediaEntry, options: PlaybackOptions): string {
-  const base = 'https://player.videasy.net';
+  // https://videasy.ws/docs.html
+  const base = 'https://player.videasy.ws/embed';
   const path = isTvEntry(entry)
     ? `${base}/tv/${encodeURIComponent(entry.id)}/${options.season}/${options.episode}`
     : `${base}/movie/${encodeURIComponent(entry.id)}`;
 
   const url = new URL(path);
-  url.searchParams.set('color', options.color);
-  url.searchParams.set('overlay', 'true');
+  if (options.autoPlay) url.searchParams.set('autoplay', '1');
+  if (isTvEntry(entry) && options.autoNext) url.searchParams.set('autonext', '1');
+  url.searchParams.set('ds_lang', 'en');
 
   if (options.progress !== null) {
     const progress = String(Math.floor(options.progress));
-    url.searchParams.set('progress', progress);
-    url.searchParams.set('start', progress);
     url.searchParams.set('startAt', progress);
-    url.searchParams.set('time', progress);
   }
 
   return url.toString();
@@ -220,6 +219,8 @@ export function buildPlayerEmbedUrl(
   player: string,
   imdbId?: string | null,
 ): string | null {
+  // Previous PapiFlix provider routing is retained for reference, but disabled.
+  /*
   switch (player) {
     case '1':
       return buildVidFastEmbedUrl(entry, options);
@@ -236,6 +237,10 @@ export function buildPlayerEmbedUrl(
     default:
       return buildEmbedUrl(entry, options);
   }
+  */
+  void player;
+  void imdbId;
+  return buildVideasyEmbedUrl(entry, options);
 }
 
 export function buildAnimepaheEmbedUrl(

@@ -4,15 +4,10 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ChevronDown, Check, SkipForward } from 'lucide-react';
+import { ArrowLeft, SkipForward } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
-import { buildPlayerEmbedUrl } from '@/lib/media/embed';
-import {
-  PLAYER_LABELS,
-  usePlayerPreference,
-  type PlayerChoice,
-} from '@/lib/hooks/use-player-preference';
+import { buildVideasyEmbedUrl } from '@/lib/media/embed';
 import {
   requestHomeScrollRestore,
   trackRecentlyWatched,
@@ -37,6 +32,7 @@ interface NormalizedPlayerProgress {
   progressSeconds: number;
 }
 
+/* Previous P1–P7 choice and VidFast origin logic, disabled for Videasy-only PapiFlix.
 const PLAYER_CHOICES: PlayerChoice[] = ['1', '2', '3', '4', '5', '6', '7'];
 
 function getAvailablePlayerChoices(imdbId: string | null): PlayerChoice[] {
@@ -64,6 +60,7 @@ const VIDFAST_ALLOWED_ORIGINS = new Set([
   'https://www.vidninja.pro',
   'https://watch.vidninja.pro',
 ]);
+*/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -112,7 +109,7 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
   const nestedRecords = [parsed.data, parsed.payload, parsed.detail, parsed.player, parsed.video].filter(isRecord);
   const records = [parsed, ...nestedRecords];
   const eventName = readEventName(records);
-  const looksLikeProgressEvent = /progress|time|seek|pause|play|ended|update/.test(eventName);
+  const looksLikeProgressEvent = eventName === 'player_event' || /progress|time|seek|pause|play|ended|update/.test(eventName);
 
   let progressSeconds = readNumber(records, [
     'currentTime',
@@ -121,8 +118,9 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
     'time',
     'position',
     'playedSeconds',
+    'player_progress',
   ]);
-  const durationSeconds = readNumber(records, ['duration', 'totalDuration', 'total_duration', 'length']);
+  const durationSeconds = readNumber(records, ['duration', 'totalDuration', 'total_duration', 'length', 'player_duration']);
   let progressPercent = readNumber(records, ['progressPercent', 'progress_percent', 'percent', 'percentage']);
   const rawProgress = readNumber(records, ['progress']);
 
@@ -160,6 +158,7 @@ function extractPlayerProgress(data: unknown): NormalizedPlayerProgress | null {
 }
 
 
+/* Previous VidFast message origin allowance, disabled.
 function isAllowedVidFastOrigin(origin: string, expectedOrigin: string): boolean {
   if (origin === expectedOrigin || VIDFAST_ALLOWED_ORIGINS.has(origin)) {
     return true;
@@ -172,6 +171,7 @@ function isAllowedVidFastOrigin(origin: string, expectedOrigin: string): boolean
     return false;
   }
 }
+*/
 
 function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
   return `${season}:${episodeNumber}`;
@@ -179,16 +179,10 @@ function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
 
 function LoadingOverlay({
   isLoading,
-  player,
-  onSwitchPlayer,
-  availableChoices,
   onReload,
   showFallback,
 }: {
   isLoading: boolean;
-  player: PlayerChoice;
-  availableChoices: PlayerChoice[];
-  onSwitchPlayer: (choice: PlayerChoice) => void;
   onReload: () => void;
   showFallback: boolean;
 }) {
@@ -206,11 +200,7 @@ function LoadingOverlay({
           {showFallback ? 'The embedded player did not finish loading.' : 'Preparing your stream...'}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-          {showFallback
-            ? player === '2'
-              ? 'VidSrc may not be supported on your browser. Try P1 (VidFast) or P3 (Videasy) instead.'
-              : 'Reload this episode or switch the available playback option if the stream stays blank.'
-            : 'Opening the stream wrapper now.'}
+          {showFallback ? 'Reload this episode if the stream stays blank.' : 'Opening Videasy now.'}
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -221,23 +211,13 @@ function LoadingOverlay({
           >
             Reload
           </button>
-          <button
-            type="button"
-            onClick={() => onSwitchPlayer(getNextPlayerChoice(player, availableChoices))}
-            className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-          >
-            Try next player
-          </button>
-        </div>
-
-        <div className="mt-5">
-          <PlayerSelect player={player} availableChoices={availableChoices} onSwitchPlayer={onSwitchPlayer} />
         </div>
       </div>
     </div>
   );
 }
 
+/* Previous player picker retained as commented reference.
 function PlayerSelect({
   player,
   availableChoices = PLAYER_CHOICES,
@@ -334,6 +314,7 @@ function PlayerSelect({
     </div>
   );
 }
+*/
 
 export function WatchPlayer(props: WatchPlayerProps) {
   if (isAnimeProvider(props.entry.provider)) {
@@ -346,7 +327,6 @@ export function WatchPlayer(props: WatchPlayerProps) {
 function StandardWatchPlayer({
   entry,
   experience,
-  imdbId = null,
   initialPlayback,
   initialSeasonDetails = null,
 }: WatchPlayerProps) {
@@ -365,13 +345,11 @@ function StandardWatchPlayer({
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
-  const { player, setPlayer } = usePlayerPreference();
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerShellRef = useRef<HTMLDivElement>(null);
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
-  const vidsrcElapsedRef = useRef(0);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -408,24 +386,19 @@ function StandardWatchPlayer({
     });
   }, [activeSeasonDetails, entry.backdropUrl, entry.posterUrl, safeEpisodeLimit, safeSeason]);
 
+  // Previous player preference and P1–P7 fallback are disabled.
+  /*
   const availablePlayerChoices = useMemo(() => getAvailablePlayerChoices(imdbId), [imdbId]);
-  const effectivePlayer = availablePlayerChoices.includes(player)
-    ? player
-    : (availablePlayerChoices[0] ?? '1');
+  const effectivePlayer = availablePlayerChoices.includes(player) ? player : availablePlayerChoices[0];
+  */
   const playbackOptions = {
     ...initialPlayback,
     episode: safeEpisode,
     language: initialPlayback.language,
-    progress:
-      effectivePlayer === '4' || effectivePlayer === '5' || effectivePlayer === '6' || effectivePlayer === '7'
-        ? null
-        : initialPlayback.progress,
+    progress: initialPlayback.progress,
     season: safeSeason,
   };
-  const isVidFastPlayer = effectivePlayer === '1';
-  const embedUrl =
-    buildPlayerEmbedUrl(entry, playbackOptions, effectivePlayer, imdbId) ??
-    buildPlayerEmbedUrl(entry, playbackOptions, '1', imdbId)!;
+  const embedUrl = buildVideasyEmbedUrl(entry, playbackOptions);
 
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
@@ -470,7 +443,7 @@ function StandardWatchPlayer({
     const onMessage = (event: MessageEvent) => {
       const isTrackedSource = event.source === iframeRef.current?.contentWindow;
       if (!isTrackedSource) return;
-      if (isVidFastPlayer ? !isAllowedVidFastOrigin(event.origin, expectedOrigin) : event.origin !== expectedOrigin) return;
+      if (event.origin !== expectedOrigin) return;
 
       hasIframeLoadedRef.current = true;
       setIsPlayerLoading(false);
@@ -499,8 +472,9 @@ function StandardWatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [canSyncWatchHistory, embedUrl, entry, experience.id, isSeries, isVidFastPlayer, safeEpisode, safeSeason]);
+  }, [canSyncWatchHistory, embedUrl, entry, experience.id, isSeries, safeEpisode, safeSeason]);
 
+  /* VidSrc elapsed-time fallback disabled with the old P1–P7 players.
   // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
   // wall-clock time as a proxy for playback progress while the player is active.
   useEffect(() => {
@@ -523,6 +497,7 @@ function StandardWatchPlayer({
 
     return () => clearInterval(intervalId);
   }, [canSyncWatchHistory, effectivePlayer, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
+  */
 
   useEffect(() => {
     const href = buildWatchHref(entry, {
@@ -590,6 +565,7 @@ function StandardWatchPlayer({
 
 
 
+  /* Previous player switching is disabled.
   const handleSwitchPlayer = useCallback(
     (choice: PlayerChoice) => {
       if (player === choice) {
@@ -601,6 +577,7 @@ function StandardWatchPlayer({
     },
     [player, setPlayer],
   );
+  */
 
   const handleReloadPlayer = useCallback(() => {
     setIsPlayerLoading(true);
@@ -670,12 +647,6 @@ function StandardWatchPlayer({
             isChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
-          <PlayerSelect
-            player={effectivePlayer}
-            availableChoices={availablePlayerChoices}
-            onSwitchPlayer={handleSwitchPlayer}
-            compact
-          />
           <PlayerViewControls
             targetRef={playerShellRef}
             episodeListVisible={isSeries ? isEpisodeListVisible : undefined}
@@ -697,15 +668,12 @@ function StandardWatchPlayer({
 
         <LoadingOverlay
           isLoading={isPlayerLoading}
-          player={effectivePlayer}
-          availableChoices={availablePlayerChoices}
-          onSwitchPlayer={handleSwitchPlayer}
           onReload={handleReloadPlayer}
           showFallback={showPlayerFallback}
         />
 
         <iframe
-          key={`${entry.provider}-${effectivePlayer}-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
+          key={`${entry.provider}-videasy-${safeSeason}-${safeEpisode}-${iframeReloadKey}`}
           ref={iframeRef}
           src={embedUrl}
           className="h-full w-full border-0"
@@ -721,7 +689,7 @@ function StandardWatchPlayer({
             setIsPlayerLoading(false);
             setShowPlayerFallback(false);
           }}
-          referrerPolicy={effectivePlayer === '5' ? 'origin' : 'no-referrer'}
+          referrerPolicy="strict-origin-when-cross-origin"
           title={`Watch ${entry.title}`}
         />
       </div>

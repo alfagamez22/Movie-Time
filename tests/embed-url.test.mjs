@@ -183,7 +183,7 @@ test('buildVidSrcEmbedUrl uses vidsrc.to TV wrapper by TMDB season and episode',
   assert.equal(url, 'https://vidsrc.to/embed/tv/1399/1/3');
 });
 
-test('buildPlayerEmbedUrl selects the requested player and marks VidAPI unavailable without an IMDb ID', () => {
+test('PapiFlix routes every former player choice to Videasy', () => {
   const entry = {
     id: '1726',
     provider: 'tmdb',
@@ -191,9 +191,10 @@ test('buildPlayerEmbedUrl selects the requested player and marks VidAPI unavaila
     type: 'movie',
   };
 
-  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '6'), 'https://embed.filmu.in/movie/1726');
-  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '7'), null);
-  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '7', 'tt0371746'), 'https://vidapi.xyz/embed/movie/tt0371746');
+  const expected = 'https://player.videasy.ws/embed/movie/1726?autoplay=1&ds_lang=en';
+  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '6'), expected);
+  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '7'), expected);
+  assert.equal(buildPlayerEmbedUrl(entry, defaultPlayback, '7', 'tt0371746'), expected);
 });
 
 test('buildVidApiEmbedUrl uses IMDb ID for TV with season and episode', () => {

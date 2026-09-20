@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
-import { PLAYER_LABELS, usePlayerPreference } from '@/lib/hooks/use-player-preference';
+// Previous P1–P7 preference UI is retained below as commented reference.
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
@@ -114,6 +114,7 @@ function ExperienceSwitcher({ experience }: { experience: MediaExperienceConfig 
   );
 }
 
+/*
 function PreferenceSwitcher({
   experience,
   compact = false,
@@ -172,9 +173,9 @@ function PreferenceSwitcher({
     </div>
   );
 }
+*/
 
 export function HomePage({ discoveryError, experience, sections }: HomePageProps) {
-  const showPlayerSwitcher = experience.preferenceMode === 'player';
   const { data: session } = useSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -347,9 +348,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
               <div className="hidden md:block">
                 <MatureToggle />
               </div>
-              <div className={showPlayerSwitcher ? 'hidden md:block' : 'hidden'}>
-                <PreferenceSwitcher experience={experience} />
-              </div>
+              {/* PapiFlix uses one Videasy player; the P1–P7 selector is disabled. */}
               <UserMenu onSignInClick={() => openAuthModal('default')} />
               <button
                 type="button"
@@ -364,7 +363,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
             <ExperienceSwitcher experience={experience} />
             <MatureToggle />
-            {showPlayerSwitcher ? <PreferenceSwitcher experience={experience} compact /> : null}
           </div>
         </div>
       </header>
