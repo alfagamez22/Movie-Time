@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { unstable_cache } from 'next/cache';
+
 import type { LibraryMediaEntry, LibrarySection } from '@/lib/media/types';
 import { getMangaDexByTag, getMangaDexLatest, getMangaDexPopular, getMangaDexRecentlyAdded } from './client';
 import { mangaDexToLibraryEntry } from './mapping';
@@ -22,9 +24,8 @@ export interface MangaBrowseResult {
   sections: LibrarySection[];
 }
 
-export async function browseManga(): Promise<MangaBrowseResult> {
-  try {
-    const [popular, latest, recent] = await Promise.all([
+async function loadMangaBrowse(): Promise<MangaBrowseResult> {
+  const [popular, latest, recent] = await Promise.all([
       getMangaDexPopular(24),
       getMangaDexLatest(24),
       getMangaDexRecentlyAdded(18),
@@ -82,7 +83,20 @@ export async function browseManga(): Promise<MangaBrowseResult> {
       }
     }
 
-    return { error: null, sections };
+  return { error: null, sections };
+}
+
+const getCachedMangaBrowse = unstable_cache(
+  loadMangaBrowse,
+  ['papimanga-browse-v1'],
+  {
+    revalidate: 15 * 60,
+  },
+);
+
+export async function browseManga(): Promise<MangaBrowseResult> {
+  try {
+    return await getCachedMangaBrowse();
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : 'Failed to browse manga.',
