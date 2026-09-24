@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { deleteRecord, findRecord, findRecords, saveRecord, stableRecordId, type AppRecord } from '@/lib/db/records';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -19,24 +19,16 @@ export async function GET(request: Request) {
   }
 
   if (episode) {
-    const progress = await prisma.papiAnimeProgress.findUnique({
-      where: {
-        userId_anilistId_season_episode: {
-          userId: session.user.id,
-          anilistId,
-          season,
-          episode,
-        },
-      },
+    const progress = await findRecord('papiAnimeProgress', {
+      userId: session.user.id, anilistId, season, episode,
     });
 
     return NextResponse.json({ progress });
   }
 
-  const allProgress = await prisma.papiAnimeProgress.findMany({
-    where: { userId: session.user.id, anilistId },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const allProgress = await findRecords('papiAnimeProgress', {
+    userId: session.user.id, anilistId,
+  }, { orderBy: 'updatedAt' });
 
   return NextResponse.json({ progress: allProgress });
 }
@@ -65,40 +57,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
   }
 
-  const progress = await prisma.papiAnimeProgress.upsert({
-    where: {
-      userId_anilistId_season_episode: {
-        userId: session.user.id,
-        anilistId: body.anilistId,
-        season: body.season ?? '1',
-        episode: body.episode,
-      },
-    },
-    update: {
-      title: body.title,
-      posterUrl: body.posterUrl ?? null,
-      backdropUrl: body.backdropUrl ?? null,
-      startAt: body.startAt ?? 0,
-      currentTime: body.currentTime ?? 0,
-      duration: body.duration ?? null,
-      progressPercent: body.progressPercent ?? 0,
-      lastEventType: body.lastEventType ?? null,
-      lastWatchedAt: new Date(),
-    },
-    create: {
-      userId: session.user.id,
-      anilistId: body.anilistId,
-      season: body.season ?? '1',
-      episode: body.episode,
-      title: body.title,
-      posterUrl: body.posterUrl ?? null,
-      backdropUrl: body.backdropUrl ?? null,
-      startAt: body.startAt ?? 0,
-      currentTime: body.currentTime ?? 0,
-      duration: body.duration ?? null,
-      progressPercent: body.progressPercent ?? 0,
-      lastEventType: body.lastEventType ?? null,
-    },
+  const key = {
+    userId: session.user.id,
+    anilistId: body.anilistId,
+    season: body.season ?? '1',
+    episode: body.episode,
+  };
+  const existing = await findRecord<AppRecord & { id: string }>('papiAnimeProgress', key);
+  const now = new Date().toISOString();
+  const progress = await saveRecord('papiAnimeProgress', existing?.id ?? stableRecordId(...Object.values(key)), {
+    ...existing,
+    ...key,
+    title: body.title,
+    posterUrl: body.posterUrl ?? null,
+    backdropUrl: body.backdropUrl ?? null,
+    startAt: body.startAt ?? 0,
+    currentTime: body.currentTime ?? 0,
+    duration: body.duration ?? null,
+    progressPercent: body.progressPercent ?? 0,
+    lastEventType: body.lastEventType ?? null,
+    lastWatchedAt: now,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
   });
 
   return NextResponse.json({ progress });
@@ -119,14 +99,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'anilistId and episode are required' }, { status: 400 });
   }
 
-  await prisma.papiAnimeProgress.deleteMany({
-    where: {
-      userId: session.user.id,
-      anilistId,
-      season,
-      episode,
-    },
+  const progress = await findRecord<AppRecord & { id: string }>('papiAnimeProgress', {
+    userId: session.user.id, anilistId, season, episode,
   });
+  if (progress) await deleteRecord('papiAnimeProgress', progress.id);
 
   return NextResponse.json({ deleted: true });
 }

@@ -3,10 +3,26 @@ import { redirect } from 'next/navigation';
 import { BookmarksPageClient } from '@/components/media/bookmarks-page-client';
 import type { BookmarkRecord } from '@/lib/hooks/use-bookmarks';
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { findRecords, type AppRecord } from '@/lib/db/records';
 import { isBookmarkStatus } from '@/lib/media/user-actions';
 
 export const dynamic = 'force-dynamic';
+
+type BookmarkSource = AppRecord & {
+  mediaId: string;
+  mediaType: string;
+  mediaProvider: string;
+  experience: string;
+  title: string;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  synopsis: string;
+  rating: number | null;
+  year: number | null;
+  status: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
 
 export default async function BookmarksPage() {
   const session = await auth();
@@ -15,10 +31,7 @@ export default async function BookmarksPage() {
     redirect('/');
   }
 
-  const bookmarks = await prisma.bookmark.findMany({
-    where: { userId: session.user.id },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const bookmarks = await findRecords<BookmarkSource>('bookmark', { userId: session.user.id }, { orderBy: 'updatedAt' });
 
   const initialBookmarks: BookmarkRecord[] = bookmarks.map((bookmark) => ({
     id: bookmark.id,
@@ -33,8 +46,8 @@ export default async function BookmarksPage() {
     rating: bookmark.rating,
     year: bookmark.year,
     status: isBookmarkStatus(bookmark.status) ? bookmark.status : 'favorite',
-    createdAt: bookmark.createdAt.toISOString(),
-    updatedAt: bookmark.updatedAt.toISOString(),
+    createdAt: new Date(bookmark.createdAt as string | Date).toISOString(),
+    updatedAt: new Date(bookmark.updatedAt as string | Date).toISOString(),
   }));
 
   return (

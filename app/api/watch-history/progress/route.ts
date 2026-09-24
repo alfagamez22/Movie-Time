@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { findRecords } from '@/lib/db/records';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -13,14 +13,11 @@ export async function GET(request: Request) {
   const experience = searchParams.get('experience');
   const mediaId = searchParams.get('mediaId');
 
-  const progress = await prisma.watchProgress.findMany({
-    where: {
-      userId: session.user.id,
-      ...(experience ? { experience } : {}),
-      ...(mediaId ? { mediaId } : {}),
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
+  const progress = await findRecords('watchProgress', {
+    userId: session.user.id,
+    ...(experience ? { experience } : {}),
+    ...(mediaId ? { mediaId } : {}),
+  }, { orderBy: 'updatedAt' });
 
   return NextResponse.json({ progress });
 }

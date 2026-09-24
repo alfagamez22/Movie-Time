@@ -1,6 +1,4 @@
-import { prisma } from '@/lib/db';
-
-import type { Prisma } from '@/lib/generated/prisma/client';
+import { deleteRecord, findRecord, findRecords, saveRecord, stableRecordId, type AppRecord } from '@/lib/db/records';
 
 export const MAX_WATCH_HISTORY_ENTRIES = 24;
 export const PROGRESS_MERGE_EPSILON_SECONDS = 2;
@@ -108,67 +106,8 @@ export function shouldApplyIncomingProgress(
 }
 
 export interface UpsertHistoryResult {
-  record: Awaited<ReturnType<typeof prisma.watchHistory.upsert>>;
-  progress: Awaited<ReturnType<typeof prisma.watchProgress.upsert>> | null;
-}
-
-function buildHistoryCreateData(userId: string, entry: WatchEntry, experience: string): Prisma.WatchHistoryCreateInput {
-  return {
-    user: { connect: { id: userId } },
-    mediaId: entry.id,
-    mediaType: entry.type,
-    mediaProvider: entry.provider,
-    experience,
-    title: entry.title,
-    posterUrl: entry.posterUrl ?? null,
-    backdropUrl: entry.backdropUrl ?? null,
-    synopsis: entry.synopsis ?? '',
-    rating: entry.rating ?? null,
-    year: entry.year ?? null,
-    episode: entry.episode ?? null,
-    season: entry.season ?? null,
-    progressSeconds: entry.progressSeconds ?? null,
-    progressPercent: entry.progressPercent ?? null,
-    durationSeconds: entry.durationSeconds ?? null,
-    anilistId: entry.anilistId ?? null,
-    malId: entry.malId ?? null,
-    animeFormat: entry.animeFormat ?? null,
-    defaultLanguage: entry.defaultLanguage ?? null,
-    episodeCount: entry.episodeCount ?? null,
-    watchedAt: entry.watchedAt ? new Date(entry.watchedAt) : new Date(),
-  };
-}
-
-function buildProgressCreateData(
-  userId: string,
-  entry: WatchEntry,
-  experience: string,
-  progress: NormalizedProgressFields,
-  completed: boolean,
-): Prisma.WatchProgressCreateInput {
-  return {
-    user: { connect: { id: userId } },
-    mediaId: entry.id,
-    mediaType: entry.type,
-    mediaProvider: entry.provider,
-    experience,
-    season: entry.season ?? '',
-    episode: entry.episode ?? '',
-    title: entry.title,
-    posterUrl: entry.posterUrl ?? null,
-    backdropUrl: entry.backdropUrl ?? null,
-    rating: entry.rating ?? null,
-    year: entry.year ?? null,
-    progressSeconds: progress.progressSeconds,
-    progressPercent: progress.progressPercent ?? 0,
-    durationSeconds: progress.durationSeconds ?? null,
-    completed,
-    anilistId: entry.anilistId ?? null,
-    malId: entry.malId ?? null,
-    animeFormat: entry.animeFormat ?? null,
-    defaultLanguage: entry.defaultLanguage ?? null,
-    watchedAt: entry.watchedAt ? new Date(entry.watchedAt) : new Date(),
-  };
+  record: AppRecord;
+  progress: AppRecord;
 }
 
 export async function upsertWatchHistoryWithProgress(
@@ -181,18 +120,24 @@ export async function upsertWatchHistoryWithProgress(
   const incomingWatchedAtMs = entry.watchedAt ?? Date.now();
   const completed = isCompleted(normalized.progressPercent, normalized.progressSeconds, normalized.durationSeconds);
 
-  const existingProgress = await prisma.watchProgress.findUnique({
-    where: {
-      userId_mediaId_mediaProvider_mediaType_season_episode: {
-        userId,
-        mediaId: entry.id,
-        mediaProvider: entry.provider,
-        mediaType: entry.type,
-        season: entry.season ?? '',
-        episode: entry.episode ?? '',
-      },
-    },
-  });
+  const progressKey = {
+    userId,
+    mediaId: entry.id,
+    mediaProvider: entry.provider,
+    mediaType: entry.type,
+    season: entry.season ?? '',
+    episode: entry.episode ?? '',
+  };
+  const historyKey = {
+    userId,
+    mediaId: entry.id,
+    mediaProvider: entry.provider,
+    mediaType: entry.type,
+  };
+  const existingProgress = await findRecord<AppRecord & {
+    id: string; durationSeconds: number | null; progressPercent: number; progressSeconds: number;
+    posterUrl: string | null; backdropUrl: string | null; completed: boolean;
+  }>('watchProgress', progressKey);
 
   const decision = shouldApplyIncomingProgress(
     existingProgress
@@ -206,67 +151,54 @@ export async function upsertWatchHistoryWithProgress(
     incomingWatchedAtMs,
   );
 
-  const record = await prisma.watchHistory.upsert({
-    where: {
-      userId_mediaId_mediaProvider_mediaType: {
-        userId,
-        mediaId: entry.id,
-        mediaProvider: entry.provider,
-        mediaType: entry.type,
-      },
-    },
-    update: {
-      episode: entry.episode ?? null,
-      season: entry.season ?? null,
-      progressSeconds: decision.merged.progressSeconds,
-      progressPercent: decision.merged.progressPercent ?? null,
-      durationSeconds: decision.merged.durationSeconds ?? null,
-      posterUrl: entry.posterUrl ?? existingProgress?.posterUrl ?? null,
-      backdropUrl: entry.backdropUrl ?? existingProgress?.backdropUrl ?? null,
-      synopsis: entry.synopsis ?? '',
-      rating: entry.rating ?? null,
-      year: entry.year ?? null,
-      anilistId: entry.anilistId ?? null,
-      malId: entry.malId ?? null,
-      animeFormat: entry.animeFormat ?? null,
-      defaultLanguage: entry.defaultLanguage ?? null,
-      episodeCount: entry.episodeCount ?? null,
-      watchedAt,
-      updatedAt: new Date(),
-    },
-    create: buildHistoryCreateData(userId, entry, experience),
-  });
+  const existingHistory = await findRecord<AppRecord & { id: string }>('watchHistory', historyKey);
+  const now = new Date().toISOString();
+  const record = await saveRecord('watchHistory', existingHistory?.id ?? stableRecordId(...Object.values(historyKey)), {
+    ...existingHistory,
+    ...historyKey,
+    experience,
+    title: entry.title,
+    posterUrl: entry.posterUrl ?? existingProgress?.posterUrl ?? null,
+    backdropUrl: entry.backdropUrl ?? existingProgress?.backdropUrl ?? null,
+    synopsis: entry.synopsis ?? '',
+    rating: entry.rating ?? null,
+    year: entry.year ?? null,
+    episode: entry.episode ?? null,
+    season: entry.season ?? null,
+    progressSeconds: decision.merged.progressSeconds,
+    progressPercent: decision.merged.progressPercent ?? null,
+    durationSeconds: decision.merged.durationSeconds ?? null,
+    anilistId: entry.anilistId ?? null,
+    malId: entry.malId ?? null,
+    animeFormat: entry.animeFormat ?? null,
+    defaultLanguage: entry.defaultLanguage ?? null,
+    episodeCount: entry.episodeCount ?? null,
+    watchedAt: watchedAt.toISOString(),
+    createdAt: existingHistory?.createdAt ?? now,
+    updatedAt: now,
+  }) as AppRecord;
 
-  const progressRecord = await prisma.watchProgress.upsert({
-    where: {
-      userId_mediaId_mediaProvider_mediaType_season_episode: {
-        userId,
-        mediaId: entry.id,
-        mediaProvider: entry.provider,
-        mediaType: entry.type,
-        season: entry.season ?? '',
-        episode: entry.episode ?? '',
-      },
-    },
-    update: {
-      title: entry.title,
-      posterUrl: entry.posterUrl ?? null,
-      backdropUrl: entry.backdropUrl ?? null,
-      rating: entry.rating ?? null,
-      year: entry.year ?? null,
-      progressSeconds: decision.merged.progressSeconds,
-      progressPercent: decision.merged.progressPercent ?? 0,
-      durationSeconds: decision.merged.durationSeconds ?? null,
-      completed: completed || existingProgress?.completed === true,
-      anilistId: entry.anilistId ?? null,
-      malId: entry.malId ?? null,
-      animeFormat: entry.animeFormat ?? null,
-      defaultLanguage: entry.defaultLanguage ?? null,
-      watchedAt,
-      updatedAt: new Date(),
-    },
-    create: buildProgressCreateData(userId, entry, experience, decision.merged, completed),
-  });
+  const progressRecord = await saveRecord('watchProgress', existingProgress?.id ?? stableRecordId(...Object.values(progressKey)), {
+    ...existingProgress,
+    ...progressKey,
+    experience,
+    title: entry.title,
+    posterUrl: entry.posterUrl ?? null,
+    backdropUrl: entry.backdropUrl ?? null,
+    rating: entry.rating ?? null,
+    year: entry.year ?? null,
+    progressSeconds: decision.merged.progressSeconds,
+    progressPercent: decision.merged.progressPercent ?? 0,
+    durationSeconds: decision.merged.durationSeconds ?? null,
+    completed: completed || existingProgress?.completed === true,
+    anilistId: entry.anilistId ?? null,
+    malId: entry.malId ?? null,
+    animeFormat: entry.animeFormat ?? null,
+    defaultLanguage: entry.defaultLanguage ?? null,
+    watchedAt: watchedAt.toISOString(),
+    createdAt: existingProgress?.createdAt ?? now,
+    updatedAt: now,
+  }) as AppRecord;
 
   return { record, progress: progressRecord };
 }
@@ -277,24 +209,9 @@ export async function deleteWatchHistoryForUser(
   mediaProvider: string,
   mediaType: string,
 ): Promise<void> {
-  await prisma.$transaction([
-    prisma.watchHistory.delete({
-      where: {
-        userId_mediaId_mediaProvider_mediaType: {
-          userId,
-          mediaId,
-          mediaProvider,
-          mediaType,
-        },
-      },
-    }),
-    prisma.watchProgress.deleteMany({
-      where: {
-        userId,
-        mediaId,
-        mediaProvider,
-        mediaType,
-      },
-    }),
-  ]);
+  const key = { userId, mediaId, mediaProvider, mediaType };
+  const history = await findRecord<AppRecord & { id: string }>('watchHistory', key);
+  const progress = await findRecords<AppRecord & { id: string }>('watchProgress', key);
+  if (history) await deleteRecord('watchHistory', history.id);
+  await Promise.all(progress.map((item) => deleteRecord('watchProgress', item.id)));
 }

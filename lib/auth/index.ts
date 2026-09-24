@@ -1,20 +1,19 @@
-import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 
-import { prisma } from '@/lib/db';
+import { findRecord, type AppRecord } from '@/lib/db/records';
 
 import { authConfig } from './config';
+import { CouchbaseAdapter } from './couchbase-adapter';
 import { getGoogleOAuthCredentials } from './oauth';
 
 const googleCredentials = getGoogleOAuthCredentials();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  // The adapter type still includes email magic-link methods, which this app does not use.
-  adapter: PrismaAdapter(prisma as unknown as Parameters<typeof PrismaAdapter>[0]),
+  adapter: CouchbaseAdapter(),
   providers: [
     Credentials({
       credentials: {
@@ -26,7 +25,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
+        const user = await findRecord<AppRecord & {
+          id: string; email: string; name: string | null; image: string | null; passwordHash?: string | null;
+        }>('user', { email: credentials.email.trim().toLowerCase() });
         if (!user?.passwordHash) return null;
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);

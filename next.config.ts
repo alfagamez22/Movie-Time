@@ -8,6 +8,7 @@ const configDirectory = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['10.0.2.2'],
   reactStrictMode: true,
+  serverExternalPackages: ['couchbase'],
   outputFileTracingRoot: configDirectory,
   typescript: {
     ignoreBuildErrors: false,

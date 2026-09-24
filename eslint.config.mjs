@@ -8,9 +8,6 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig([
   {
-    ignores: ["lib/generated/prisma/**"],
-  },
-  {
     extends: [...next],
   },
 ]);

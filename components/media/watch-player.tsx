@@ -194,10 +194,12 @@ function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
 
 function LoadingOverlay({
   isLoading,
+  message,
   onReload,
   showFallback,
 }: {
   isLoading: boolean;
+  message: string;
   onReload: () => void;
   showFallback: boolean;
 }) {
@@ -212,10 +214,10 @@ function LoadingOverlay({
           {showFallback ? 'Playback Check' : 'Loading Player'}
         </p>
         <h2 className="mt-3 text-xl font-bold text-white">
-          {showFallback ? 'The embedded player did not finish loading.' : 'Preparing your stream...'}
+          {showFallback ? 'Videasy needs another playback attempt.' : 'Preparing your stream...'}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-300">
-          {showFallback ? 'Reload this episode if the stream stays blank.' : 'Opening Videasy now.'}
+          {message || 'Opening Videasy now.'}
         </p>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -359,6 +361,7 @@ function StandardWatchPlayer({
   const [isChromeVisible, setIsChromeVisible] = useState(true);
   const [isPlayerLoading, setIsPlayerLoading] = useState(true);
   const [showPlayerFallback, setShowPlayerFallback] = useState(false);
+  const [playerMessage, setPlayerMessage] = useState('Opening Videasy now.');
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -420,6 +423,7 @@ function StandardWatchPlayer({
   const handleEpisodeChange = useCallback((newEpisode: string) => {
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
+    setPlayerMessage('Opening Videasy now.');
     setEpisode(newEpisode);
     setEmbedPlayback({ season: safeSeason, episode: newEpisode });
   }, [safeSeason]);
@@ -445,8 +449,9 @@ function StandardWatchPlayer({
     const timeoutId = window.setTimeout(() => {
       if (hasIframeLoadedRef.current) return;
       setIsPlayerLoading(false);
+      setPlayerMessage('Videasy is taking longer than expected to load.');
       setShowPlayerFallback(true);
-    }, 12_000);
+    }, 30_000);
 
     return () => window.clearTimeout(timeoutId);
   }, [embedUrl]);
@@ -466,6 +471,19 @@ function StandardWatchPlayer({
       hasIframeLoadedRef.current = true;
       setIsPlayerLoading(false);
       setShowPlayerFallback(false);
+
+      const parsedMessage = parseMessageData(event.data);
+      if (isRecord(parsedMessage) && parsedMessage.type === 'PLAYER_EVENT' && isRecord(parsedMessage.data)) {
+        const status = typeof parsedMessage.data.player_status === 'string'
+          ? parsedMessage.data.player_status.toLowerCase()
+          : '';
+        if (status === 'playing') {
+          setPlayerMessage('');
+        } else if (status === 'error' || status === 'failed') {
+          setPlayerMessage('Videasy could not play this source. Reload the player to ask Videasy to select a source again.');
+          setShowPlayerFallback(true);
+        }
+      }
 
       const playerEpisode = extractPlayerEpisode(event.data, entry.id);
       const currentEpisode = playerEpisode
@@ -617,6 +635,7 @@ function StandardWatchPlayer({
   const handleReloadPlayer = useCallback(() => {
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
+    setPlayerMessage('Asking Videasy to load this title again…');
     setIframeReloadKey((value) => value + 1);
   }, []);
 
@@ -707,6 +726,7 @@ function StandardWatchPlayer({
           isLoading={isPlayerLoading}
           onReload={handleReloadPlayer}
           showFallback={showPlayerFallback}
+          message={playerMessage}
         />
 
         <iframe
@@ -724,7 +744,7 @@ function StandardWatchPlayer({
           onLoad={() => {
             hasIframeLoadedRef.current = true;
             setIsPlayerLoading(false);
-            setShowPlayerFallback(false);
+            setPlayerMessage('Videasy loaded. If playback is blank, reload to request another source.');
           }}
           referrerPolicy="strict-origin-when-cross-origin"
           title={`Watch ${entry.title}`}

@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 
-import { prisma } from '@/lib/db';
+import { findRecord, saveRecord } from '@/lib/db/records';
 
 type RegisterCredentialsInput = {
   email?: string;
@@ -30,14 +31,21 @@ export async function registerCredentialsUser(
     return { ok: false, status: 400, error: 'Password must be at least 8 characters.' };
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await findRecord('user', { email });
   if (existing) {
     return { ok: false, status: 409, error: 'An account with this email already exists.' };
   }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  await prisma.user.create({
-    data: { email, name: input.name?.trim() || null, passwordHash },
+  const now = new Date().toISOString();
+  await saveRecord('user', randomUUID(), {
+    email,
+    name: input.name?.trim() || null,
+    passwordHash,
+    emailVerified: null,
+    image: null,
+    createdAt: now,
+    updatedAt: now,
   });
 
   return { ok: true };

@@ -6,7 +6,8 @@
 # configuration (NEXT_PUBLIC_* values, public provider base URLs, OAuth
 # client ID, NextAuth host settings) and are expected to appear in source,
 # docs, and prerendered HTML.
-# Real secrets (TMDB_*, AUTH_SECRET, AUTH_GOOGLE_SECRET, DATABASE_URL) must
+# Real secrets (TMDB_*, AUTH_SECRET, AUTH_GOOGLE_SECRET, COUCHBASE_PASSWORD,
+# COUCHBASE_USERNAME, COUCHBASE_CONNECTION_STRING) must
 # remain flagged as secret in the Netlify UI and must NEVER be added to the
 # omit list below.
 

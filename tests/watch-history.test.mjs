@@ -51,9 +51,9 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
 
 const watchHistory = loadTsModuleWithRequire('lib/media/watch-history.ts', {
   stubs: {
-    '@/lib/db': { prisma: {} },
-    '@/lib/generated/prisma/client': { PrismaClient: function () {} },
-    '@/lib/generated/prisma/internal/prismaNamespace': { Prisma: {} },
+    '@/lib/db/records': {
+      deleteRecord() {}, findRecord() {}, findRecords() {}, saveRecord() {}, stableRecordId() {},
+    },
   },
 });
 const recentlyWatched = loadTsModule('lib/hooks/recently-watched-merge.ts');

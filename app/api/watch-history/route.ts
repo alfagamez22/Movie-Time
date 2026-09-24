@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
 import { MAX_WATCH_HISTORY_ENTRIES, upsertWatchHistoryWithProgress, type WatchEntry } from '@/lib/media/watch-history';
+import { findRecords } from '@/lib/db/records';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -13,11 +13,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const experience = searchParams.get('experience');
 
-  const entries = await prisma.watchHistory.findMany({
-    where: { userId: session.user.id, ...(experience ? { experience } : {}) },
-    orderBy: { watchedAt: 'desc' },
-    take: MAX_WATCH_HISTORY_ENTRIES,
-  });
+  const entries = await findRecords('watchHistory', {
+    userId: session.user.id,
+    ...(experience ? { experience } : {}),
+  }, { orderBy: 'watchedAt', limit: MAX_WATCH_HISTORY_ENTRIES });
 
   return NextResponse.json({ entries });
 }

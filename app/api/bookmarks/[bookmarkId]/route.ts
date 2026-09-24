@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
-import { prisma } from '@/lib/db';
+import { deleteRecord, readRecord, saveRecord } from '@/lib/db/records';
+
+type BookmarkDoc = Record<string, unknown> & { id: string; userId: string; status?: string };
 
 interface RouteContext {
   params: Promise<{ bookmarkId: string }>;
@@ -21,14 +23,15 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Invalid status.' }, { status: 400 });
   }
 
-  const bookmark = await prisma.bookmark.findUnique({ where: { id: bookmarkId } });
+  const bookmark = await readRecord<BookmarkDoc>('bookmark', bookmarkId);
   if (!bookmark || bookmark.userId !== session.user.id) {
     return NextResponse.json({ error: 'Not found.' }, { status: 404 });
   }
 
-  const updated = await prisma.bookmark.update({
-    where: { id: bookmarkId },
-    data: { status: body.status },
+  const updated = await saveRecord('bookmark', bookmarkId, {
+    ...bookmark,
+    status: body.status,
+    updatedAt: new Date().toISOString(),
   });
 
   return NextResponse.json({ bookmark: updated });
@@ -42,11 +45,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   const { bookmarkId } = await context.params;
 
-  const bookmark = await prisma.bookmark.findUnique({ where: { id: bookmarkId } });
+  const bookmark = await readRecord<BookmarkDoc>('bookmark', bookmarkId);
   if (!bookmark || bookmark.userId !== session.user.id) {
     return NextResponse.json({ error: 'Not found.' }, { status: 404 });
   }
 
-  await prisma.bookmark.delete({ where: { id: bookmarkId } });
+  await deleteRecord('bookmark', bookmarkId);
   return NextResponse.json({ success: true });
 }

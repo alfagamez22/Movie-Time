@@ -48,6 +48,12 @@ infrastructure/
 - Use `.github/workflows/validate.yml` as the validation gate in CI.
 - See `infrastructure/README.md` for environment variables and deployment notes.
 
+## Database
+
+The web app uses Couchbase Capella for user accounts, OAuth accounts, bookmarks, comments, and watch progress. Configure `COUCHBASE_CONNECTION_STRING`, `COUCHBASE_USERNAME`, `COUCHBASE_PASSWORD`, `COUCHBASE_BUCKET`, and `COUCHBASE_SCOPE` in the server environment. The application uses the bucket's `_default` collection.
+
+For a legacy Postgres import, keep `DATABASE_URL` available only to the migration utilities. Review the dry run with `npm run db:migrate:couchbase`, then copy records with `npm run db:migrate:couchbase -- --apply` and compare source and destination using `npm run db:verify:couchbase`. The source database remains unchanged. Set `COUCHBASE_MIGRATION_AUDIT_LOG` to choose the operation log destination; by default, the scripts append to `couchbase-migration-audit.log` in the repository. Indexes are defined in `docs/couchbase-indexes.sql` and can be provisioned with `npm run db:indexes:couchbase`.
+
 ## Google sign-in
 
 - The web app already exposes Google sign-in through Auth.js and the account modal.

@@ -14,7 +14,7 @@ The Android client only needs the public PWA URL. It does not require, and must 
 
 - `TMDB_API_TOKEN` / `TMDB_API_KEY`
 - `AUTH_SECRET` / `AUTH_GOOGLE_SECRET`
-- `DATABASE_URL`
+- `COUCHBASE_CONNECTION_STRING` / `COUCHBASE_USERNAME` / `COUCHBASE_PASSWORD`
 - `NEXT_PUBLIC_SITE_URL` for production
 
 The PWA backend (Next.js on Netlify/Vercel) keeps all real secrets in its environment variables. Android only needs to know where the deployed PWA is hosted so the WebView can load it.
