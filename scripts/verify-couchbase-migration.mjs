@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { appendFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Pool } from 'pg';
+import { collectionForRecord } from './couchbase-layout.mjs';
 
 const require = createRequire(import.meta.url);
 const couchbase = require('couchbase');
@@ -49,8 +50,8 @@ async function main() {
   let mismatches = 0;
 
   try {
-    const collection = cluster.bucket(required('COUCHBASE_BUCKET'))
-      .scope(process.env.COUCHBASE_SCOPE?.trim() || '_default').collection('_default');
+    const scope = cluster.bucket(required('COUCHBASE_BUCKET'))
+      .scope(process.env.COUCHBASE_SCOPE?.trim() || '_default');
 
     for (const [table, type] of MODELS) {
       const rows = (await source.query(`SELECT * FROM "${table}"`)).rows;
@@ -59,6 +60,7 @@ async function main() {
         const id = String(row.id);
         const key = `${type}::${encodeURIComponent(id)}`;
         try {
+          const collection = scope.collection(collectionForRecord(type, row));
           const result = await collection.get(key);
           const expected = { ...row, id, type };
           if (stableJson(result.content) !== stableJson(expected)) modelMismatches += 1;
@@ -76,7 +78,7 @@ async function main() {
     appendFileSync(logPath,
       `\n[${new Date().toISOString()}] Papiflix Couchbase migration verification\n` +
       'Operation: collection.get(docKey) compared with source Postgres document fields\n' +
-      `Keyspace: ${required('COUCHBASE_BUCKET')}.${process.env.COUCHBASE_SCOPE?.trim() || '_default'}._default\n` +
+      `Keyspace: ${required('COUCHBASE_BUCKET')}.${process.env.COUCHBASE_SCOPE?.trim() || '_default'}.<named collections>\n` +
       `Result: ${total - mismatches}/${total} source records match; mismatches=${mismatches}\n`);
     console.log(`TOTAL: ${total - mismatches}/${total} records match; mismatches=${mismatches}`);
     if (mismatches > 0) process.exitCode = 1;

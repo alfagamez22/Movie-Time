@@ -50,9 +50,9 @@ infrastructure/
 
 ## Database
 
-The web app uses Couchbase Capella for user accounts, OAuth accounts, bookmarks, comments, and watch progress. Configure `COUCHBASE_CONNECTION_STRING`, `COUCHBASE_USERNAME`, `COUCHBASE_PASSWORD`, `COUCHBASE_BUCKET`, and `COUCHBASE_SCOPE` in the server environment. The application uses the bucket's `_default` collection.
+The web app uses Couchbase Capella for user accounts, OAuth accounts, bookmarks, comments, and watch progress. Configure `COUCHBASE_CONNECTION_STRING`, `COUCHBASE_USERNAME`, `COUCHBASE_PASSWORD`, `COUCHBASE_BUCKET`, and `COUCHBASE_SCOPE` in the server environment. The `identity` collection holds shared users, OAuth accounts, sessions, and verification tokens. The `papiflix`, `papianime`, and `mangadex` collections hold each experience's bookmarks, comments, and watch history/progress. `papimanga` records are stored in `mangadex`.
 
-For a legacy Postgres import, keep `DATABASE_URL` available only to the migration utilities. Review the dry run with `npm run db:migrate:couchbase`, then copy records with `npm run db:migrate:couchbase -- --apply` and compare source and destination using `npm run db:verify:couchbase`. The source database remains unchanged. Set `COUCHBASE_MIGRATION_AUDIT_LOG` to choose the operation log destination; by default, the scripts append to `couchbase-migration-audit.log` in the repository. Indexes are defined in `docs/couchbase-indexes.sql` and can be provisioned with `npm run db:indexes:couchbase`.
+To split a legacy `_default` collection, preview with `npm run db:split:couchbase`, then copy and verify with `npm run db:split:couchbase -- --apply`. The source collection remains intact. For a legacy Postgres import, keep `DATABASE_URL` available only to the migration utilities. Review the dry run with `npm run db:migrate:couchbase`, then copy records with `npm run db:migrate:couchbase -- --apply` and compare source and destination using `npm run db:verify:couchbase`. Set `COUCHBASE_MIGRATION_AUDIT_LOG` to choose the operation log destination; by default, the scripts append to `couchbase-migration-audit.log` in the repository. Named collection indexes are defined in `scripts/couchbase-layout.mjs` and can be provisioned with `npm run db:indexes:couchbase`.
 
 ## Google sign-in
 

@@ -8,6 +8,7 @@
     "start": "next start",
     "db:migrate:couchbase": "node scripts/migrate-postgres-to-couchbase.mjs",
     "db:indexes:couchbase": "node scripts/setup-couchbase-indexes.mjs",
+    "db:split:couchbase": "node scripts/split-couchbase-collections.mjs",
     "db:verify:couchbase": "node scripts/verify-couchbase-migration.mjs",
     "lint": "eslint .",
     "test": "node --test tests/config.test.mjs tests/embed-url.test.mjs tests/anime-episodes.test.mjs tests/tmdb-release-filter.test.mjs tests/tmdb-sections.test.mjs tests/watch-history.test.mjs tests/image-disk-cache.test.mjs tests/recently-watched-tombstone.test.mjs tests/manga-routes.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs",

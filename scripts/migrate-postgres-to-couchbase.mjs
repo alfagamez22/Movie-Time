@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { appendFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Pool } from 'pg';
+import { collectionForRecord } from './couchbase-layout.mjs';
 
 const require = createRequire(import.meta.url);
 const couchbase = require('couchbase');
@@ -50,7 +51,7 @@ async function main() {
 
     const planned = snapshot.reduce((sum, entry) => sum + entry.rows.length, 0);
     console.log(`Total source records: ${planned}`);
-    console.log(`Target: ${requireEnv('COUCHBASE_BUCKET')}.${process.env.COUCHBASE_SCOPE?.trim() || '_default'}._default`);
+    console.log(`Target: ${requireEnv('COUCHBASE_BUCKET')}.${process.env.COUCHBASE_SCOPE?.trim() || '_default'}.<named collection>`);
     console.log(apply
       ? 'Mode: APPLY (KV upsert each source document by stable model/id key)'
       : 'Mode: DRY RUN (no Couchbase writes; rerun with --apply after approval)');
@@ -64,18 +65,19 @@ async function main() {
     });
     const bucket = cluster.bucket(requireEnv('COUCHBASE_BUCKET'));
     const scope = bucket.scope(process.env.COUCHBASE_SCOPE?.trim() || '_default');
-    const collection = scope.collection('_default');
 
     let copied = 0;
     for (const { rows, type } of snapshot) {
       for (const row of rows) {
         const id = String(row.id);
         const key = `${type}::${encodeURIComponent(id)}`;
-        await collection.upsert(key, { ...normalize(row), id, type });
+        const document = { ...normalize(row), id, type };
+        const collectionName = collectionForRecord(type, document);
+        await scope.collection(collectionName).upsert(key, document);
         appendFileSync(QUERY_HISTORY_PATH,
           `\n[${new Date().toISOString()}] Papiflix data migration\n` +
           `Operation: collection.upsert(docKey, document)\n` +
-          `Keyspace: ${bucket.name}.${scope.name}._default\n` +
+          `Keyspace: ${bucket.name}.${scope.name}.${collectionName}\n` +
           `Document key: ${key}\n` +
           'Result: 1 document upserted; migration authorized by user request.\n');
         copied += 1;

@@ -1,7 +1,7 @@
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 
 type CouchbaseState = typeof globalThis & {
-  papiflixCouchbase?: Promise<{ bucket: Bucket; cluster: Cluster; collection: Collection; scope: Scope }>;
+  papiflixCouchbase?: Promise<{ bucket: Bucket; cluster: Cluster; scope: Scope }>;
 };
 
 const globalState = globalThis as CouchbaseState;
@@ -23,7 +23,7 @@ export async function getCouchbase() {
       }).then((cluster) => {
         const bucket = cluster.bucket(requiredEnvironment('COUCHBASE_BUCKET'));
         const scope = bucket.scope(process.env.COUCHBASE_SCOPE?.trim() || '_default');
-        return { bucket, cluster, collection: scope.collection('_default'), scope };
+        return { bucket, cluster, scope };
       });
     })().catch((error: unknown) => {
       globalState.papiflixCouchbase = undefined;
@@ -38,15 +38,43 @@ export function couchbaseDocumentKey(type: string, id: string): string {
   return `${type}::${encodeURIComponent(id)}`;
 }
 
+export const MEDIA_COLLECTIONS = ['papiflix', 'papianime', 'mangadex'] as const;
+export type MediaCollection = typeof MEDIA_COLLECTIONS[number];
+
+const IDENTITY_TYPES = new Set(['user', 'account', 'session', 'verificationToken']);
+
+export function collectionForRecord(type: string, document: Record<string, unknown> = {}): string {
+  if (IDENTITY_TYPES.has(type)) return 'identity';
+  if (type === 'papiAnimeProgress') return 'papianime';
+  const experience = document.experience;
+  if (experience === 'papiflix' || experience === 'papianime') return experience;
+  if (experience === 'papimanga' || experience === 'mangadex') return 'mangadex';
+  const provider = document.mediaProvider;
+  if (provider === 'tmdb') return 'papiflix';
+  if (provider === 'anilist') return 'papianime';
+  if (provider === 'mangadex') return 'mangadex';
+  throw new Error(`Cannot determine Couchbase collection for ${type}.`);
+}
+
+export function collectionsForRecord(type: string, filters: Record<string, unknown> = {}): string[] {
+  if (IDENTITY_TYPES.has(type)) return ['identity'];
+  if (type === 'papiAnimeProgress') return ['papianime'];
+  if (filters.experience || filters.mediaProvider) return [collectionForRecord(type, filters)];
+  return [...MEDIA_COLLECTIONS];
+}
+
 export async function getDocument<T>(type: string, id: string): Promise<T | null> {
-  const { collection } = await getCouchbase();
-  try {
-    const result = await collection.get(couchbaseDocumentKey(type, id));
-    return result.content as T;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'DocumentNotFoundError') return null;
-    throw error;
+  const { scope } = await getCouchbase();
+  for (const name of collectionsForRecord(type)) {
+    try {
+      const result = await scope.collection(name).get(couchbaseDocumentKey(type, id));
+      return result.content as T;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'DocumentNotFoundError') continue;
+      throw error;
+    }
   }
+  return null;
 }
 
 export async function upsertDocument<T extends Record<string, unknown>>(
@@ -54,9 +82,9 @@ export async function upsertDocument<T extends Record<string, unknown>>(
   id: string,
   document: T,
 ): Promise<T & { id: string; type: string }> {
-  const { collection } = await getCouchbase();
+  const { scope } = await getCouchbase();
   const value = { ...document, id, type };
-  await collection.upsert(couchbaseDocumentKey(type, id), value);
+  await scope.collection(collectionForRecord(type, value)).upsert(couchbaseDocumentKey(type, id), value);
   return value;
 }
 
@@ -65,18 +93,21 @@ export async function insertDocument<T extends Record<string, unknown>>(
   id: string,
   document: T,
 ): Promise<T & { id: string; type: string }> {
-  const { collection } = await getCouchbase();
+  const { scope } = await getCouchbase();
   const value = { ...document, id, type };
-  await collection.insert(couchbaseDocumentKey(type, id), value);
+  await scope.collection(collectionForRecord(type, value)).insert(couchbaseDocumentKey(type, id), value);
   return value;
 }
 
 export async function removeDocument(type: string, id: string): Promise<void> {
-  const { collection } = await getCouchbase();
-  try {
-    await collection.remove(couchbaseDocumentKey(type, id));
-  } catch (error) {
-    if (error instanceof Error && error.name === 'DocumentNotFoundError') return;
-    throw error;
+  const { scope } = await getCouchbase();
+  for (const name of collectionsForRecord(type)) {
+    try {
+      await scope.collection(name).remove(couchbaseDocumentKey(type, id));
+      return;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'DocumentNotFoundError') continue;
+      throw error;
+    }
   }
 }

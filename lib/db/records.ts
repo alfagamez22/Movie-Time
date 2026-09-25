@@ -1,4 +1,4 @@
-import { getCouchbase, getDocument, removeDocument, upsertDocument } from './couchbase';
+import { collectionsForRecord, getCouchbase, getDocument, removeDocument, upsertDocument } from './couchbase';
 
 export type AppRecord = Record<string, unknown> & {
   id: string;
@@ -44,14 +44,24 @@ export async function findRecords<T extends AppRecord>(
   }
 
   const limit = options.limit == null ? '' : ' LIMIT $limit';
-  const query = `SELECT d.* FROM ${quoteIdentifier(bucket.name)}.${quoteIdentifier(scope.name)}.${quoteIdentifier('_default')} AS d WHERE ${where.join(' AND ')}${order}${limit}`;
   if (options.limit != null) parameters.limit = Math.max(0, Math.floor(options.limit));
 
-  const result = await cluster.query<T>(query, {
-    parameters,
-    scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency,
-  });
-  return result.rows;
+  const collections = collectionsForRecord(type, filters);
+  const results = await Promise.all(collections.map(async (name) => {
+    const query = `SELECT d.* FROM ${quoteIdentifier(bucket.name)}.${quoteIdentifier(scope.name)}.${quoteIdentifier(name)} AS d WHERE ${where.join(' AND ')}${order}${limit}`;
+    const result = await cluster.query<T>(query, {
+      parameters,
+      scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency,
+    });
+    return result.rows;
+  }));
+  const rows = results.flat();
+  if (options.orderBy) {
+    const field = options.orderBy;
+    const direction = options.direction === 'asc' ? 1 : -1;
+    rows.sort((a, b) => direction * String(a[field] ?? '').localeCompare(String(b[field] ?? '')));
+  }
+  return options.limit == null ? rows : rows.slice(0, Math.max(0, Math.floor(options.limit)));
 }
 
 export async function findRecord<T extends AppRecord>(type: string, filters: RecordFilters): Promise<T | null> {
