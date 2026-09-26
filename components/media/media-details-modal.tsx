@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
+import { rememberPlaybackReturn } from '@/lib/media/playback-return';
 import {
   getMediaKindLabel,
   isMangaProvider,
@@ -348,10 +349,12 @@ function RecommendationCarousel({
 function AnimeSeriesPlaylist({
   entries,
   currentId,
+  experienceId,
   onSelectEntry,
 }: {
   entries: AnimePlaylistItem[];
   currentId: string;
+  experienceId: MediaExperienceConfig['id'];
   onSelectEntry: (entry: LibraryMediaEntry) => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
@@ -462,6 +465,7 @@ function AnimeSeriesPlaylist({
                 </div>
               </button>
               <Link href={buildWatchHref(entry, { basePath: '/anime/watch' })}
+                onClick={() => rememberPlaybackReturn(entry, experienceId)}
                 className="mx-3 mb-3 flex items-center justify-center gap-1 rounded-md bg-white px-2 py-1.5 text-xs font-bold text-black hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-white">
                 <Play className="h-3 w-3 fill-current" /> Play
               </Link>
@@ -677,6 +681,7 @@ export function MediaDetailsModal({
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Link
                       href={playHref}
+                      onClick={() => { if (!isManga) rememberPlaybackReturn(displayEntry, experience.id); }}
                       className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-zinc-200"
                     >
                       {isManga ? <BookOpen className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
@@ -720,6 +725,7 @@ export function MediaDetailsModal({
                 <AnimeSeriesPlaylist
                   entries={animePlaylist}
                   currentId={displayEntry.id}
+                  experienceId={experience.id}
                   onSelectEntry={selectRecommendation}
                 />
               ) : null}

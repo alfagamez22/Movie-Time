@@ -19,6 +19,7 @@ import { BrowseRow } from './browse-row';
 import { HeroBanner } from './hero-banner';
 import { MatureToggle, filterMatureSections, useMatureUnlocked } from './mature-toggle';
 import { MediaDetailsModal } from './media-details-modal';
+import { consumePlaybackReturn } from '@/lib/media/playback-return';
 
 interface HomePageProps {
   discoveryError: string | null;
@@ -128,6 +129,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
   const isSearchPending = query.trim() !== debouncedQuery;
+
+  useEffect(() => {
+    const returnEntry = consumePlaybackReturn(experience.id);
+    if (returnEntry) setSelectedEntry(returnEntry);
+  }, [experience.id]);
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false);

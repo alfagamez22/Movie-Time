@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
+import { rememberPlaybackReturn } from '@/lib/media/playback-return';
 import { getMediaKindLabel, isMangaProvider, type LibraryMediaEntry, type PlaybackLanguage } from '@/lib/media/types';
 
 interface HeroBannerProps {
@@ -153,6 +154,7 @@ export function HeroBanner({
               <div className="flex flex-wrap gap-3 pt-1">
                 <Link
                   href={playHref}
+                  onClick={() => { if (!isManga) rememberPlaybackReturn(active, active.provider === 'tmdb' ? 'papiflix' : 'papianime'); }}
                   className="inline-flex items-center gap-2 rounded-md bg-white px-6 py-2.5 text-sm font-bold text-black transition-all hover:bg-zinc-200 active:scale-95"
                 >
                   {isManga ? <BookOpen className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
@@ -170,6 +172,7 @@ export function HeroBanner({
                 ) : (
                   <Link
                     href={playHref}
+                    onClick={() => { if (!isManga) rememberPlaybackReturn(active, active.provider === 'tmdb' ? 'papiflix' : 'papianime'); }}
                     className="inline-flex items-center gap-2 rounded-md bg-zinc-700/60 px-6 py-2.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-zinc-600/70 active:scale-95"
                   >
                     <Info className="h-4 w-4" />

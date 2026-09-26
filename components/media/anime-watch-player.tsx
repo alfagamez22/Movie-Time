@@ -14,6 +14,7 @@ import {
   useWatchedEpisodes,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
+import { playbackBackTarget } from '@/lib/media/playback-return';
 import { buildVidnestAnimeEmbedUrl } from '@/lib/media/embed';
 import {
   getEpisodeLimit,
@@ -715,8 +716,10 @@ export function AnimeWatchPlayer({
   }, [autoNextEnabled, currentEpisode, currentLanguage, entry, experience.watchBasePath, initialPlayback.autoPlay]);
 
   const handleBackToLibrary = () => {
-    requestHomeScrollRestore(experience.id);
-    router.push(experience.homeHref, { scroll: false });
+    const target = playbackBackTarget(entry, experience.id, experience.homeHref);
+    if (target === experience.homeHref || target.startsWith(`${experience.homeHref}#`) ||
+        target.startsWith(`${experience.homeHref}?`)) requestHomeScrollRestore(experience.id);
+    router.replace(target, { scroll: false });
   };
 
   const handleEpisodeChange = (episode: number) => {
@@ -756,8 +759,8 @@ export function AnimeWatchPlayer({
         <button
           type="button"
           onClick={handleBackToLibrary}
-          aria-label="Back to library"
-          title="Back to library"
+          aria-label="Back to title details"
+          title="Back to title details"
           className="absolute left-[calc(env(safe-area-inset-left)+1rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/20 text-zinc-100 backdrop-blur-sm transition-all hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -802,7 +805,7 @@ export function AnimeWatchPlayer({
                     onClick={handleBackToLibrary}
                     className="rounded-full border border-white/10 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
                   >
-                    Back to library
+                    Back to title details
                   </button>
                 </div>
               ) : null}

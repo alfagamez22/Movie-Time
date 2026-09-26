@@ -15,6 +15,7 @@ import {
   useWatchedEpisodes,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
+import { playbackBackTarget } from '@/lib/media/playback-return';
 import {
   getEpisodeLimit,
   isAnimeProvider,
@@ -605,6 +606,13 @@ function StandardWatchPlayer({
     };
   }, []);
 
+  const handleBackToDetails = useCallback(() => {
+    const target = playbackBackTarget(entry, experience.id, experience.homeHref);
+    if (target === experience.homeHref || target.startsWith(`${experience.homeHref}#`) ||
+        target.startsWith(`${experience.homeHref}?`)) requestHomeScrollRestore(experience.id);
+    router.replace(target, { scroll: false });
+  }, [entry, experience.homeHref, experience.id, router]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -615,12 +623,11 @@ function StandardWatchPlayer({
         return;
       }
       event.preventDefault();
-      requestHomeScrollRestore(experience.id);
-      router.push(experience.homeHref, { scroll: false });
+      handleBackToDetails();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [experience.homeHref, experience.id, router]);
+  }, [handleBackToDetails]);
 
 
 
@@ -670,11 +677,6 @@ function StandardWatchPlayer({
     [entry.id, entry.slug, entry.type],
   );
 
-  const handleBackToLibrary = useCallback(() => {
-    requestHomeScrollRestore(experience.id);
-    router.push(experience.homeHref, { scroll: false });
-  }, [experience.homeHref, experience.id, router]);
-
   return (
     <div
       ref={playerShellRef}
@@ -694,9 +696,9 @@ function StandardWatchPlayer({
         <div className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[calc(env(safe-area-inset-top)+2px)] bg-gradient-to-b from-black/80 to-transparent" />
         <button
           type="button"
-          onClick={handleBackToLibrary}
-          aria-label="Back to library"
-          title="Back to library (Esc)"
+          onClick={handleBackToDetails}
+          aria-label="Back to title details"
+          title="Back to title details (Esc)"
           className={`absolute left-[calc(env(safe-area-inset-left)+0.75rem)] top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-full bg-black/45 text-zinc-100 backdrop-blur-md transition-opacity duration-300 hover:bg-white/15 hover:text-white hover:ring-1 hover:ring-white/35 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20 ${
             isChromeVisible ? 'opacity-100' : 'opacity-40'
           }`}

@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronRight, Lock, Sparkles } from 'lucide-react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
+import { consumePlaybackReturn } from '@/lib/media/playback-return';
 import type {
   LibrarySection,
   LibrarySectionCategory,
@@ -142,6 +143,11 @@ export function CategoriesPage({ description: _description, discoveryError, expe
   const [selectedEntry, setSelectedEntry] = useState<typeof sections[number]['entries'][number] | null>(null);
   const grouped = useMemo(() => groupSectionsByCategory(sections), [sections]);
 
+  useEffect(() => {
+    const returnEntry = consumePlaybackReturn(experience.id);
+    if (returnEntry) setSelectedEntry(returnEntry);
+  }, [experience.id]);
+
   const openDetails = useCallback((entry: typeof sections[number]['entries'][number]) => {
     setSelectedEntry(entry);
   }, []);
@@ -208,6 +214,10 @@ export function CategoryDetailPage({
 }: BaseProps & { category: LibrarySectionCategory; label: string }) {
   const matureUnlocked = useMatureUnlocked();
   const [selectedEntry, setSelectedEntry] = useState<typeof sections[number]['entries'][number] | null>(null);
+  useEffect(() => {
+    const returnEntry = consumePlaybackReturn(experience.id);
+    if (returnEntry) setSelectedEntry(returnEntry);
+  }, [experience.id]);
   const openDetails = useCallback((entry: typeof sections[number]['entries'][number]) => {
     setSelectedEntry(entry);
   }, []);
