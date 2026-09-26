@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState, type WheelEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -228,6 +228,41 @@ function TrailerPlayer({
   );
 }
 
+function FittedCardTitle({ title, height = 40, maxSize = 12 }: { title: string; height?: number; maxSize?: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const [fitted, setFitted] = useState({ fontSize: maxSize, height });
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const text = textRef.current;
+    if (!container || !text) return;
+
+    const fit = () => {
+      let fontSize = maxSize;
+      text.style.fontSize = `${fontSize}px`;
+      while (text.scrollHeight > height && fontSize > 9) {
+        fontSize -= 0.5;
+        text.style.fontSize = `${fontSize}px`;
+      }
+      setFitted({ fontSize, height: Math.max(height, text.scrollHeight) });
+    };
+
+    const observer = new ResizeObserver(fit);
+    observer.observe(container);
+    fit();
+    return () => observer.disconnect();
+  }, [height, maxSize, title]);
+
+  return (
+    <div ref={containerRef} className="mt-1 min-w-0" style={{ height: fitted.height }}>
+      <p ref={textRef} className="break-words font-semibold leading-[1.25] text-white" style={{ fontSize: fitted.fontSize }}>
+        {title}
+      </p>
+    </div>
+  );
+}
+
 function RecommendationCarousel({
   entries,
   isLoading,
@@ -292,11 +327,8 @@ function RecommendationCarousel({
                 />
               ) : null}
             </div>
-            <p className="mt-2 line-clamp-2 text-xs font-semibold leading-tight text-white">{item.title}</p>
-            <p className="mt-0.5 text-[11px] uppercase tracking-wide text-zinc-500">
-              {getMediaKindLabel(item)}
-              {item.year ? ` / ${item.year}` : ''}
-            </p>
+            <FittedCardTitle title={item.title} />
+            {item.year ? <p className="mt-0.5 text-[11px] text-zinc-500">{item.year}</p> : null}
           </button>
         ))}
       </div>
@@ -322,13 +354,93 @@ function AnimeSeriesPlaylist({
   currentId: string;
   onSelectEntry: (entry: LibraryMediaEntry) => void;
 }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const hoverFrameRef = useRef<number | null>(null);
+  const hoverDirectionRef = useRef(0);
+  const [canScroll, setCanScroll] = useState({ left: false, right: false });
+
+  const updateScroll = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    setCanScroll({
+      left: row.scrollLeft > 2,
+      right: row.scrollLeft + row.clientWidth < row.scrollWidth - 2,
+    });
+  }, []);
+
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const observer = new ResizeObserver(updateScroll);
+    observer.observe(row);
+    const frame = requestAnimationFrame(updateScroll);
+    row.addEventListener('scroll', updateScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      row.removeEventListener('scroll', updateScroll);
+      observer.disconnect();
+    };
+  }, [entries, updateScroll]);
+
+  const stopHoverScroll = useCallback(() => {
+    hoverDirectionRef.current = 0;
+    if (hoverFrameRef.current !== null) cancelAnimationFrame(hoverFrameRef.current);
+    hoverFrameRef.current = null;
+  }, []);
+
+  useEffect(() => stopHoverScroll, [stopHoverScroll]);
+
+  const onPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse') return;
+    const row = rowRef.current;
+    if (!row) return;
+    const bounds = row.getBoundingClientRect();
+    const edge = Math.min(72, bounds.width * 0.2);
+    const offset = event.clientX - bounds.left;
+    const direction = offset < edge ? -1 : offset > bounds.width - edge ? 1 : 0;
+    if (direction === hoverDirectionRef.current) return;
+    stopHoverScroll();
+    if (!direction) return;
+    hoverDirectionRef.current = direction;
+    const tick = () => {
+      const current = rowRef.current;
+      if (!current || !hoverDirectionRef.current) return;
+      const previousLeft = current.scrollLeft;
+      current.scrollLeft += hoverDirectionRef.current * 5;
+      if (current.scrollLeft === previousLeft) {
+        stopHoverScroll();
+        return;
+      }
+      hoverFrameRef.current = requestAnimationFrame(tick);
+    };
+    hoverFrameRef.current = requestAnimationFrame(tick);
+  }, [stopHoverScroll]);
+
+  const scroll = useCallback((direction: -1 | 1) => {
+    const row = rowRef.current;
+    if (!row) return;
+    row.scrollBy({ left: direction * row.clientWidth * 0.8, behavior: 'smooth' });
+  }, []);
+
   if (entries.length < 2) return null;
 
   return (
     <section aria-label="Anime series playlist">
       <h3 className="mb-1 text-lg font-bold text-white">Series playlist</h3>
-      <p className="mb-4 text-sm text-zinc-400">Each season and movie has its own AniList player ID.</p>
-      <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide">
+      <p className="mb-4 text-sm text-zinc-400">Explore related seasons and movies.</p>
+      <div className="relative" onPointerMove={onPointerMove} onPointerLeave={stopHoverScroll}>
+        {canScroll.left ? (
+          <button type="button" onClick={() => scroll(-1)} aria-label="Scroll series playlist left"
+            className="absolute inset-y-0 left-0 z-10 flex w-11 items-center justify-center bg-gradient-to-r from-[#111] to-transparent text-white hover:text-netflix-red focus-visible:outline-2 focus-visible:outline-white">
+            <ChevronLeft className="h-7 w-7" />
+          </button>
+        ) : null}
+        <div ref={rowRef} className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide" onWheel={(event) => {
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+            event.preventDefault();
+            rowRef.current?.scrollBy({ left: event.deltaY });
+          }
+        }}>
         {entries.map(({ entry, key, label }) => {
           const isCurrent = entry.id === currentId;
           return (
@@ -345,8 +457,8 @@ function AnimeSeriesPlaylist({
                   </span>
                 </div>
                 <div className="p-3">
-                  <p className="line-clamp-2 min-h-9 text-xs font-semibold leading-tight text-white">{entry.title}</p>
-                  <p className="mt-1 text-[11px] text-zinc-400">{entry.year ?? 'Anime'} · AniList {entry.id}</p>
+                  <FittedCardTitle title={entry.title} height={42} />
+                  {entry.year ? <p className="mt-1 text-[11px] text-zinc-400">{entry.year}</p> : null}
                 </div>
               </button>
               <Link href={buildWatchHref(entry, { basePath: '/anime/watch' })}
@@ -356,6 +468,13 @@ function AnimeSeriesPlaylist({
             </div>
           );
         })}
+        </div>
+        {canScroll.right ? (
+          <button type="button" onClick={() => scroll(1)} aria-label="Scroll series playlist right"
+            className="absolute inset-y-0 right-0 z-10 flex w-11 items-center justify-center bg-gradient-to-l from-[#111] to-transparent text-white hover:text-netflix-red focus-visible:outline-2 focus-visible:outline-white">
+            <ChevronRight className="h-7 w-7" />
+          </button>
+        ) : null}
       </div>
     </section>
   );
