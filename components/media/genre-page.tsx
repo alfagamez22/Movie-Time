@@ -32,7 +32,6 @@ function PosterCard({ entry, onSelect }: { entry: LibraryMediaEntry; onSelect: (
     <button
       type="button"
       onClick={() => onSelect(entry)}
-      aria-label={`Show details for ${entry.title}`}
       className="group relative aspect-[2/3] overflow-hidden rounded-md bg-zinc-900 ring-1 ring-white/5 transition duration-200 hover:z-10 hover:scale-105 hover:ring-2 hover:ring-white/80 focus-visible:z-10 focus-visible:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
     >
       {entry.posterUrl ? (

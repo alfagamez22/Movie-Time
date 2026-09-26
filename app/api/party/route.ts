@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { rateLimit } from '@/lib/rate-limit';
+
 import { auth } from '@/lib/auth';
 import { createParty, listLiveParties } from '@/lib/party/store';
 
@@ -28,6 +30,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: 'Sign in to start a watch party.' }, { status: 401 });
+  const limited = rateLimit('party-create', session.user.id, 5, 10 * 60_000);
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const experience = text(body?.experience, 20);

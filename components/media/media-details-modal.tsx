@@ -710,7 +710,7 @@ export function MediaDetailsModal({
 
             <div className="relative min-h-[20rem] overflow-hidden sm:min-h-[22rem] sm:rounded-t-xl">
               {backdropUrl ? (
-                <Image src={backdropUrl} alt="" fill priority sizes="100vw" className="object-cover" />
+                <Image src={backdropUrl} alt="" fill preload sizes="100vw" className="object-cover" />
               ) : null}
               <div className="absolute inset-0 bg-gradient-to-r from-[#111] via-[#111]/75 to-transparent" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-black/50" />

@@ -1,8 +1,7 @@
 'use client';
 
-import * as Ably from 'ably';
-import { ChatClient, ChatMessageEventType, type Message } from '@ably/chat';
-import { ChatClientProvider, ChatRoomProvider, useMessages, usePresence, usePresenceListener } from '@ably/chat/react';
+import type { InboundMessage, Realtime } from 'ably';
+import type { ChatClient, Message, PresenceMember, Room } from '@ably/chat';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
@@ -17,9 +16,16 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Check, Copy, ListVideo, LogOut, MessageCircle, Pause, Play, Radio, RefreshCw, Send, Users, Volume2 } from 'lucide-react';
+import { Check, Copy, ListVideo, LogOut, Maximize, MessageCircle, Minimize, PanelRightClose, PanelRightOpen, Pause, Play, Radio, RefreshCw, Send, Users, Volume2 } from 'lucide-react';
 
 import { PLAYER_PROGRESS_EVENT, type PlayerProgressDetail } from '@/lib/party/player-events';
+import {
+  decideGuestAction,
+  DRIFT_TOLERANCE_S,
+  expectedHostTime,
+  nextPlayState,
+  pickSuccessor,
+} from '@/lib/party/sync-logic';
 import {
   partyRoomName,
   partySyncChannel,
@@ -29,14 +35,10 @@ import {
 } from '@/lib/party/types';
 
 const PUBLISH_INTERVAL_MS = 5_000;
-const DRIFT_TOLERANCE_S = 8;
-const RESYNC_COOLDOWN_MS = 20_000;
 /** Embeds report 0:00 (or stale times) for a few seconds after loading before honouring `startAt`. */
 const RESYNC_SETTLE_MS = 8_000;
-const MAX_FAILED_RESYNCS = 2;
 const PAUSE_CONFIRM_MS = 1_500;
-const PAUSED_STATUSES = new Set(['paused', 'pause', 'ended', 'completed']);
-const PLAYING_STATUSES = new Set(['playing', 'play', 'resumed']);
+const CHAT_MIN_INTERVAL_MS = 1_000;
 const HOST_STALE_MS = 30_000;
 const HOST_GONE_GRACE_MS = 8_000;
 const HEARTBEAT_MS = 30_000;
@@ -55,6 +57,17 @@ export function formatClock(totalSeconds: number) {
   const minutes = Math.floor((value % 3600) / 60);
   const secs = String(value % 60).padStart(2, '0');
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}` : `${minutes}:${secs}`;
+}
+
+interface Viewer extends PartyPresenceData {
+  clientId: string;
+  joinedAt: number;
+}
+
+interface LiveConnection {
+  chat: ChatClient;
+  realtime: Realtime;
+  room: Room;
 }
 
 interface ActivityItem {
@@ -76,6 +89,7 @@ interface PartyContextValue {
   joinWithSound: () => void;
   joined: boolean;
   leaveParty: () => void;
+  messages: Message[];
   needsSignIn: boolean;
   outOfSync: boolean;
   party: WatchParty | null;
@@ -83,10 +97,13 @@ interface PartyContextValue {
   ready: boolean;
   refreshParty: () => void;
   resync: () => void;
+  selfId: string | null;
+  sendChat: (text: string) => Promise<void>;
   starting: boolean;
   startError: string | null;
   startParty: () => void;
   status: 'idle' | 'loading' | 'active' | 'ended' | 'error';
+  viewers: Viewer[];
 }
 
 const PartyContext = createContext<PartyContextValue | null>(null);
@@ -143,7 +160,10 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
   const [hostSeenAt, setHostSeenAt] = useState(0);
   const [now, setNow] = useState(0);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [clients, setClients] = useState<{ chat: ChatClient; realtime: Ably.Realtime } | null>(null);
+  const [live, setLive] = useState<LiveConnection | null>(null);
+  const [members, setMembers] = useState<PresenceMember[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const lastChatAtRef = useRef(0);
   const localTimeRef = useRef<{ at: number; duration: number | null; playing: boolean; seconds: number }>({ at: 0, duration: null, playing: false, seconds: 0 });
   const guestPausedRef = useRef(false);
   const settleUntilRef = useRef(0);
@@ -195,28 +215,100 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
 
   const needsSignIn = status === 'active' && sessionStatus === 'unauthenticated';
 
+  const presenceDataRef = useRef<PartyPresenceData>({ image: null, name: 'Viewer', role: 'guest' });
   useEffect(() => {
-    if (status !== 'active' || !userId) return;
-    const realtime = new Ably.Realtime({ authUrl: '/api/party/token', closeOnUnload: true });
-    const chat = new ChatClient(realtime);
-    const id = setTimeout(() => setClients({ chat, realtime }), 0);
-    return () => {
-      clearTimeout(id);
-      setClients(null);
-      realtime.close();
+    presenceDataRef.current = {
+      image: session?.user?.image ?? null,
+      name: session?.user?.name ?? session?.user?.email ?? 'Viewer',
+      role: 'guest',
     };
-  }, [status, userId]);
+  }, [session?.user?.email, session?.user?.image, session?.user?.name]);
+
+  // Ably is only downloaded and connected once someone is actually in a party.
+  useEffect(() => {
+    if (status !== 'active' || !userId || !code) return;
+    let cancelled = false;
+    let teardown: (() => void) | null = null;
+
+    void (async () => {
+      const [{ Realtime: RealtimeClient }, { ChatClient: ChatClientCtor, ChatMessageEventType }] = await Promise.all([
+        import('ably'),
+        import('@ably/chat'),
+      ]);
+      if (cancelled) return;
+      const realtime = new RealtimeClient({ authUrl: '/api/party/token', closeOnUnload: true });
+      const chat = new ChatClientCtor(realtime);
+      const roomName = partyRoomName(code);
+      try {
+        const room = await chat.rooms.get(roomName);
+        await room.attach();
+        if (cancelled) throw new Error('cancelled');
+
+        const refreshMembers = () => void room.presence.get().then((list) => {
+          if (!cancelled) setMembers(list);
+        }).catch(() => undefined);
+        const presenceSub = room.presence.subscribe(refreshMembers);
+        const messageSub = room.messages.subscribe((event) => {
+          if (event.type !== ChatMessageEventType.Created) return;
+          setMessages((current) => (current.some((item) => item.serial === event.message.serial)
+            ? current
+            : [...current, event.message].slice(-200)));
+        });
+        void messageSub.historyBeforeSubscribe({ limit: 50 }).then((page) => {
+          if (cancelled) return;
+          setMessages((current) => {
+            const known = new Set(current.map((item) => item.serial));
+            return [...page.items.filter((item) => !known.has(item.serial)).reverse(), ...current];
+          });
+        }).catch(() => undefined);
+        await room.presence.enter(presenceDataRef.current);
+        refreshMembers();
+        setLive({ chat, realtime, room });
+
+        teardown = () => {
+          presenceSub.unsubscribe();
+          messageSub.unsubscribe();
+          void room.presence.leave().catch(() => undefined);
+          void chat.rooms.release(roomName).catch(() => undefined);
+          realtime.close();
+        };
+      } catch {
+        void chat.rooms.release(roomName).catch(() => undefined);
+        realtime.close();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      teardown?.();
+      setLive(null);
+      setMembers([]);
+      setMessages([]);
+    };
+  }, [code, status, userId]);
+
+  const viewers = useMemo<Viewer[]>(() => {
+    const byClient = new Map<string, Viewer>();
+    for (const member of members) {
+      const data = (member.data ?? {}) as Partial<PartyPresenceData>;
+      const joinedAt = member.updatedAt instanceof Date ? member.updatedAt.getTime() : Number.POSITIVE_INFINITY;
+      const existing = byClient.get(member.clientId);
+      byClient.set(member.clientId, {
+        clientId: member.clientId,
+        image: data.image ?? null,
+        joinedAt: Math.min(existing?.joinedAt ?? Infinity, joinedAt),
+        name: data.name ?? 'Viewer',
+        role: member.clientId === party?.hostId ? 'host' : 'guest',
+      });
+    }
+    return [...byClient.values()].sort((a, b) => (a.role === 'host' ? -1 : b.role === 'host' ? 1 : a.joinedAt - b.joinedAt));
+  }, [members, party?.hostId]);
 
   useEffect(() => {
     const onProgress = (event: Event) => {
       const { duration, seconds, status: playerStatus } = (event as CustomEvent<PlayerProgressDetail>).detail;
       const previous = localTimeRef.current;
-      // Only explicit statuses change play state; repeated timestamps between ticks are not a pause.
-      const playing = PAUSED_STATUSES.has(playerStatus)
-        ? false
-        : PLAYING_STATUSES.has(playerStatus) || seconds !== previous.seconds
-          ? true
-          : previous.playing;
+      const playing = nextPlayState(previous, seconds, playerStatus);
       if (Date.now() < settleUntilRef.current) {
         localTimeRef.current = { ...previous, duration: duration ?? previous.duration, playing };
         return;
@@ -248,8 +340,8 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
 
   // Host: publish playback state periodically and whenever the episode changes.
   useEffect(() => {
-    if (!clients || !isHost || !code) return;
-    const channel = clients.realtime.channels.get(partySyncChannel(code));
+    if (!live || !isHost || !code) return;
+    const channel = live.realtime.channels.get(partySyncChannel(code));
     let last = buildState();
     let lastPublishedAt = 0;
     const publish = () => {
@@ -270,13 +362,13 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
       clearInterval(timer);
       window.removeEventListener(PLAYER_PROGRESS_EVENT, onProgress);
     };
-  }, [buildState, clients, code, isHost]);
+  }, [buildState, live, code, isHost]);
 
   // Guests: follow the host.
   useEffect(() => {
-    if (!clients || isHost || !code || !party) return;
-    const channel = clients.realtime.channels.get(partySyncChannel(code), { params: { rewind: '1' } });
-    const listener = (message: Ably.InboundMessage) => {
+    if (!live || isHost || !code || !party) return;
+    const channel = live.realtime.channels.get(partySyncChannel(code), { params: { rewind: '1' } });
+    const listener = (message: InboundMessage) => {
       if (message.name === 'host') {
         refreshPartyRef.current();
         return;
@@ -295,7 +387,7 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     };
     void channel.subscribe(listener);
     return () => channel.unsubscribe(listener);
-  }, [clients, code, isHost, party]);
+  }, [live, code, isHost, party]);
 
   useEffect(() => {
     if (!hostState || isHost || !code) return;
@@ -307,52 +399,54 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     }
     if (!joined) return;
 
-    const expectedAt = (state: PartySyncState) =>
-      state.time + (state.playing ? (Date.now() - state.sentAt) / 1000 : 0);
-    const follow = (paused: boolean, reason: 'episode' | 'drift' | 'play' | 'pause') => {
-      const target = expectedAt(hostState);
+    const follow = (paused: boolean, drift = false) => {
+      const target = expectedHostTime(hostState, Date.now());
       lastResyncRef.current = Date.now();
       guestPausedRef.current = paused;
       settleUntilRef.current = paused ? 0 : Date.now() + RESYNC_SETTLE_MS;
-      awaitingResyncRef.current = reason === 'drift' ? target : null;
+      awaitingResyncRef.current = drift ? target : null;
       localTimeRef.current = { ...localTimeRef.current, at: 0 };
       onFollowRef.current({ episode: hostState.episode, paused, season: hostState.season, time: target });
     };
-    const episodeChanged = (hostState.season ?? null) !== season || (hostState.episode ?? null) !== episode;
+    const action = decideGuestAction({
+      episode,
+      failedResyncs: failedResyncsRef.current,
+      guestPaused: guestPausedRef.current,
+      host: hostState,
+      lastResyncAt: lastResyncRef.current,
+      local: localTimeRef.current,
+      now: Date.now(),
+      season,
+      settleUntil: settleUntilRef.current,
+    });
 
-    if (!hostState.playing) {
-      if (guestPausedRef.current && !episodeChanged) return;
+    if (action === 'pause') {
       // Ignore sub-second pauses (buffering, scrubbing) so guests don't unload and reload the embed.
       const timer = setTimeout(() => {
         const latest = hostStateRef.current;
-        if (latest && !latest.playing) follow(true, 'pause');
+        if (latest && !latest.playing) follow(true);
       }, PAUSE_CONFIRM_MS);
       return () => clearTimeout(timer);
     }
-    if (guestPausedRef.current || episodeChanged) {
-      follow(false, episodeChanged ? 'episode' : 'play');
-      if (episodeChanged && hostState.episode) {
+    if (action === 'resume') follow(false);
+    if (action === 'episode') {
+      follow(false);
+      if (hostState.episode) {
         const id = setTimeout(() => pushActivity(
           `Host switched to ${hostState.season ? `S${hostState.season} · ` : ''}E${hostState.episode}`,
         ), 0);
         return () => clearTimeout(id);
       }
-      return;
     }
-
-    const local = localTimeRef.current;
-    if (!local.at || Date.now() < settleUntilRef.current) return;
-    const localNow = local.seconds + (local.playing ? (Date.now() - local.at) / 1000 : 0);
-    const drifted = Math.abs(localNow - expectedAt(hostState)) > DRIFT_TOLERANCE_S;
-    if (!drifted || Date.now() - lastResyncRef.current < RESYNC_COOLDOWN_MS) return;
-
-    // If reloading at the host's time keeps failing (embed ignores startAt), stop looping and let the viewer decide.
-    if (failedResyncsRef.current >= MAX_FAILED_RESYNCS) {
+    if (action === 'drift') {
+      failedResyncsRef.current += 1;
+      follow(false, true);
+    }
+    if (action === 'out-of-sync') {
+      // Reloading at the host's time keeps failing (embed ignores startAt): stop looping and let the viewer decide.
       const id = setTimeout(() => setOutOfSync(true), 0);
       return () => clearTimeout(id);
     }
-    failedResyncsRef.current += 1;
-    follow(false, 'drift');
   }, [code, entry.id, episode, hostState, isHost, joined, pushActivity, router, season]);
 
   useEffect(() => {
@@ -411,11 +505,11 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
         });
       }
       pushActivity('You are now the host');
-      if (clients) void clients.realtime.channels.get(partySyncChannel(code)).publish('host', { hostId: json.party.hostId }).catch(() => undefined);
+      if (live) void live.realtime.channels.get(partySyncChannel(code)).publish('host', { hostId: json.party.hostId }).catch(() => undefined);
     } else if (json?.party) {
       setParty(json.party);
     }
-  }, [clients, code, hostState, pushActivity]);
+  }, [live, code, hostState, pushActivity]);
 
   const startParty = useCallback(async () => {
     if (!userId) {
@@ -469,14 +563,14 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
 
   const endParty = useCallback(() => {
     if (!code) return;
-    if (clients) void clients.realtime.channels.get(partySyncChannel(code)).publish('end', {}).catch(() => undefined);
+    if (live) void live.realtime.channels.get(partySyncChannel(code)).publish('end', {}).catch(() => undefined);
     void fetch(`/api/party/${code}`, {
       body: JSON.stringify({ end: true }),
       headers: { 'Content-Type': 'application/json' },
       method: 'PATCH',
     });
     reset();
-  }, [clients, code, reset]);
+  }, [live, code, reset]);
 
   const resync = useCallback(() => {
     const state = hostStateRef.current;
@@ -501,6 +595,74 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     }
   }, [hostState]);
 
+  const selfId = userId;
+  const presenceEntries = useMemo(() => viewers.map(({ clientId, joinedAt }) => ({ clientId, joinedAt })), [viewers]);
+  const successor = pickSuccessor(presenceEntries, party?.hostId ?? null);
+
+  // Host left: the longest-present viewer claims the role; everyone else re-reads the party shortly after.
+  useEffect(() => {
+    if (!live || isHost || !successor) return;
+    const timer = setTimeout(() => {
+      if (successor === selfId) void claimHost();
+      else refreshParty();
+    }, HOST_GONE_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [claimHost, isHost, live, refreshParty, selfId, successor]);
+
+  // Keeps the public "Live Watch Parties" row current.
+  const viewerCount = viewers.length;
+  useEffect(() => {
+    if (!live || !isHost || !code) return;
+    const beat = () => {
+      const snapshot = buildState();
+      void fetch(`/api/party/${code}`, {
+        body: JSON.stringify({
+          duration: snapshot.duration,
+          episode: snapshot.episode,
+          season: snapshot.season,
+          time: snapshot.time,
+          viewerCount: Math.max(1, viewerCount),
+          watchPath: snapshot.watchPath,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH',
+      }).catch(() => undefined);
+    };
+    beat();
+    const timer = setInterval(beat, HEARTBEAT_MS);
+    return () => clearInterval(timer);
+  }, [buildState, code, isHost, live, viewerCount]);
+
+  const seenViewersRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!live) {
+      seenViewersRef.current = null;
+      return;
+    }
+    const current = new Set(viewers.map((viewer) => viewer.clientId));
+    const previous = seenViewersRef.current;
+    seenViewersRef.current = current;
+    if (!previous) return;
+    const arrived = viewers.filter((viewer) => !previous.has(viewer.clientId));
+    const left = [...previous].filter((id) => !current.has(id)).length;
+    const id = setTimeout(() => {
+      arrived.forEach((viewer) => pushActivity(`${viewer.name} joined`));
+      if (left) pushActivity(`${left} ${left === 1 ? 'viewer' : 'viewers'} left`);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [live, pushActivity, viewers]);
+
+  const sendChat = useCallback(async (text: string) => {
+    const clean = text.trim().slice(0, 500);
+    if (!clean || !live) return;
+    if (Date.now() - lastChatAtRef.current < CHAT_MIN_INTERVAL_MS) throw new Error('Slow down');
+    lastChatAtRef.current = Date.now();
+    await live.room.messages.send({
+      metadata: { image: session?.user?.image ?? null, name: session?.user?.name ?? 'Viewer' },
+      text: clean,
+    });
+  }, [live, session?.user?.image, session?.user?.name]);
+
   const value = useMemo<PartyContextValue>(() => ({
     activity,
     claimHost,
@@ -514,116 +676,29 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     joinWithSound,
     joined: isHost || joined,
     leaveParty: reset,
+    messages,
     needsSignIn,
     outOfSync: outOfSync && !isHost,
     party,
     pushActivity,
-    ready: Boolean(clients && party),
+    ready: Boolean(live && party),
     refreshParty,
     resync,
+    selfId,
+    sendChat,
     starting,
     startError,
     startParty: () => void startParty(),
     status,
-  }), [activity, buildState, claimHost, clients, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, outOfSync, party, pushActivity, refreshParty, reset, resync, startError, startParty, starting, status]);
+    viewers,
+  }), [messages, selfId, sendChat, viewers, activity, buildState, claimHost, live, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, outOfSync, party, pushActivity, refreshParty, reset, resync, startError, startParty, starting, status]);
 
-  const content = <PartyContext.Provider value={value}>{children}</PartyContext.Provider>;
-  if (!clients || !code || !party) return content;
-
-  return (
-    <ChatClientProvider client={clients.chat}>
-      <ChatRoomProvider name={partyRoomName(code)}>
-        <PresenceEnter
-          data={{
-            image: session?.user?.image ?? null,
-            name: session?.user?.name ?? session?.user?.email ?? 'Viewer',
-            role: isHost ? 'host' : 'guest',
-          }}
-        />
-        <PartyContext.Provider value={value}>
-          <HostSuccession />
-          {children}
-        </PartyContext.Provider>
-      </ChatRoomProvider>
-    </ChatClientProvider>
-  );
-}
-
-function PresenceEnter({ data }: { data: PartyPresenceData }) {
-  usePresence({ initialData: data });
-  return null;
-}
-
-/** Promotes the longest-present viewer when the host leaves, and keeps the public party listing fresh. */
-function HostSuccession() {
-  const party = useParty();
-  const { data: session } = useSession();
-  const { presenceData } = usePresenceListener();
-  const selfId = session?.user?.id ?? null;
-  const hostId = party.party?.hostId ?? null;
-  const { claimHost, code, getSnapshot, isHost, refreshParty } = party;
-
-  const members = useMemo(() => {
-    const byClient = new Map<string, number>();
-    for (const member of presenceData) {
-      const at = member.updatedAt instanceof Date ? member.updatedAt.getTime() : Number.POSITIVE_INFINITY;
-      byClient.set(member.clientId, Math.min(byClient.get(member.clientId) ?? Infinity, at));
-    }
-    return [...byClient.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([clientId]) => clientId);
-  }, [presenceData]);
-  const hostPresent = !hostId || members.includes(hostId);
-  const nextInLine = members[0] ?? null;
-
-  useEffect(() => {
-    if (hostPresent || isHost || members.length === 0) return;
-    const timer = setTimeout(() => {
-      if (nextInLine === selfId) void claimHost();
-      else refreshParty();
-    }, HOST_GONE_GRACE_MS);
-    return () => clearTimeout(timer);
-  }, [claimHost, hostPresent, isHost, members.length, nextInLine, refreshParty, selfId]);
-
-  useEffect(() => {
-    if (!isHost || !code) return;
-    const beat = () => {
-      const snapshot = getSnapshot();
-      void fetch(`/api/party/${code}`, {
-        body: JSON.stringify({
-          duration: snapshot.duration,
-          episode: snapshot.episode,
-          season: snapshot.season,
-          time: snapshot.time,
-          viewerCount: Math.max(1, members.length),
-          watchPath: snapshot.watchPath,
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'PATCH',
-      }).catch(() => undefined);
-    };
-    beat();
-    const timer = setInterval(beat, HEARTBEAT_MS);
-    return () => clearInterval(timer);
-  }, [code, getSnapshot, isHost, members.length]);
-
-  return null;
+  // Never wrap the player in anything that appears later: a changed tree would remount it and reload the embed.
+  return <PartyContext.Provider value={value}>{children}</PartyContext.Provider>;
 }
 
 function useViewers() {
-  const { presenceData } = usePresenceListener();
-  const hostId = useParty().party?.hostId;
-  return useMemo(() => {
-    const byClient = new Map<string, PartyPresenceData & { clientId: string }>();
-    for (const member of presenceData) {
-      const data = (member.data ?? {}) as Partial<PartyPresenceData>;
-      byClient.set(member.clientId, {
-        clientId: member.clientId,
-        image: data.image ?? null,
-        name: data.name ?? 'Viewer',
-        role: member.clientId === hostId ? 'host' : 'guest',
-      });
-    }
-    return [...byClient.values()].sort((a, b) => (a.role === 'host' ? -1 : b.role === 'host' ? 1 : a.name.localeCompare(b.name)));
-  }, [hostId, presenceData]);
+  return useParty().viewers;
 }
 
 function LiveBadge() {
@@ -637,6 +712,48 @@ function LiveBadge() {
       Live
       <span className="tabular-nums">{viewers.length}</span>
     </span>
+  );
+}
+
+function GuestFullscreenButton({ visible }: { visible: boolean }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [supported, setSupported] = useState(false);
+
+  useEffect(() => {
+    const id = setTimeout(() => setSupported(Boolean(document.fullscreenEnabled)), 0);
+    const onChange = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('fullscreenchange', onChange);
+    };
+  }, []);
+
+  // Guests can't reach the embed's own fullscreen control, so fullscreen the player box it sits in.
+  const toggle = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    const stage = buttonRef.current?.parentElement;
+    void stage?.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+  }, []);
+
+  if (!supported) return null;
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={toggle}
+      aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+      title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+      className={`absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-md transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
+        visible || !fullscreen ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'
+      }`}
+    >
+      {fullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+    </button>
   );
 }
 
@@ -674,6 +791,8 @@ export function WatchPartyPlayerLayer({ chromeVisible }: { chromeVisible: boolea
           onContextMenu={(event) => event.preventDefault()}
         />
       ) : null}
+
+      {guestView && party.joined ? <GuestFullscreenButton visible={chromeVisible} /> : null}
 
       {guestView && party.joined && party.hostPaused && !party.hostStale ? (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black text-center">
@@ -764,22 +883,17 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
   const viewers = useViewers();
   const [tab, setTab] = useState<PanelTab>('chat');
   const [copied, setCopied] = useState(false);
-  const seenRef = useRef<Set<string> | null>(null);
-  const { pushActivity } = party;
+  const [collapsed, setCollapsed] = useState(false);
+  const [seenMessages, setSeenMessages] = useState(0);
+  const messageCount = party.messages.length;
+  const chatVisible = !collapsed && tab === 'chat';
+  const unread = chatVisible ? 0 : Math.max(0, messageCount - seenMessages);
 
   useEffect(() => {
-    const current = new Set(viewers.map((viewer) => viewer.clientId));
-    const previous = seenRef.current;
-    seenRef.current = current;
-    if (!previous) return;
-    const joined = viewers.filter((viewer) => !previous.has(viewer.clientId));
-    const left = [...previous].filter((id) => !current.has(id));
-    const id = setTimeout(() => {
-      joined.forEach((viewer) => pushActivity(`${viewer.name} joined`));
-      if (left.length) pushActivity(`${left.length} ${left.length === 1 ? 'viewer' : 'viewers'} left`);
-    }, 0);
+    if (!chatVisible) return;
+    const id = setTimeout(() => setSeenMessages(messageCount), 0);
     return () => clearTimeout(id);
-  }, [pushActivity, viewers]);
+  }, [chatVisible, messageCount]);
 
   const copyInvite = useCallback(async () => {
     const url = new URL(party.party?.watchPath ?? window.location.pathname, window.location.origin);
@@ -798,6 +912,52 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
     { icon: MessageCircle, id: 'chat', label: 'Chat' },
     { icon: Radio, id: 'activity', label: 'Activity' },
   ];
+
+  if (collapsed) {
+    return (
+      <aside
+        aria-label="Watch party (collapsed)"
+        className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#0b0b0b] p-2 landscape:h-full landscape:w-16 landscape:flex-col landscape:border-l landscape:border-t-0 landscape:py-3"
+      >
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-label="Show watch party panel"
+          title="Show watch party panel"
+          className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <PanelRightOpen className="h-5 w-5" />
+        </button>
+        <span className="flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-1 text-[11px] font-black text-white landscape:flex-col landscape:gap-0.5 landscape:rounded-lg landscape:px-1.5">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+          <span className="tabular-nums">{viewers.length}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setTab('chat');
+            setCollapsed(false);
+          }}
+          aria-label={unread ? `Open chat, ${unread} unread` : 'Open chat'}
+          className="relative flex h-10 w-10 items-center justify-center rounded-lg text-zinc-300 hover:bg-white/10 hover:text-white"
+        >
+          <MessageCircle className="h-5 w-5" />
+          {unread ? (
+            <span className="absolute -right-1 -top-1 min-w-[1.1rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-bold text-white">
+              {unread > 99 ? '99+' : unread}
+            </span>
+          ) : null}
+        </button>
+        <ul className="ml-auto flex -space-x-2 landscape:ml-0 landscape:mt-auto landscape:flex-col landscape:space-x-0 landscape:-space-y-2">
+          {viewers.slice(0, 4).map((viewer) => (
+            <li key={viewer.clientId} className={`relative h-8 w-8 overflow-hidden rounded-full bg-zinc-800 ring-2 ${viewer.role === 'host' ? 'ring-red-600' : 'ring-[#0b0b0b]'}`} title={viewer.name}>
+              {viewer.image ? <Image src={viewer.image} alt="" fill sizes="32px" className="object-cover" /> : null}
+            </li>
+          ))}
+        </ul>
+      </aside>
+    );
+  }
 
   return (
     <aside
@@ -820,6 +980,15 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
             </p>
           </div>
           <div className="flex shrink-0 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              aria-label="Hide watch party panel"
+              title="Hide panel"
+              className="flex items-center rounded-md bg-white/10 px-2 py-1.5 text-white hover:bg-white/20"
+            >
+              <PanelRightClose className="h-3.5 w-3.5" />
+            </button>
             <button
               type="button"
               onClick={() => void copyInvite()}
@@ -871,6 +1040,9 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
           >
             <Icon className="h-3.5 w-3.5" />
             {label}
+            {id === 'chat' && unread ? (
+              <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">{unread > 99 ? '99+' : unread}</span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -935,49 +1107,25 @@ function PartyTimeline() {
 }
 
 function PartyChat() {
-  const { data: session } = useSession();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, selfId, sendChat } = useParty();
   const [draft, setDraft] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { historyBeforeSubscribe, sendMessage } = useMessages({
-    listener: (event) => {
-      if (event.type !== ChatMessageEventType.Created) return;
-      setMessages((current) => (current.some((item) => item.serial === event.message.serial) ? current : [...current, event.message].slice(-200)));
-    },
-  });
-
-  useEffect(() => {
-    if (!historyBeforeSubscribe) return;
-    let cancelled = false;
-    void historyBeforeSubscribe({ limit: 50 })
-      .then((page) => {
-        if (cancelled) return;
-        setMessages((current) => {
-          const known = new Set(current.map((item) => item.serial));
-          return [...page.items.filter((item) => !known.has(item.serial)).reverse(), ...current];
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [historyBeforeSubscribe]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ behavior: 'smooth', top: listRef.current.scrollHeight });
   }, [messages.length]);
 
   const send = useCallback(() => {
-    const text = draft.trim().slice(0, 500);
+    const text = draft.trim();
     if (!text) return;
     setDraft('');
-    void sendMessage({
-      metadata: { image: session?.user?.image ?? null, name: session?.user?.name ?? 'Viewer' },
-      text,
-    }).catch(() => setDraft(text));
-  }, [draft, sendMessage, session?.user?.image, session?.user?.name]);
-
-  const selfId = session?.user?.id;
+    setNotice(null);
+    sendChat(text).catch((error: unknown) => {
+      setDraft(text);
+      setNotice(error instanceof Error && error.message === 'Slow down' ? 'You are sending messages too fast.' : 'Message not sent. Try again.');
+    });
+  }, [draft, sendChat]);
 
   return (
     <>
@@ -992,7 +1140,7 @@ function PartyChat() {
                 {meta.image ? <Image src={meta.image} alt="" fill sizes="28px" className="object-cover" /> : null}
               </span>
               <div className="min-w-0 max-w-[80%]">
-                <p className="text-[10px] font-semibold text-zinc-500">{mine ? 'You' : meta.name ?? 'Viewer'}</p>
+                <p className="text-[10px] font-semibold text-zinc-400">{mine ? 'You' : meta.name ?? 'Viewer'}</p>
                 <p className={`mt-0.5 inline-block whitespace-pre-wrap break-words rounded-2xl px-3 py-1.5 text-left text-sm ${mine ? 'rounded-tr-sm bg-red-600 text-white' : 'rounded-tl-sm bg-white/10 text-zinc-100'}`}>
                   {message.text}
                 </p>
@@ -1001,6 +1149,7 @@ function PartyChat() {
           );
         })}
       </div>
+      {notice ? <p role="status" className="px-3 pb-1 text-[11px] text-amber-300">{notice}</p> : null}
       <form
         className="flex gap-2 border-t border-white/10 p-2"
         onSubmit={(event) => {
@@ -1014,7 +1163,7 @@ function PartyChat() {
           maxLength={500}
           placeholder="Message the party…"
           aria-label="Chat message"
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white/30 focus:outline-none"
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-zinc-400 focus:border-white/30 focus:outline-none"
         />
         <button type="submit" aria-label="Send message" disabled={!draft.trim()} className="rounded-lg bg-white px-3 text-black disabled:opacity-40">
           <Send className="h-4 w-4" />

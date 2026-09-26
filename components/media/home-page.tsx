@@ -47,7 +47,6 @@ function SearchResultCard({
     <button
       type="button"
       onClick={() => onSelect(entry)}
-      aria-label={`Show details for ${entry.title}`}
       className="group flex w-full gap-3 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-left shadow-[0_14px_45px_rgba(0,0,0,0.28)] transition hover:-translate-y-0.5 hover:border-white/18 hover:bg-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red sm:gap-4 sm:rounded-xl sm:p-4"
     >
       <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-800 ring-1 ring-white/10 sm:h-28 sm:w-20 md:h-32 md:w-24">
@@ -160,7 +159,9 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   useEffect(() => {
     const returnEntry = consumePlaybackReturn(experience.id);
-    if (returnEntry) setSelectedEntry(returnEntry);
+    if (!returnEntry) return;
+    const id = setTimeout(() => setSelectedEntry(returnEntry), 0);
+    return () => clearTimeout(id);
   }, [experience.id]);
 
   const closeSearch = useCallback(() => {
@@ -387,7 +388,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             <div className="safe-page-x flex-1 overflow-y-auto py-5 sm:py-6">
               <div className="mx-auto max-w-4xl">
                 {!debouncedQuery ? (
-                  <p className="mt-10 text-center text-sm text-zinc-600">{experience.emptySearchText}</p>
+                  <p className="mt-10 text-center text-sm text-zinc-400">{experience.emptySearchText}</p>
                 ) : isSearchPending ? (
                   <p className="text-center text-sm text-zinc-500">Searching...</p>
                 ) : searchResults.length === 0 && searchPeople.length === 0 ? (
@@ -475,7 +476,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         recentlyWatched={recentlyWatched}
       />
 
-      <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-600 md:px-12">
+      <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-400 md:px-12">
         {experience.footerText}
       </footer>
 

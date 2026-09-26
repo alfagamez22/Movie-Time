@@ -338,7 +338,7 @@ function AnimeEpisodeStill({
       fill
       sizes="(max-width: 640px) 128px, 144px"
       className="object-cover transition duration-300 group-hover:scale-[1.03]"
-      priority={priority}
+      preload={priority}
       onError={() => {
         if (src && resolvedSrc === src) setFailedSrc(src);
       }}

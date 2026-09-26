@@ -11,7 +11,7 @@
     "db:split:couchbase": "node scripts/split-couchbase-collections.mjs",
     "db:verify:couchbase": "node scripts/verify-couchbase-migration.mjs",
     "lint": "eslint .",
-    "test": "node --test tests/config.test.mjs tests/embed-url.test.mjs tests/anime-episodes.test.mjs tests/tmdb-release-filter.test.mjs tests/tmdb-sections.test.mjs tests/watch-history.test.mjs tests/image-disk-cache.test.mjs tests/recently-watched-tombstone.test.mjs tests/manga-routes.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs",
+    "test": "node --test tests/config.test.mjs tests/embed-url.test.mjs tests/anime-episodes.test.mjs tests/tmdb-release-filter.test.mjs tests/tmdb-sections.test.mjs tests/watch-history.test.mjs tests/image-disk-cache.test.mjs tests/recently-watched-tombstone.test.mjs tests/manga-routes.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs tests/party-sync.test.mjs tests/rate-limit.test.mjs",
     "typecheck": "tsc --noEmit",
     "validate": "npm run lint && npm run build",
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\""

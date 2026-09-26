@@ -31,7 +31,7 @@ function PartyCard({ party }: { party: PublicParty }) {
   return (
     <Link
       href={joinHref(party)}
-      aria-label={`Join ${party.hostName}'s watch party for ${party.title}`}
+      title={`Join ${party.hostName}'s watch party`}
       className="cinema-card group relative block shrink-0 overflow-hidden rounded-lg bg-zinc-900 ring-1 ring-red-600/30 transition duration-200 hover:-translate-y-1 hover:ring-2 hover:ring-red-500 focus-visible:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
     >
       <div className="relative aspect-video">

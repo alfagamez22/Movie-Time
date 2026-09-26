@@ -38,3 +38,12 @@ tsconfig.tsbuildinfo
 
 # On-disk TMDB image cache (regenerated on first request)
 public/.img-cache/
+
+# Local secrets and tool state — never commit
+/credentials.txt
+*.credentials.txt
+.harness-mem/
+.claude/settings.local.json
+
+# The project installs with pnpm (see pnpm-lock.yaml); npm's lockfile only drifts.
+package-lock.json

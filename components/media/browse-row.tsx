@@ -129,7 +129,6 @@ function PosterCard({
     return (
       <article className="cinema-card group relative shrink-0">
         <button type="button" onClick={() => onSelect(entry)}
-          aria-label={`Show details for ${entry.title}`}
           className="cinema-card-button block w-full overflow-hidden rounded-xl bg-[#181818] text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
           <div className="relative aspect-video overflow-hidden bg-zinc-900">
             {hasPortraitOnly ? (
@@ -171,7 +170,6 @@ function PosterCard({
       <button
         type="button"
         onClick={() => onSelect(entry)}
-        aria-label={`Show details for ${entry.title}`}
         className={`relative w-full overflow-hidden text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red ${
           isRecentlyWatched
             ? 'rounded-xl bg-zinc-950 shadow-[0_18px_50px_rgba(0,0,0,0.45)] ring-1 ring-white/10 transition-transform duration-300 hover:-translate-y-1 hover:ring-white/20'

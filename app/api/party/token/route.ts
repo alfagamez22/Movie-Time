@@ -1,6 +1,8 @@
 import * as Ably from 'ably';
 import { NextResponse } from 'next/server';
 
+import { rateLimit } from '@/lib/rate-limit';
+
 import { auth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +10,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: 'Sign in to join a watch party.' }, { status: 401 });
+  const limited = rateLimit('party-token', session.user.id, 20, 60_000);
+  if (limited) return limited;
 
   const key = process.env.ABLY_API_KEY?.trim();
   if (!key) return NextResponse.json({ error: 'Watch party is not configured.' }, { status: 503 });

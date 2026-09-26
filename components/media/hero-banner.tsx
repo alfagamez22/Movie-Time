@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
@@ -94,7 +95,7 @@ export function HeroBanner({
       }}
     >
       {/* Crossfading backdrop */}
-      <AnimatePresence mode="sync">
+      <AnimatePresence mode="sync" initial={false}>
         <motion.div
           key={activeIndex}
           initial={{ opacity: 0 }}
@@ -104,10 +105,16 @@ export function HeroBanner({
           className="absolute inset-0"
         >
           {heroImageUrl ? (
-            <div
+            <Image
+              src={heroImageUrl}
+              alt=""
               aria-hidden="true"
-              className="absolute inset-0 bg-cover bg-[position:70%_20%]"
-              style={{ backgroundImage: `url("${heroImageUrl}")` }}
+              fill
+              preload={activeIndex === 0}
+              loading={activeIndex === 0 ? 'eager' : 'lazy'}
+              fetchPriority={activeIndex === 0 ? 'high' : 'auto'}
+              sizes="100vw"
+              className="object-cover object-[70%_20%]"
             />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />
@@ -118,7 +125,7 @@ export function HeroBanner({
       {/* Foreground content */}
       <div className="browse-hero-content absolute inset-0 flex items-end">
         <div className="mx-auto w-full max-w-7xl px-6 md:px-12">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={`content-${activeIndex}`}
               initial={{ opacity: 0, y: 22 }}
@@ -209,17 +216,22 @@ export function HeroBanner({
 
       {/* Dot indicators */}
       {count > 1 ? (
-        <div className="browse-hero-dots absolute right-6 flex gap-2 md:right-12">
+        <div className="browse-hero-dots absolute right-6 flex gap-0.5 md:right-12">
           {items.map((item, i) => (
             <button
               key={`${item.provider}:${item.type}:${item.id}`}
               type="button"
               onClick={() => go(i)}
               aria-label={`Show ${item.title}`}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === activeIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
-              }`}
-            />
+              aria-current={i === activeIndex ? 'true' : undefined}
+              className="group/dot flex h-6 min-w-6 items-center justify-center"
+            >
+              <span
+                className={`block h-1.5 rounded-full transition-all duration-300 ${
+                  i === activeIndex ? 'w-6 bg-white' : 'w-1.5 bg-white/40 group-hover/dot:bg-white/70'
+                }`}
+              />
+            </button>
           ))}
         </div>
       ) : null}

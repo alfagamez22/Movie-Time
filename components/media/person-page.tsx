@@ -88,7 +88,7 @@ export function PersonPage({ experience, person }: { experience: MediaExperience
         <div className="relative mx-auto flex max-w-[1800px] flex-col items-center gap-6 px-4 pb-10 pt-[calc(env(safe-area-inset-top)+5.5rem)] text-center sm:flex-row sm:items-end sm:text-left md:gap-10 md:px-12 md:pb-14 md:pt-36">
           <div className="relative aspect-[2/3] w-36 shrink-0 overflow-hidden rounded-xl bg-zinc-900 shadow-2xl ring-1 ring-white/15 sm:w-44 md:w-56">
             {person.profileUrl ? (
-              <Image src={person.profileUrl} alt={person.name} fill priority sizes="224px" className="object-cover" />
+              <Image src={person.profileUrl} alt={person.name} fill preload sizes="224px" className="object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center p-4 text-center text-sm font-semibold text-zinc-500">{person.name}</div>
             )}

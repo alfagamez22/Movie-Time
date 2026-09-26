@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 
+import { clientIp, rateLimit } from '@/lib/rate-limit';
+
 import { findGenreTile, getGenreTitles, parseGenreSort } from '@/lib/tmdb/genres';
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const limited = rateLimit('genres', clientIp(request), 120, 60_000);
+  if (limited) return limited;
   const tile = await findGenreTile((await params).slug);
   if (!tile) return NextResponse.json({ error: 'Unknown genre' }, { status: 404 });
 

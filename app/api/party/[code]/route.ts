@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { rateLimit } from '@/lib/rate-limit';
+
 import { auth } from '@/lib/auth';
 import { getParty, updateParty } from '@/lib/party/store';
 import type { WatchParty } from '@/lib/party/types';
@@ -25,6 +27,8 @@ export async function PATCH(request: Request, { params }: Params) {
   const party = await getParty((await params).code.toUpperCase());
   if (!party) return NextResponse.json({ error: 'Party not found.' }, { status: 404 });
   if (party.hostId !== session?.user?.id) return NextResponse.json({ error: 'Only the host can change the party.' }, { status: 403 });
+  const limited = rateLimit('party-update', party.hostId, 12, 60_000);
+  if (limited) return limited;
 
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const watchPath = typeof body?.watchPath === 'string' && body.watchPath.startsWith('/') && !body.watchPath.startsWith('//')

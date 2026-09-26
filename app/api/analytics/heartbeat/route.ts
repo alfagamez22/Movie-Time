@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { clientIp, rateLimit } from '@/lib/rate-limit';
+
 import { getRequestMeta } from '@/lib/analytics/request-meta';
 import { recordHeartbeat } from '@/lib/analytics/store';
 import { auth } from '@/lib/auth';
@@ -21,6 +23,8 @@ function readVisitorCookie(request: Request): string | null {
 }
 
 export async function POST(request: Request) {
+  const limited = rateLimit('heartbeat', clientIp(request), 20, 60_000);
+  if (limited) return limited;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const sessionId = text(body?.sessionId, 64);
   const mediaId = text(body?.mediaId);

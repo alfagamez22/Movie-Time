@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { rateLimit } from '@/lib/rate-limit';
+
 import { auth } from '@/lib/auth';
 import { getPartyMembers } from '@/lib/party/ably';
 import { getParty, updateParty } from '@/lib/party/store';
@@ -11,6 +13,8 @@ import { getParty, updateParty } from '@/lib/party/store';
 export async function POST(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 });
+  const limited = rateLimit('party-claim', session.user.id, 10, 60_000);
+  if (limited) return limited;
 
   const party = await getParty((await params).code.toUpperCase());
   if (!party || party.endedAt) return NextResponse.json({ error: 'Party not found.' }, { status: 404 });
