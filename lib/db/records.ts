@@ -49,11 +49,16 @@ export async function findRecords<T extends AppRecord>(
   const collections = collectionsForRecord(type, filters);
   const results = await Promise.all(collections.map(async (name) => {
     const query = `SELECT d.* FROM ${quoteIdentifier(bucket.name)}.${quoteIdentifier(scope.name)}.${quoteIdentifier(name)} AS d WHERE ${where.join(' AND ')}${order}${limit}`;
-    const result = await cluster.query<T>(query, {
-      parameters,
-      scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency,
-    });
-    return result.rows;
+    try {
+      const result = await cluster.query<T>(query, {
+        parameters,
+        scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency,
+      });
+      return result.rows;
+    } catch (error) {
+      console.error('Couchbase record query failed', { collection: name, type, error: error instanceof Error ? error.name : 'UnknownError' });
+      throw error;
+    }
   }));
   const rows = results.flat();
   if (options.orderBy) {

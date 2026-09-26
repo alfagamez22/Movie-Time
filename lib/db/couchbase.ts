@@ -16,15 +16,31 @@ export async function getCouchbase() {
   if (!globalState.papiflixCouchbase) {
     globalState.papiflixCouchbase = (async () => {
       const { connect } = await import('couchbase');
-      return connect(requiredEnvironment('COUCHBASE_CONNECTION_STRING'), {
-        username: requiredEnvironment('COUCHBASE_USERNAME'),
-        password: requiredEnvironment('COUCHBASE_PASSWORD'),
-        configProfile: 'wanDevelopment',
-      }).then((cluster) => {
+      const connectionString = requiredEnvironment('COUCHBASE_CONNECTION_STRING');
+      let cluster: Cluster;
+      try {
+        cluster = await connect(connectionString, {
+          username: requiredEnvironment('COUCHBASE_USERNAME'),
+          password: requiredEnvironment('COUCHBASE_PASSWORD'),
+          configProfile: 'wanDevelopment',
+        });
+      } catch (error) {
+        console.error('Couchbase bootstrap failed', {
+          phase: 'connect',
+          error: error instanceof Error ? error.name : 'UnknownError',
+          validScheme: /^couchbases?:\/\//.test(connectionString),
+          wrappedInQuotes: /^['"]|['"]$/.test(connectionString),
+        });
+        throw error;
+      }
+      try {
         const bucket = cluster.bucket(requiredEnvironment('COUCHBASE_BUCKET'));
         const scope = bucket.scope(process.env.COUCHBASE_SCOPE?.trim() || '_default');
         return { bucket, cluster, scope };
-      });
+      } catch (error) {
+        console.error('Couchbase bootstrap failed', { phase: 'bucket-or-scope', error: error instanceof Error ? error.name : 'UnknownError' });
+        throw error;
+      }
     })().catch((error: unknown) => {
       globalState.papiflixCouchbase = undefined;
       throw error;
