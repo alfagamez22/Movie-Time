@@ -90,6 +90,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
+  const user = await readRecord<CommentUser>('user', session.user.id);
+  if (!user) return NextResponse.json({ error: 'User record not found.' }, { status: 404 });
+
   const comment = await saveRecord('mediaComment', randomUUID(), {
     userId: session.user.id,
     mediaId: body.mediaId,
@@ -101,8 +104,5 @@ export async function POST(request: Request) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
-  const user = await readRecord<CommentUser>('user', session.user.id);
-
-  if (!user) return NextResponse.json({ error: 'User record not found.' }, { status: 404 });
   return NextResponse.json({ comment: serializeComment({ ...comment, user } as CommentWithUser, session.user.id) }, { status: 201 });
 }

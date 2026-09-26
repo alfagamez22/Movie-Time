@@ -446,6 +446,7 @@ function StandardWatchPlayer({
     }
 
     hasIframeLoadedRef.current = false;
+    lastProgressWriteRef.current = 0;
     const timeoutId = window.setTimeout(() => {
       if (hasIframeLoadedRef.current) return;
       setIsPlayerLoading(false);
@@ -506,7 +507,12 @@ function StandardWatchPlayer({
       if (!progress) return;
 
       const now = Date.now();
-      if (now - lastProgressWriteRef.current < 5_000 && progress.progressPercent !== 100) return;
+      const playerStatus = isRecord(parsedMessage) && isRecord(parsedMessage.data) &&
+        typeof parsedMessage.data.player_status === 'string'
+        ? parsedMessage.data.player_status.toLowerCase()
+        : '';
+      const isFinalPosition = ['paused', 'seeked', 'completed'].includes(playerStatus);
+      if (now - lastProgressWriteRef.current < 5_000 && !isFinalPosition && progress.progressPercent !== 100) return;
       lastProgressWriteRef.current = now;
 
       trackRecentlyWatched(

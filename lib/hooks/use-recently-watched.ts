@@ -62,6 +62,36 @@ const entryCache = new Map<RecentlyWatchedNamespace, RecentlyWatchedEntry[]>();
 const watchedEpisodesRawValueCache = new Map<RecentlyWatchedNamespace, string>();
 const watchedEpisodesSetCache = new Map<RecentlyWatchedNamespace, Map<string, Set<string>>>();
 const serverHydratedNamespace = new Set<RecentlyWatchedNamespace>();
+const pendingWatchWrites = new Map<string, { entry: RecentlyWatchedEntry; namespace: RecentlyWatchedNamespace; active: boolean }>();
+
+function queueWatchWrite(entry: RecentlyWatchedEntry, namespace: RecentlyWatchedNamespace) {
+  const key = `${namespace}:${entry.provider}:${entry.type}:${entry.id}`;
+  const pending = pendingWatchWrites.get(key) ?? { entry, namespace, active: false };
+  pending.entry = entry;
+  pendingWatchWrites.set(key, pending);
+  if (pending.active) return;
+
+  pending.active = true;
+  void (async () => {
+    try {
+      while (pendingWatchWrites.get(key) === pending) {
+        const next = pending.entry;
+        const response = await fetch('/api/watch-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entry: next, experience: namespace }),
+        });
+        if (!response.ok) break;
+        if (pending.entry === next) break;
+      }
+    } catch {
+      // The local entry remains available for the next account sync.
+    } finally {
+      if (pendingWatchWrites.get(key) === pending) pendingWatchWrites.delete(key);
+      pending.active = false;
+    }
+  })();
+}
 
 function getNamespacePrefix(namespace: RecentlyWatchedNamespace): string {
   if (namespace === 'papianime') {
@@ -516,11 +546,27 @@ export function trackRecentlyWatched(
     return;
   }
 
-  fetch('/api/watch-history', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entry: nextEntry, experience: namespace }),
-  }).catch(() => {});
+  queueWatchWrite(nextEntry, namespace);
+}
+
+export function clearAccountWatchHistory() {
+  if (!isBrowser()) return;
+  for (const namespace of ['papiflix', 'papianime', 'papimanga'] as const) {
+    const keys = getNamespaceKeys(namespace);
+    try {
+      sessionStorage.removeItem(keys.recentlyWatchedStorageKey);
+      localStorage.removeItem(keys.watchedEpisodesStorageKey);
+    } catch {
+      // In-memory state and the cookie can still be cleared when storage is unavailable.
+    }
+    document.cookie = `${keys.recentlyWatchedCookie}=; Path=/; Max-Age=0; SameSite=Lax`;
+    rawValueCache.delete(namespace);
+    entryCache.delete(namespace);
+    watchedEpisodesRawValueCache.delete(namespace);
+    watchedEpisodesSetCache.delete(namespace);
+    serverHydratedNamespace.delete(namespace);
+    window.dispatchEvent(new Event(keys.eventName));
+  }
 }
 
 export function getRecentlyWatchedEntry(

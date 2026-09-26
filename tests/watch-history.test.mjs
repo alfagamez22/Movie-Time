@@ -100,6 +100,26 @@ test('shouldApplyIncomingProgress keeps existing when incoming is stale', () => 
   assert.equal(decision.merged.progressPercent, 80);
 });
 
+test('shouldApplyIncomingProgress saves a newer backward seek', () => {
+  const existing = { durationSeconds: 1200, progressPercent: 80, progressSeconds: 960 };
+  const incoming = { durationSeconds: 1200, progressPercent: 25, progressSeconds: 300 };
+
+  assert.deepEqual(watchHistory.shouldApplyIncomingProgress(existing, incoming, 2000, 1000), {
+    isNewer: true,
+    merged: incoming,
+  });
+  assert.deepEqual(watchHistory.shouldApplyIncomingProgress(existing, incoming, 500, 1000), {
+    isNewer: false,
+    merged: existing,
+  });
+  assert.deepEqual(watchHistory.shouldApplyIncomingProgress(existing, {
+    ...incoming, progressSeconds: 1100, progressPercent: 92,
+  }, 500, 1000), {
+    isNewer: false,
+    merged: existing,
+  });
+});
+
 test('shouldApplyIncomingProgress merges higher progress without losing existing data', () => {
   const existing = watchHistory.normalizeProgress({
     durationSeconds: 1000,
@@ -256,6 +276,20 @@ test('mergeRecentlyWatched prefers the newer entry and merges progress maximums'
   assert.equal(merged[0].watchedAt, 2000);
   assert.equal(merged[0].progressPercent, 50);
   assert.equal(merged[0].progressSeconds, 600);
+});
+
+test('mergeRecentlyWatched keeps the last position after a backward seek', () => {
+  const base = {
+    id: 'tt-1', provider: 'tmdb', title: 'Example', type: 'movie', synopsis: '', watchedAt: 1000,
+    progressSeconds: 900, progressPercent: 75,
+  };
+  const [merged] = recentlyWatched.mergeRecentlyWatched({
+    localEntries: [base],
+    preferServer: true,
+    serverEntries: [{ ...base, progressSeconds: 300, progressPercent: 25, watchedAt: 2000 }],
+  });
+  assert.equal(merged.progressSeconds, 300);
+  assert.equal(merged.progressPercent, 25);
 });
 
 test('mergeRecentlyWatched fills missing fields from local when server has them', () => {

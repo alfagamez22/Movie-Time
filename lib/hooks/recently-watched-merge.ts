@@ -193,14 +193,12 @@ export function mergeRecentlyWatched({ localEntries, preferServer, serverEntries
         id: entry.id,
         malId: entry.malId ?? existing.malId,
         posterUrl: entry.posterUrl ?? existing.posterUrl,
-        progressPercent:
-          typeof entry.progressPercent === 'number'
-            ? Math.max(entry.progressPercent, existing.progressPercent ?? 0)
-            : existing.progressPercent,
-        progressSeconds:
-          typeof entry.progressSeconds === 'number'
-            ? Math.max(entry.progressSeconds, existing.progressSeconds ?? 0)
-            : existing.progressSeconds,
+        progressPercent: entry.watchedAt >= existing.watchedAt
+          ? entry.progressPercent ?? existing.progressPercent
+          : existing.progressPercent ?? entry.progressPercent,
+        progressSeconds: entry.watchedAt >= existing.watchedAt
+          ? entry.progressSeconds ?? existing.progressSeconds
+          : existing.progressSeconds ?? entry.progressSeconds,
         provider: entry.provider,
         rating: entry.rating ?? existing.rating,
         season: entry.season ?? existing.season,

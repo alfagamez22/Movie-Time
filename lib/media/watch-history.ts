@@ -78,9 +78,14 @@ export function shouldApplyIncomingProgress(
   existing: NormalizedProgressFields | null,
   incoming: NormalizedProgressFields,
   incomingWatchedAt: number,
+  existingWatchedAt = 0,
 ): MergeDecision {
   if (!existing) {
     return { isNewer: true, merged: incoming };
+  }
+
+  if (existingWatchedAt > 0 && incomingWatchedAt < existingWatchedAt) {
+    return { isNewer: false, merged: existing };
   }
 
   const existingPercent = existing.progressPercent ?? 0;
@@ -90,6 +95,9 @@ export function shouldApplyIncomingProgress(
   const isStale = percentDrop > PROGRESS_DROP_PERCENT || secondsDrop > PROGRESS_MERGE_EPSILON_SECONDS * 5;
 
   if (isStale) {
+    if (existingWatchedAt > 0 && incomingWatchedAt > existingWatchedAt && incoming.progressSeconds > 0) {
+      return { isNewer: true, merged: incoming };
+    }
     return { isNewer: false, merged: existing };
   }
 
@@ -116,8 +124,10 @@ export async function upsertWatchHistoryWithProgress(
   experience: string,
 ): Promise<UpsertHistoryResult> {
   const normalized = normalizeProgress(entry);
-  const watchedAt = entry.watchedAt ? new Date(entry.watchedAt) : new Date();
-  const incomingWatchedAtMs = entry.watchedAt ?? Date.now();
+  const incomingWatchedAtMs = typeof entry.watchedAt === 'number' && Number.isFinite(entry.watchedAt) &&
+    entry.watchedAt > 0 && entry.watchedAt <= Date.now() + 60_000
+    ? entry.watchedAt : Date.now();
+  const watchedAt = new Date(incomingWatchedAtMs);
   const completed = isCompleted(normalized.progressPercent, normalized.progressSeconds, normalized.durationSeconds);
 
   const progressKey = {
@@ -134,10 +144,13 @@ export async function upsertWatchHistoryWithProgress(
     mediaProvider: entry.provider,
     mediaType: entry.type,
   };
-  const existingProgress = await findRecord<AppRecord & {
-    id: string; durationSeconds: number | null; progressPercent: number; progressSeconds: number;
-    posterUrl: string | null; backdropUrl: string | null; completed: boolean;
-  }>('watchProgress', progressKey);
+  const [existingProgress, existingHistory] = await Promise.all([
+    findRecord<AppRecord & {
+      id: string; durationSeconds: number | null; progressPercent: number; progressSeconds: number;
+      posterUrl: string | null; backdropUrl: string | null; completed: boolean;
+    }>('watchProgress', progressKey),
+    findRecord<AppRecord & { id: string }>('watchHistory', historyKey),
+  ]);
 
   const decision = shouldApplyIncomingProgress(
     existingProgress
@@ -149,10 +162,18 @@ export async function upsertWatchHistoryWithProgress(
       : null,
     normalized,
     incomingWatchedAtMs,
+    existingProgress?.watchedAt ? new Date(existingProgress.watchedAt as string).getTime() : 0,
   );
 
-  const existingHistory = await findRecord<AppRecord & { id: string }>('watchHistory', historyKey);
   const now = new Date().toISOString();
+  const previousHistoryWatchedAt = existingHistory?.watchedAt
+    ? new Date(existingHistory.watchedAt as string).getTime()
+    : 0;
+  const historyWatchedAt = previousHistoryWatchedAt > incomingWatchedAtMs
+    ? new Date(previousHistoryWatchedAt).toISOString()
+    : watchedAt.toISOString();
+  const progressWatchedAt = decision.isNewer ? watchedAt.toISOString() :
+    (existingProgress?.watchedAt as string | undefined) ?? watchedAt.toISOString();
   const record = await saveRecord('watchHistory', existingHistory?.id ?? stableRecordId(...Object.values(historyKey)), {
     ...existingHistory,
     ...historyKey,
@@ -173,7 +194,7 @@ export async function upsertWatchHistoryWithProgress(
     animeFormat: entry.animeFormat ?? null,
     defaultLanguage: entry.defaultLanguage ?? null,
     episodeCount: entry.episodeCount ?? null,
-    watchedAt: watchedAt.toISOString(),
+    watchedAt: historyWatchedAt,
     createdAt: existingHistory?.createdAt ?? now,
     updatedAt: now,
   }) as AppRecord;
@@ -195,7 +216,7 @@ export async function upsertWatchHistoryWithProgress(
     malId: entry.malId ?? null,
     animeFormat: entry.animeFormat ?? null,
     defaultLanguage: entry.defaultLanguage ?? null,
-    watchedAt: watchedAt.toISOString(),
+    watchedAt: progressWatchedAt,
     createdAt: existingProgress?.createdAt ?? now,
     updatedAt: now,
   }) as AppRecord;

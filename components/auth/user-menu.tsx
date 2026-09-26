@@ -6,6 +6,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Bookmark, LogOut, User } from 'lucide-react';
 import Image from 'next/image';
+import { clearAccountWatchHistory } from '@/lib/hooks/use-recently-watched';
 
 interface UserMenuProps {
   onSignInClick: () => void;
@@ -30,6 +31,7 @@ export function UserMenu({ onSignInClick }: UserMenuProps) {
   const handleSignOut = useCallback(async () => {
     setOpen(false);
     await signOut({ redirect: false });
+    clearAccountWatchHistory();
   }, []);
 
   if (status === 'loading') {
