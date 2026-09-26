@@ -27,6 +27,7 @@ import {
 import { AnimeWatchPlayer } from './anime-watch-player';
 import { PlayerViewControls } from './player-view-controls';
 import type { WatchPlayerProps } from './watch-player.types';
+import { useWatchBeacon } from '@/lib/hooks/use-watch-beacon';
 
 interface NormalizedPlayerProgress {
   durationSeconds?: number;
@@ -379,6 +380,7 @@ function StandardWatchPlayer({
     : 1;
   const safeEpisode = String(Math.min(Math.max(1, Number.parseInt(episode, 10)), safeEpisodeLimit));
   const maxSeasons = isTvEntry(entry) ? entry.maxSeasons : 1;
+  useWatchBeacon({ entry, episode: isSeries ? embedPlayback.episode : null, experience: experience.id, season: isSeries ? embedPlayback.season : null });
 
   const seasonOptions = useMemo(
     () => (isSeries ? Array.from({ length: maxSeasons }, (_, index) => String(index + 1)) : []),

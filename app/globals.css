@@ -274,3 +274,9 @@
     justify-content: center;
   }
 }
+@media (min-width: 1920px) {
+  .dashboard-shell { zoom: 1.2; }
+}
+@media (min-width: 2560px) {
+  .dashboard-shell { zoom: 1.5; }
+}

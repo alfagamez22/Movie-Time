@@ -23,6 +23,7 @@ import {
 
 import type { WatchPlayerProps } from './watch-player.types';
 import { PlayerViewControls } from './player-view-controls';
+import { useWatchBeacon } from '@/lib/hooks/use-watch-beacon';
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 const VIDNEST_ORIGIN = 'https://vidnest.fun';
@@ -556,6 +557,7 @@ export function AnimeWatchPlayer({
   const currentLanguage = initialPlayback.language;
 
   const embedUrl = buildVidnestAnimeEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
+  useWatchBeacon({ entry, episode: isSeries ? currentEpisode : null, experience: experience.id, season: isSeries ? currentSeason : null });
 
   useEffect(() => {
     if (!canSyncWatchHistory) return;

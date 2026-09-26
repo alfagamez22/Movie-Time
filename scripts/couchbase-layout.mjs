@@ -38,4 +38,8 @@ export const INDEXES = {
     ['idx_mangadex_progress_episode', ['type', 'userId', 'mediaId', 'mediaProvider', 'mediaType', 'season', 'episode']],
     ['idx_mangadex_comment_media', ['type', 'mediaId', 'mediaType', 'mediaProvider', 'createdAt']],
   ],
+  analytics: [
+    ['idx_analytics_session_seen', ['type', 'lastSeenAt', 'isAdmin', 'country', 'experience']],
+    ['idx_analytics_session_user', ['type', 'userId', 'lastSeenAt']],
+  ],
 };
