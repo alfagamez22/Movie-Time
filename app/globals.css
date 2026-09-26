@@ -133,3 +133,144 @@
     -webkit-tap-highlight-color: rgba(229, 9, 20, 0.24);
   }
 }
+
+/* Shared PapiFlix and PapiAnime browse treatment; PapiManga keeps its reader layout. */
+[data-browse-theme='cinema'] {
+  background: #0b0b0d;
+}
+[data-browse-theme='cinema'] > header {
+  background: linear-gradient(#0b0b0df5, #0b0b0dcc 65%, transparent);
+}
+[data-browse-theme='cinema'] > header > div {
+  max-width: 1800px;
+}
+[data-browse-theme='cinema'] nav {
+  gap: clamp(0.75rem, 1.7vw, 2rem);
+  white-space: nowrap;
+}
+[data-browse-theme='cinema'] nav a {
+  padding-block: 0.65rem;
+  font-size: 0.85rem;
+}
+[data-browse-theme='cinema'] nav a:first-child {
+  color: white;
+  border-bottom: 2px solid white;
+}
+.browse-hero {
+  --hero-safe-bottom: 5.5rem;
+  height: 78svh;
+  min-height: 560px;
+  max-height: 900px;
+}
+.browse-hero-content {
+  padding-top: 5.5rem;
+  padding-bottom: var(--hero-safe-bottom);
+}
+.browse-hero-dots {
+  bottom: calc(var(--hero-safe-bottom) + 1rem);
+}
+@media (orientation: landscape) and (max-height: 540px) {
+  .browse-hero {
+    --hero-safe-bottom: 3rem;
+    height: 100svh;
+    min-height: 340px;
+  }
+  .browse-hero-content { padding-top: 4rem; }
+  .browse-hero p { display: none; }
+}
+@media (min-width: 1920px) {
+  .browse-hero {
+    --hero-safe-bottom: 7rem;
+    max-height: 1200px;
+  }
+  .browse-hero .max-w-xl { max-width: 48rem; }
+  html [data-browse-theme='cinema'] .browse-hero h1 { font-size: 5rem; }
+  .browse-hero p { font-size: 1.25rem; }
+  .browse-hero a, .browse-hero button { font-size: 1.05rem; }
+}
+.browse-hero a:focus-visible,
+.browse-hero button:focus-visible {
+  outline: 3px solid white;
+  outline-offset: 3px;
+}
+[data-browse-theme='cinema'] .browse-hero h1 {
+  font-size: clamp(2.25rem, 4.6vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+[data-browse-theme='cinema'] .browse-hero .max-w-7xl {
+  max-width: 1800px;
+}
+[data-browse-theme='cinema'] .browse-shelves {
+  position: relative;
+  padding-top: 0;
+  padding-bottom: 4rem;
+  margin-top: calc(-2rem + 30px);
+}
+[data-browse-theme='cinema'] .content-auto-section {
+  contain-intrinsic-size: 290px;
+}
+[data-browse-theme='cinema'] .content-auto-section h2 {
+  font-size: clamp(1.1rem, 1.65vw, 1.5rem);
+  letter-spacing: -0.025em;
+  margin-bottom: 1rem;
+}
+[data-browse-theme='cinema'] .overflow-x-auto {
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 3rem;
+  gap: 1rem;
+  padding-block: 0.4rem 0.8rem;
+}
+.cinema-card {
+  width: clamp(260px, 27vw, 420px);
+  scroll-snap-align: start;
+}
+.cinema-card-button {
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.cinema-card-button:hover,
+.cinema-card-button:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 2px #ffffffbf, 0 14px 30px #0006;
+}
+@media (max-width: 767px) {
+  .browse-hero {
+    --hero-safe-bottom: 4rem;
+    height: 74svh;
+    min-height: 520px;
+  }
+  .browse-hero-dots {
+    right: auto;
+    left: 50%;
+    bottom: 1.25rem;
+    transform: translateX(-50%);
+  }
+  [data-browse-theme='cinema'] .browse-hero h1 {
+    font-size: clamp(1.9rem, 8vw, 2.5rem);
+  }
+  [data-browse-theme='cinema'] .browse-shelves {
+    margin-top: calc(-1rem + 20px);
+  }
+  [data-browse-theme='cinema'] .overflow-x-auto {
+    scroll-padding-inline: 1.25rem;
+    gap: 0.75rem;
+  }
+  .cinema-card { width: 76vw; max-width: 360px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema-card *, .cinema-card-button { transition: none !important; }
+  .cinema-card-button:hover, .cinema-card-button:focus-visible { transform: none; }
+}
+@media (min-width: 768px) and (max-width: 1100px) {
+  [data-browse-theme='cinema'] > header > div > div:first-child {
+    flex-wrap: wrap;
+    height: auto;
+    padding-block: 0.5rem;
+  }
+  [data-browse-theme='cinema'] nav {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+}

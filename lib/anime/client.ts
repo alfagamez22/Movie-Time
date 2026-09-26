@@ -3,10 +3,20 @@ import 'server-only';
 import {
   fetchAnilistBrowseBuckets,
   fetchAnilistMediaById,
+  fetchAnilistRelationsById,
   searchAnilistAnime,
   type AnilistMedia,
   type AnilistMediaDetails,
+  type AnilistRelationEdge,
 } from '@/lib/anime/anilist';
+import { appConfig } from '@/lib/config';
+import {
+  buildAnimePlaylist,
+  isMatchingSeriesTitle,
+  isSeriesRelation,
+  rankAnimeRecommendations,
+  seriesNameKey,
+} from '@/lib/anime/playlist';
 import {
   cleanSynopsis,
   cleanText,
@@ -316,20 +326,68 @@ function mapTrailers(details: AnilistMediaDetails): MediaTrailer[] {
   ];
 }
 
-function mapRecommendations(details: AnilistMediaDetails): LibraryMediaEntry[] {
+function mapRecommendations(details: AnilistMediaDetails, playlistIds: Set<number>): LibraryMediaEntry[] {
   const recommendationEntries = (details.recommendations?.nodes ?? [])
     .map((node) => node.mediaRecommendation)
     .filter((entry): entry is AnilistMedia => Boolean(entry));
-  const relationEntries = (details.relations?.edges ?? [])
-    .map((edge) => edge.node)
-    .filter((entry): entry is AnilistMedia => Boolean(entry));
-
   return dedupeEntries(
-    [...recommendationEntries, ...relationEntries]
-      .filter((entry) => String(entry.id) !== String(details.id))
+    rankAnimeRecommendations(details, recommendationEntries, playlistIds, appConfig.animeIncludeAdult)
       .map((entry) => toLibraryMediaEntry(createAnimeEntry(entry))),
     18,
   );
+}
+
+async function mapAnimeSeries(details: AnilistMediaDetails) {
+  const media = new Map<number, AnilistMedia>([[details.id, details]]);
+  const relations = new Map<number, AnilistRelationEdge[]>([
+    [details.id, details.relations?.edges ?? []],
+  ]);
+  const seen = new Set<number>([details.id]);
+  let frontier = [details.id];
+
+  // Follow a short prequel/sequel chain. AniList keeps each season as a
+  // separate Media ID, so every playlist item retains its own player key.
+  for (let depth = 0; depth < 3 && frontier.length && media.size < 16; depth += 1) {
+    const next: number[] = [];
+    for (const id of frontier) {
+      const edges = relations.get(id) ?? [];
+      for (const edge of edges) {
+        if (!isSeriesRelation(edge) || !edge.node || media.size >= 16) continue;
+        if (!appConfig.animeIncludeAdult && edge.node.isAdult) continue;
+        media.set(edge.node.id, edge.node);
+        if ((edge.relationType === 'PREQUEL' || edge.relationType === 'SEQUEL') &&
+            !seen.has(edge.node.id) && next.length < 6) {
+          seen.add(edge.node.id);
+          next.push(edge.node.id);
+        }
+      }
+    }
+    if (depth === 2) break;
+    const fetched = await Promise.all(next.map(async (id) => {
+      try { return [id, await fetchAnilistRelationsById(id)] as const; }
+      catch { return [id, [] as AnilistRelationEdge[]] as const; }
+    }));
+    for (const [id, edges] of fetched) relations.set(id, edges);
+    frontier = next;
+  }
+
+  // A matching title can fill a missing AniList relation. Keep the match
+  // strict so unrelated titles with similar words are not merged.
+  const titleKey = seriesNameKey(details.title.english || details.title.romaji || getAnilistTitle(details));
+  if (titleKey.length >= 6) {
+    try {
+      const candidates = await searchAnilistAnime(titleKey, 18);
+      for (const item of candidates) {
+        if (media.size >= 16) break;
+        if (isMatchingSeriesTitle(item, titleKey) && (appConfig.animeIncludeAdult || !item.isAdult)) {
+          media.set(item.id, item);
+        }
+      }
+    } catch { /* Relations remain usable when search is unavailable. */ }
+  }
+
+  return buildAnimePlaylist(details.id, media, relations,
+    (item) => toLibraryMediaEntry(createAnimeEntry(item)), appConfig.animeIncludeAdult);
 }
 
 export async function lookupAnimeMediaEntry(id: string): Promise<AnimeLookupResult> {
@@ -453,11 +511,15 @@ export async function lookupAnimeMediaDetails(id: string): Promise<AnimeMediaDet
     return createLookupFailure('AniList details are unavailable right now. Try again later.', 'upstream-error', 502);
   }
 
+  const animePlaylist = await mapAnimeSeries(details);
+  const playlistIds = new Set(animePlaylist.map((item) => Number(item.entry.id)));
+
   return {
     data: {
+      animePlaylist,
       cast: mapCast(details),
       entry: lookup.entry,
-      recommendations: mapRecommendations(details),
+      recommendations: mapRecommendations(details, playlistIds),
       trailers: mapTrailers(details),
     },
     ok: true,

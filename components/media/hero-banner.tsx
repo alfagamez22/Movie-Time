@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -33,6 +33,7 @@ export function HeroBanner({
   watchBasePath,
 }: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
   const count = items.length;
 
   // Auto-advance every 6 seconds; resets whenever activeIndex changes (user nav or auto)
@@ -77,7 +78,20 @@ export function HeroBanner({
   };
 
   return (
-    <div className="relative h-[76dvh] min-h-[620px] w-full overflow-hidden bg-black landscape:h-[86dvh] landscape:min-h-[360px] md:h-[85vh] md:min-h-[560px]">
+    <div
+      className="browse-hero relative w-full touch-pan-y overflow-hidden bg-black"
+      onTouchStart={(event) => {
+        touchStartX.current = event.touches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(event) => {
+        const startX = touchStartX.current;
+        touchStartX.current = null;
+        const endX = event.changedTouches[0]?.clientX;
+        if (startX === null || endX === undefined || count <= 1) return;
+        const delta = endX - startX;
+        if (Math.abs(delta) > 50) go(activeIndex + (delta < 0 ? 1 : -1));
+      }}
+    >
       {/* Crossfading backdrop */}
       <AnimatePresence mode="sync">
         <motion.div
@@ -91,7 +105,7 @@ export function HeroBanner({
           {heroImageUrl ? (
             <div
               aria-hidden="true"
-              className="absolute inset-0 bg-cover bg-center"
+              className="absolute inset-0 bg-cover bg-[position:70%_20%]"
               style={{ backgroundImage: `url("${heroImageUrl}")` }}
             />
           ) : null}
@@ -101,7 +115,7 @@ export function HeroBanner({
       </AnimatePresence>
 
       {/* Foreground content */}
-      <div className="absolute inset-0 flex items-center pb-14 pt-20 landscape:pb-8 landscape:pt-16">
+      <div className="browse-hero-content absolute inset-0 flex items-end">
         <div className="mx-auto w-full max-w-7xl px-6 md:px-12">
           <AnimatePresence mode="wait">
             <motion.div
@@ -116,7 +130,7 @@ export function HeroBanner({
                 {getMediaKindLabel(active)}
               </span>
 
-              <h1 className="text-4xl font-black leading-tight tracking-tight text-white drop-shadow-lg sm:text-5xl md:text-6xl">
+              <h1 title={active.title} className="line-clamp-2 text-4xl font-black leading-tight tracking-tight text-white drop-shadow-lg sm:text-5xl md:text-6xl">
                 {active.title}
               </h1>
 
@@ -175,7 +189,7 @@ export function HeroBanner({
             type="button"
             onClick={() => go(activeIndex - 1)}
             aria-label="Previous title"
-            className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/30 p-2 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+            className="absolute left-3 top-1/2 hidden -translate-y-1/2 rounded-full md:block bg-black/30 p-2 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
@@ -183,7 +197,7 @@ export function HeroBanner({
             type="button"
             onClick={() => go(activeIndex + 1)}
             aria-label="Next title"
-            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/30 p-2 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+            className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-full md:block bg-black/30 p-2 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
           >
             <ChevronRight className="h-6 w-6" />
           </button>
@@ -192,7 +206,7 @@ export function HeroBanner({
 
       {/* Dot indicators */}
       {count > 1 ? (
-        <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 gap-2 landscape:bottom-4">
+        <div className="browse-hero-dots absolute right-6 flex gap-2 md:right-12">
           {items.map((item, i) => (
             <button
               key={`${item.provider}:${item.type}:${item.id}`}

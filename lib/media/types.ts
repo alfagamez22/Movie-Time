@@ -129,10 +129,17 @@ export interface MediaTrailer {
 }
 
 export interface MediaDetailsPayload {
+  animePlaylist?: AnimePlaylistItem[];
   cast: MediaCastMember[];
   entry: MediaEntry;
   recommendations: LibraryMediaEntry[];
   trailers: MediaTrailer[];
+}
+
+export interface AnimePlaylistItem {
+  entry: LibraryMediaEntry;
+  key: string;
+  label: string;
 }
 
 export interface MovieMediaEntry extends MediaEntryBase {

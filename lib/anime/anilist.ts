@@ -31,6 +31,7 @@ export interface AnilistCoverImage {
 }
 
 export interface AnilistMedia {
+  isAdult?: boolean | null;
   averageScore?: number | null;
   bannerImage?: string | null;
   coverImage?: AnilistCoverImage | null;
@@ -56,6 +57,7 @@ export interface AnilistMedia {
   status?: AnilistStatus | null;
   synonyms?: string[] | null;
   title: AnilistTitleGroup;
+  type?: 'ANIME' | 'MANGA' | null;
 }
 
 export interface AnilistCharacterEdge {
@@ -136,6 +138,8 @@ const responseCache = new Map<string, CacheEntry<unknown>>();
 
 const MEDIA_CARD_FRAGMENT = `
   id
+  type
+  isAdult
   idMal
   title {
     romaji
@@ -285,6 +289,23 @@ export async function fetchAnilistMediaById(id: string): Promise<AnilistMediaDet
 
   const result = await requestAnilist<DetailsQueryResult>(query, { id: parsedId });
   return result.Media ?? null;
+}
+
+export async function fetchAnilistRelationsById(id: number): Promise<AnilistRelationEdge[]> {
+  const query = `
+    query AnimeSeriesRelations($id: Int!) {
+      Media(id: $id, type: ANIME) {
+        relations {
+          edges {
+            relationType
+            node { ${MEDIA_CARD_FRAGMENT} }
+          }
+        }
+      }
+    }
+  `;
+  const result = await requestAnilist<{ Media: { relations?: { edges?: AnilistRelationEdge[] } } | null }>(query, { id });
+  return result.Media?.relations?.edges ?? [];
 }
 
 function buildAdultFilter(): string {

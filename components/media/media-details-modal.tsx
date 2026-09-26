@@ -12,6 +12,7 @@ import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
 import {
   getMediaKindLabel,
   isMangaProvider,
+  type AnimePlaylistItem,
   type LibraryMediaEntry,
   type MediaCastMember,
   type MediaDetailsPayload,
@@ -312,6 +313,54 @@ function RecommendationCarousel({
   );
 }
 
+function AnimeSeriesPlaylist({
+  entries,
+  currentId,
+  onSelectEntry,
+}: {
+  entries: AnimePlaylistItem[];
+  currentId: string;
+  onSelectEntry: (entry: LibraryMediaEntry) => void;
+}) {
+  if (entries.length < 2) return null;
+
+  return (
+    <section aria-label="Anime series playlist">
+      <h3 className="mb-1 text-lg font-bold text-white">Series playlist</h3>
+      <p className="mb-4 text-sm text-zinc-400">Each season and movie has its own AniList player ID.</p>
+      <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide">
+        {entries.map(({ entry, key, label }) => {
+          const isCurrent = entry.id === currentId;
+          return (
+            <div key={key} className={`w-40 shrink-0 overflow-hidden rounded-xl border bg-white/[0.035] sm:w-44 ${
+              isCurrent ? 'border-white/70' : 'border-white/10'
+            }`}>
+              <button type="button" onClick={() => onSelectEntry(entry)}
+                aria-label={`View ${label}: ${entry.title}`}
+                className="block w-full text-left focus-visible:outline-2 focus-visible:outline-white">
+                <div className="relative aspect-[2/3] bg-zinc-900">
+                  {entry.posterUrl ? <Image src={entry.posterUrl} alt="" fill sizes="176px" className="object-cover" /> : null}
+                  <span className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                    {label}
+                  </span>
+                </div>
+                <div className="p-3">
+                  <p className="line-clamp-2 min-h-9 text-xs font-semibold leading-tight text-white">{entry.title}</p>
+                  <p className="mt-1 text-[11px] text-zinc-400">{entry.year ?? 'Anime'} · AniList {entry.id}</p>
+                </div>
+              </button>
+              <Link href={buildWatchHref(entry, { basePath: '/anime/watch' })}
+                className="mx-3 mb-3 flex items-center justify-center gap-1 rounded-md bg-white px-2 py-1.5 text-xs font-bold text-black hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-white">
+                <Play className="h-3 w-3 fill-current" /> Play
+              </Link>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function MediaDetailsModal({
   entry,
   experience,
@@ -416,6 +465,7 @@ export function MediaDetailsModal({
   const displayEntry = activeDetails?.entry ?? entry;
   const cast = activeDetails?.cast ?? [];
   const recommendations = activeDetails?.recommendations ?? [];
+  const animePlaylist = activeDetails?.animePlaylist ?? [];
   const trailers = activeDetails?.trailers ?? [];
   const backdropUrl = displayEntry?.backdropUrl ?? entry?.backdropUrl;
   const posterUrl = displayEntry?.posterUrl ?? entry?.posterUrl;
@@ -546,6 +596,14 @@ export function MediaDetailsModal({
                 <h3 className="mb-3 text-base font-bold">Trailers</h3>
                 <TrailerList isLoading={isLoading} onSelectTrailer={openTrailer} trailers={trailers} />
               </section>
+
+              {experience.id === 'papianime' ? (
+                <AnimeSeriesPlaylist
+                  entries={animePlaylist}
+                  currentId={displayEntry.id}
+                  onSelectEntry={selectRecommendation}
+                />
+              ) : null}
 
               {displayEntry ? (
                 <MediaComments

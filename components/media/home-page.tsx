@@ -10,7 +10,6 @@ import { AnimatePresence, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
-// Previous P1–P7 preference UI is retained below as commented reference.
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
@@ -113,67 +112,6 @@ function ExperienceSwitcher({ experience }: { experience: MediaExperienceConfig 
     </select>
   );
 }
-
-/*
-function PreferenceSwitcher({
-  experience,
-  compact = false,
-}: {
-  experience: MediaExperienceConfig;
-  compact?: boolean;
-}) {
-  const { player, setPlayer } = usePlayerPreference();
-
-  if (experience.preferenceMode !== 'player') {
-    return null;
-  }
-
-  // PapiFlix shows P1-P7 (VidFast, VidSrc, Videasy, Vidking, EZVid, FilmU, VidAPI).
-  // PapiAnime uses a separate AnimePlayerSwitcher below — the global player
-  // store is still consulted (it just renders an empty set on the /anime route).
-  // PapiAnimev2 doesn't use multi-player switching.
-  if (experience.id === 'papianime') {
-    return null;
-  }
-
-  if (compact) {
-    return (
-      <select
-        id="papiflix-mobile-player"
-        value={player}
-        onChange={(event) => setPlayer(event.target.value as keyof typeof PLAYER_LABELS)}
-        aria-label="Select playback source"
-        title={`P${player} · ${PLAYER_LABELS[player]}`}
-        className="h-9 max-w-[9.5rem] touch-manipulation rounded-full border border-white/10 bg-black/60 px-3 text-xs font-semibold text-white outline-none backdrop-blur-md focus:border-white/25 focus:ring-2 focus:ring-white/70"
-      >
-        {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
-          <option key={choice} value={choice} className="bg-[#111] text-white">
-            P{choice} · {PLAYER_LABELS[choice]}
-          </option>
-        ))}
-      </select>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-0.5 text-xs">
-      {(['1', '2', '3', '4', '5', '6', '7'] as const).map((choice) => (
-        <button
-          key={choice}
-          type="button"
-          onClick={() => setPlayer(choice)}
-          title={`Switch to ${PLAYER_LABELS[choice]}`}
-          className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
-            player === choice ? 'bg-netflix-red text-white' : 'text-zinc-400 hover:text-white'
-          }`}
-        >
-          P{choice}
-        </button>
-      ))}
-    </div>
-  );
-}
-*/
 
 export function HomePage({ discoveryError, experience, sections }: HomePageProps) {
   const { data: session } = useSession();
@@ -304,12 +242,12 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const matureUnlocked = useMatureUnlocked();
 
   const visibleSections = useMemo(
-    () => filterMatureSections(sections, matureUnlocked),
-    [matureUnlocked, sections],
+    () => experience.id === 'papiflix' ? filterMatureSections(sections, matureUnlocked) : sections,
+    [experience.id, matureUnlocked, sections],
   );
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white">
+    <main className="min-h-screen bg-[#050505] text-white" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
@@ -335,9 +273,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                   {link.label}
                 </Link>
               ))}
-              <Link href="/categories" className="transition-colors hover:text-white">
-                Categories
-              </Link>
+              {experience.id === 'papiflix' ? (
+                <Link href="/categories" className="transition-colors hover:text-white">
+                  Categories
+                </Link>
+              ) : null}
               {isAuthenticated ? (
                 <Link href="/bookmarks" className="transition-colors hover:text-white">
                   Bookmarks
@@ -345,10 +285,11 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
               ) : null}
             </nav>
             <div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
-              <div className="hidden md:block">
-                <MatureToggle />
-              </div>
-              {/* PapiFlix uses one Videasy player; the P1–P7 selector is disabled. */}
+              {experience.id === 'papiflix' ? (
+                <div className="hidden md:block">
+                  <MatureToggle />
+                </div>
+              ) : null}
               <UserMenu onSignInClick={() => openAuthModal('default')} />
               <button
                 type="button"
@@ -362,7 +303,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-center gap-2 md:hidden">
             <ExperienceSwitcher experience={experience} />
-            <MatureToggle />
+            {experience.id === 'papiflix' ? <MatureToggle /> : null}
           </div>
         </div>
       </header>
@@ -437,9 +378,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         </div>
       ) : null}
 
-      <div className="space-y-10 py-8">
+      <div className="browse-shelves space-y-10 py-8">
         {recentlyWatched.length > 0 ? (
           <BrowseRow
+            cinematic={experience.id !== 'papimanga'}
             anchorId="recently-watched"
             key="recently-watched"
             title={experience.id === 'papimanga' ? 'Recently Read' : 'Recently Watched'}
@@ -452,6 +394,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         ) : null}
         {visibleSections.map((section, index) => (
           <BrowseRow
+            cinematic={experience.id !== 'papimanga'}
             anchorId={section.id}
             key={section.id}
             title={section.title}

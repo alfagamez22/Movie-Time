@@ -4,12 +4,13 @@ import Image from 'next/image';
 import { useCallback, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Info, Play, X } from 'lucide-react';
 
-import { isMangaProvider, type LibraryMediaEntry } from '@/lib/media/types';
+import { isAnimeProvider, isMangaProvider, type LibraryMediaEntry } from '@/lib/media/types';
 
 const MAX_LOOPABLE_ENTRIES = 8;
 
 interface BrowseRowProps {
   anchorId?: string;
+  cinematic?: boolean;
   entries: LibraryMediaEntry[];
   loop?: boolean;
   onEntryRemove?: (entry: LibraryMediaEntry) => void;
@@ -104,11 +105,13 @@ function formatNextEpisodeArrival(entry: LibraryMediaEntry): string | null {
 }
 
 function PosterCard({
+  cinematic = false,
   eagerLoadPoster,
   entry,
   onRemove,
   onSelect,
 }: {
+  cinematic?: boolean;
   eagerLoadPoster?: boolean;
   entry: LibraryMediaEntry;
   onRemove?: (entry: LibraryMediaEntry) => void;
@@ -118,6 +121,47 @@ function PosterCard({
   const isRecentlyWatched = Boolean(onRemove);
   const recentLabel = isMangaProvider(entry.provider) ? 'recently read' : 'recently watched';
   const nextEpisodeArrival = formatNextEpisodeArrival(entry);
+
+  if (cinematic) {
+    const artwork = entry.backdropUrl || entry.posterUrl;
+    const isAnime = isAnimeProvider(entry.provider);
+    const hasPortraitOnly = !entry.backdropUrl && Boolean(entry.posterUrl);
+    return (
+      <article className="cinema-card group relative shrink-0">
+        <button type="button" onClick={() => onSelect(entry)}
+          aria-label={`Show details for ${entry.title}`}
+          className="cinema-card-button block w-full overflow-hidden rounded-xl bg-[#181818] text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
+          <div className="relative aspect-video overflow-hidden bg-zinc-900">
+            {hasPortraitOnly ? (
+              <div aria-hidden="true" className="absolute inset-0 scale-125 bg-cover bg-center opacity-45 blur-xl"
+                style={{ backgroundImage: `url("${entry.posterUrl}")` }} />
+            ) : null}
+            {artwork ? <Image src={artwork} alt="" fill
+              sizes="(max-width: 640px) 76vw, (max-width: 1024px) 40vw, 28vw"
+              loading={eagerLoadPoster ? 'eager' : 'lazy'}
+              className={`${hasPortraitOnly ? 'object-contain' : 'object-cover'} transition-transform duration-300 group-hover:scale-105 group-focus-within:scale-105`} /> : null}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
+            <span className="absolute bottom-3 left-4 text-[10px] font-bold uppercase tracking-[0.18em] text-white/80">
+              {isAnime ? (entry.type === 'tv' ? 'Anime series' : 'Anime film') : (entry.type === 'tv' ? 'Series' : 'Film')}
+            </span>
+            <span className="absolute bottom-3 right-3 rounded-full border border-white/40 bg-black/30 p-2 text-white"><Info className="h-4 w-4" /></span>
+            {progress?.percent != null ? <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20"><div className="h-full bg-netflix-red" style={{ width: `${progress.percent}%` }} /></div> : null}
+          </div>
+          <div className="space-y-1.5 px-4 py-3.5">
+            <h3 className="truncate text-sm font-semibold tracking-tight text-white sm:text-base">{entry.title}</h3>
+            <div className="flex min-h-5 items-center gap-2.5 text-xs text-zinc-400">
+              {entry.year ? <span>{entry.year}</span> : null}
+              {typeof entry.rating === 'number' ? <span className="text-emerald-400">★ {entry.rating.toFixed(1)}</span> : null}
+              {progress ? <span className="truncate">{progress.label}</span> : null}
+            </div>
+            {nextEpisodeArrival ? <p className="text-xs text-emerald-400">{nextEpisodeArrival}</p> : null}
+          </div>
+        </button>
+        {onRemove ? <button type="button" onClick={() => onRemove(entry)} aria-label={`Remove ${entry.title} from ${recentLabel}`}
+          className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/75 text-white transition hover:bg-netflix-red focus-visible:outline-2 focus-visible:outline-white"><X className="h-4 w-4" /></button> : null}
+      </article>
+    );
+  }
 
   return (
     <div
@@ -216,13 +260,13 @@ function PosterCard({
   );
 }
 
-export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEntrySelect, prioritizeLeadPoster = false, title }: BrowseRowProps) {
+export function BrowseRow({ cinematic = false, anchorId, entries, loop = true, onEntryRemove, onEntrySelect, prioritizeLeadPoster = false, title }: BrowseRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
   const hasEntries = entries.length > 0;
   // Large TMDB rows become noticeably heavier when tripled for the seamless loop.
-  const shouldLoop = loop && entries.length > 2 && entries.length <= MAX_LOOPABLE_ENTRIES;
+  const shouldLoop = !cinematic && loop && entries.length > 2 && entries.length <= MAX_LOOPABLE_ENTRIES;
 
   // Scroll to the middle copy after mount
   useEffect(() => {
@@ -286,7 +330,7 @@ export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEnt
           type="button"
           onClick={() => scroll('left')}
           aria-label={`Scroll ${title} left`}
-          className="absolute left-0 top-0 z-10 flex h-full w-14 items-center justify-center bg-gradient-to-r from-[#050505] to-transparent opacity-0 transition-opacity group-hover/row:opacity-100"
+          className="absolute left-0 top-0 z-10 flex h-full w-14 items-center justify-center bg-gradient-to-r from-[#050505] to-transparent opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100"
         >
           <ChevronLeft className="h-7 w-7 text-white drop-shadow-md" />
         </button>
@@ -298,6 +342,7 @@ export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEnt
         >
           {rowItems.map((entry, i) => (
             <PosterCard
+              cinematic={cinematic}
               key={`${shouldLoop ? 'loop' : 'single'}-${i}-${entry.provider}:${entry.type}:${entry.id}`}
               eagerLoadPoster={prioritizeLeadPoster && i % entries.length === 0}
               entry={entry}
@@ -312,7 +357,7 @@ export function BrowseRow({ anchorId, entries, loop = true, onEntryRemove, onEnt
           type="button"
           onClick={() => scroll('right')}
           aria-label={`Scroll ${title} right`}
-          className="absolute right-0 top-0 z-10 flex h-full w-14 items-center justify-center bg-gradient-to-l from-[#050505] to-transparent opacity-0 transition-opacity group-hover/row:opacity-100"
+          className="absolute right-0 top-0 z-10 flex h-full w-14 items-center justify-center bg-gradient-to-l from-[#050505] to-transparent opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100"
         >
           <ChevronRight className="h-7 w-7 text-white drop-shadow-md" />
         </button>

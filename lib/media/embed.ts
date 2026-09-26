@@ -246,14 +246,14 @@ export function buildPlayerEmbedUrl(
   return buildVideasyEmbedUrl(entry, options);
 }
 
-export function buildAnimepaheEmbedUrl(
+export function buildVidnestAnimeEmbedUrl(
   anilistId: string,
   episode: string | number,
   language: 'sub' | 'dub',
   startAt: number | null,
 ): string {
   const url = new URL(
-    `https://vidnest.fun/animepahe/${encodeURIComponent(anilistId)}/${encodeURIComponent(String(episode))}/${language}`,
+    `https://vidnest.fun/anime/${encodeURIComponent(anilistId)}/${encodeURIComponent(String(episode))}/${language}`,
   );
 
   if (startAt != null && startAt > 0) {

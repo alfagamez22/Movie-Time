@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, SkipForward } from 'lucide-react';
+import { ArrowLeft, RotateCcw, SkipForward } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import {
@@ -14,7 +14,7 @@ import {
   useWatchedEpisodes,
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
-import { buildAnimepaheEmbedUrl } from '@/lib/media/embed';
+import { buildVidnestAnimeEmbedUrl } from '@/lib/media/embed';
 import {
   getEpisodeLimit,
   type EpisodePreview,
@@ -552,9 +552,9 @@ export function AnimeWatchPlayer({
         )
       : null;
   const resumeStartSeconds = savedStartAt ?? savedProgress?.progressSeconds ?? 0;
-  const currentLanguage = 'sub' as const;
+  const currentLanguage = initialPlayback.language;
 
-  const embedUrl = buildAnimepaheEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
+  const embedUrl = buildVidnestAnimeEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
 
   useEffect(() => {
     if (!canSyncWatchHistory) return;
@@ -809,6 +809,16 @@ export function AnimeWatchPlayer({
             </div>
           </div>
         ) : null}
+
+        <button
+          type="button"
+          onClick={handleReloadPlayer}
+          aria-label="Reload player"
+          title="Reload player if an overlay blocks playback"
+          className="absolute left-[calc(env(safe-area-inset-left)+4.5rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-black/75 text-white shadow-lg hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <RotateCcw className="h-5 w-5" />
+        </button>
 
         <iframe
           key={`${anilistId}-${currentEpisode}-${currentLanguage}-${iframeReloadKey}`}

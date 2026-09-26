@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, SkipForward } from 'lucide-react';
+import { ArrowLeft, RotateCcw, SkipForward } from 'lucide-react';
 
 import { useEpisodeAutoScroll } from '@/lib/hooks/use-episode-auto-scroll';
 import { buildVideasyEmbedUrl } from '@/lib/media/embed';
@@ -454,7 +454,7 @@ function StandardWatchPlayer({
     }, 30_000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [embedUrl]);
+  }, [embedUrl, iframeReloadKey]);
 
   useEffect(() => {
     if (!embedUrl) {
@@ -636,8 +636,9 @@ function StandardWatchPlayer({
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
     setPlayerMessage('Asking Videasy to load this title again…');
+    setEmbedPlayback({ season: safeSeason, episode: safeEpisode });
     setIframeReloadKey((value) => value + 1);
-  }, []);
+  }, [safeSeason, safeEpisode]);
 
   const handleSeasonChange = useCallback(
     async (newSeason: string) => {
@@ -728,6 +729,16 @@ function StandardWatchPlayer({
           showFallback={showPlayerFallback}
           message={playerMessage}
         />
+
+        <button
+          type="button"
+          onClick={handleReloadPlayer}
+          aria-label="Reload player"
+          title="Reload player if an overlay blocks playback"
+          className="absolute left-[calc(env(safe-area-inset-left)+4.5rem)] top-[calc(env(safe-area-inset-top)+0.75rem)] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-black/75 text-white shadow-lg hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <RotateCcw className="h-5 w-5" />
+        </button>
 
         <iframe
           key={`${entry.provider}-videasy-${embedPlayback.season}-${embedPlayback.episode}-${iframeReloadKey}`}
