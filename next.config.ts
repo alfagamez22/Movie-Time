@@ -10,6 +10,15 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['couchbase'],
   outputFileTracingRoot: configDirectory,
+  // Couchbase resolves its platform binary at runtime; static tracing misses
+  // pnpm's optional Linux package unless it is explicitly included.
+  outputFileTracingIncludes: {
+    '/*': [
+      'node_modules/.pnpm/@couchbase+couchbase-linux-x64-napi@*/node_modules/@couchbase/couchbase-linux-x64-napi/**/*',
+      'node_modules/.pnpm/couchbase@*/node_modules/@couchbase/couchbase-linux-x64-napi/**/*',
+      'node_modules/@couchbase/couchbase-linux-x64-napi/**/*',
+    ],
+  },
   typescript: {
     ignoreBuildErrors: false,
   },
