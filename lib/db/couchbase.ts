@@ -9,7 +9,15 @@ const globalState = globalThis as CouchbaseState;
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not configured.`);
+  // Vercel's variable editor treats pasted .env quotes as literal characters.
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.slice(1, -1);
+  }
   return value;
+}
+
+function optionalEnvironment(name: string, fallback: string): string {
+  return process.env[name]?.trim() ? requiredEnvironment(name) : fallback;
 }
 
 export async function getCouchbase() {
@@ -35,7 +43,7 @@ export async function getCouchbase() {
       }
       try {
         const bucket = cluster.bucket(requiredEnvironment('COUCHBASE_BUCKET'));
-        const scope = bucket.scope(process.env.COUCHBASE_SCOPE?.trim() || '_default');
+        const scope = bucket.scope(optionalEnvironment('COUCHBASE_SCOPE', '_default'));
         return { bucket, cluster, scope };
       } catch (error) {
         console.error('Couchbase bootstrap failed', { phase: 'bucket-or-scope', error: error instanceof Error ? error.name : 'UnknownError' });
