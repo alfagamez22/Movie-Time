@@ -16,6 +16,8 @@ export interface MediaExperienceConfig {
   homeHref: string;
   id: MediaExperience;
   navLinks: MediaNavLink[];
+  peopleSource?: 'tmdb' | 'anilist';
+  personBasePath?: string;
   preferenceMode: 'language' | 'player';
   searchEndpoint: string;
   searchPlaceholder: string;
@@ -44,6 +46,8 @@ export const papiflixExperience: MediaExperienceConfig = {
   // PapiFlix experience; it is intentionally absent on the /anime route because
   // papianimeExperience sets preferenceMode: 'language' (see below), which
   // renders a dub/sub toggle in place of the player-switcher.
+  peopleSource: 'tmdb',
+  personBasePath: '/person',
   preferenceMode: 'player',
   searchEndpoint: '/api/media',
   searchPlaceholder: 'Search movies, series, or enter a numeric ID...',
@@ -67,6 +71,8 @@ export const papianimeExperience: MediaExperienceConfig = {
     { href: '/', label: 'PapiFlix' },
     { href: '/manga', label: 'PapiManga' },
   ],
+  peopleSource: 'anilist',
+  personBasePath: '/anime/person',
   preferenceMode: 'language',
   searchEndpoint: '/api/anime',
   searchPlaceholder: 'Search anime titles or AniList ID...',

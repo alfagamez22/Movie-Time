@@ -32,10 +32,10 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ category: string }> }) {
   const { category } = await params;
-  if (!isCategory(category)) return { title: 'Category | PapiFlix' };
+  if (!isCategory(category)) return { title: 'Category' };
   return {
     description: CATEGORY_DESCRIPTIONS[category],
-    title: `${CATEGORY_LABELS[category]} | PapiFlix Categories`,
+    title: `${CATEGORY_LABELS[category]} | Categories`,
   };
 }
 
@@ -51,7 +51,11 @@ export default async function Page({ params }: { params: Promise<{ category: str
 
   const liveLibrary = await getTmdbLibrarySections();
   const allSections = liveLibrary.ok ? liveLibrary.sections : [];
-  const filtered = allSections.filter((section) => (section.category ?? 'discover') === category);
+  // Regional also receives the Vivamax row so it can be blended into Filipino Movies once VMX is on.
+  const filtered = allSections.filter((section) => {
+    const sectionCategory = section.category ?? 'discover';
+    return sectionCategory === category || (category === 'regional' && section.id === 'vivamax-movies');
+  });
 
   return (
     <CategoryDetailPage

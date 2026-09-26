@@ -283,7 +283,7 @@ function createSection(id: string, title: string, description: string, entries: 
   };
 }
 
-function mapBrowseEntries(media: AnilistMedia[]): LibraryMediaEntry[] {
+export function mapBrowseEntries(media: AnilistMedia[]): LibraryMediaEntry[] {
   return media.map((entry) => toLibraryMediaEntry(createAnimeEntry(entry)));
 }
 
@@ -300,6 +300,7 @@ function mapCast(details: AnilistMediaDetails): MediaCastMember[] {
 
       return {
         character: characterName || undefined,
+        id: actorName && typeof actor?.id === 'number' ? actor.id : undefined,
         name: actorName || characterName,
         profileUrl: cleanText(actor?.image?.large) || cleanText(edge.node?.image?.large) || undefined,
       };

@@ -13,6 +13,7 @@ import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
+import type { PersonSummary } from '@/lib/people/types';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
@@ -88,6 +89,31 @@ function SearchResultCard({
   );
 }
 
+function SearchPeopleStrip({ basePath, label, people }: { basePath: string; label: string; people: PersonSummary[] }) {
+  return (
+    <section className="mb-6">
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">{label}</h2>
+      <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2 [scrollbar-width:none]">
+        {people.map((person) => (
+          <Link
+            key={person.id}
+            href={`${basePath}/${person.id}`}
+            className="group flex w-24 shrink-0 flex-col items-center text-center focus-visible:outline-none sm:w-28"
+          >
+            <span className="relative h-20 w-20 overflow-hidden rounded-full bg-zinc-800 ring-2 ring-white/10 transition group-hover:ring-white group-focus-visible:ring-white sm:h-24 sm:w-24">
+              {person.profileUrl ? (
+                <Image src={person.profileUrl} alt="" fill sizes="96px" className="object-cover" />
+              ) : null}
+            </span>
+            <span className="mt-2 line-clamp-2 text-sm font-semibold leading-tight text-white group-hover:underline">{person.name}</span>
+            {person.knownFor ? <span className="mt-0.5 line-clamp-1 text-[11px] text-zinc-500">{person.knownFor}</span> : null}
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ExperienceSwitcher({ experience }: { experience: MediaExperienceConfig }) {
   const router = useRouter();
 
@@ -120,6 +146,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LibraryMediaEntry[]>([]);
+  const [searchPeople, setSearchPeople] = useState<PersonSummary[]>([]);
   const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const [navScrolled, setNavScrolled] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -240,8 +267,20 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         }
       });
 
+    if (experience.peopleSource) {
+      const peopleParams = new URLSearchParams({ q: debouncedQuery, source: experience.peopleSource });
+      void fetch(`/api/people?${peopleParams.toString()}`, { signal: controller.signal })
+        .then(async (res) => {
+          const json = (await res.json().catch(() => null)) as { people?: PersonSummary[] } | null;
+          if (!controller.signal.aborted) setSearchPeople(json?.people ?? []);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSearchPeople([]);
+        });
+    }
+
     return () => controller.abort(new DOMException('Query changed', 'AbortError'));
-  }, [debouncedQuery, experience.searchEndpoint, experience.id]);
+  }, [debouncedQuery, experience.searchEndpoint, experience.id, experience.peopleSource]);
 
   const featuredItems = getFeaturedItems(sections);
   const authPromptCopy = getAuthPromptCopy(authPromptReason);
@@ -350,16 +389,30 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                   <p className="mt-10 text-center text-sm text-zinc-600">{experience.emptySearchText}</p>
                 ) : isSearchPending ? (
                   <p className="text-center text-sm text-zinc-500">Searching...</p>
-                ) : searchResults.length === 0 ? (
+                ) : searchResults.length === 0 && searchPeople.length === 0 ? (
                   <p className="text-center text-sm text-zinc-500">
                     No results for &ldquo;{debouncedQuery}&rdquo;
                   </p>
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    {searchResults.map((entry) => (
-                      <SearchResultCard key={`${entry.provider}:${entry.type}:${entry.id}`} entry={entry} onSelect={openDetails} />
-                    ))}
-                  </div>
+                  <>
+                    {searchPeople.length > 0 && experience.personBasePath ? (
+                      <SearchPeopleStrip
+                        basePath={experience.personBasePath}
+                        label={experience.peopleSource === 'anilist' ? 'Voice Actors' : 'Cast & Crew'}
+                        people={searchPeople}
+                      />
+                    ) : null}
+                    {searchResults.length > 0 ? (
+                      <div className="flex flex-col gap-3">
+                        {searchPeople.length > 0 ? (
+                          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Titles</h2>
+                        ) : null}
+                        {searchResults.map((entry) => (
+                          <SearchResultCard key={`${entry.provider}:${entry.type}:${entry.id}`} entry={entry} onSelect={openDetails} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>

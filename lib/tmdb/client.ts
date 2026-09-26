@@ -73,7 +73,7 @@ interface TmdbSeasonDetailsResponse {
   season_number: number;
 }
 
-interface TmdbBrowseResult {
+export interface TmdbBrowseResult {
   adult?: boolean;
   backdrop_path?: string;
   first_air_date?: string;
@@ -416,7 +416,7 @@ export function isReleasedTmdbBrowseResult(result: TmdbBrowseResult, explicitTyp
   return releaseTimestamp === null || releaseTimestamp <= getUtcDayTimestamp(date);
 }
 
-function buildTmdbImageUrl(path: string | undefined, size: 'w92' | 'w300' | 'w780' = 'w780'): string | undefined {
+export function buildTmdbImageUrl(path: string | undefined, size: 'w92' | 'w300' | 'w780' = 'w780'): string | undefined {
   if (!path) {
     return undefined;
   }
@@ -434,7 +434,7 @@ function createUpstreamFailure(message: string, reason: TmdbLookupFailureReason,
   };
 }
 
-function isTmdbFailure(value: unknown): value is TmdbLookupFailure {
+export function isTmdbFailure(value: unknown): value is TmdbLookupFailure {
   if (!value || typeof value !== 'object' || !('ok' in value)) {
     return false;
   }
@@ -540,7 +540,7 @@ async function requestTmdb(pathname: string): Promise<Response | TmdbLookupFailu
   );
 }
 
-async function requestOfficialTmdb<T>(
+export async function requestOfficialTmdb<T>(
   pathname: string,
   query: Record<string, string | number | boolean | undefined> = {},
 ): Promise<T | TmdbLookupFailure> {
@@ -601,7 +601,7 @@ function normalizeRating(value: number | undefined): number | undefined {
   return Number(value.toFixed(1));
 }
 
-function createLibraryEntryFromBrowseResult(
+export function createLibraryEntryFromBrowseResult(
   result: TmdbBrowseResult,
   explicitType?: MediaType,
 ): LibraryMediaEntry | null {

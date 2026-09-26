@@ -71,6 +71,7 @@ export interface AnilistCharacterEdge {
   } | null;
   role?: string | null;
   voiceActors?: Array<{
+    id?: number | null;
     image?: {
       large?: string | null;
     } | null;
@@ -136,7 +137,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 const BROWSE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — browse sections change slowly
 const responseCache = new Map<string, CacheEntry<unknown>>();
 
-const MEDIA_CARD_FRAGMENT = `
+export const MEDIA_CARD_FRAGMENT = `
   id
   type
   isAdult
@@ -184,7 +185,7 @@ function getCurrentSeason(date = new Date()): { season: AnilistSeason; year: num
   return { season: 'FALL', year };
 }
 
-async function requestAnilist<T>(query: string, variables: Record<string, unknown>, ttlMs = CACHE_TTL_MS): Promise<T> {
+export async function requestAnilist<T>(query: string, variables: Record<string, unknown>, ttlMs = CACHE_TTL_MS): Promise<T> {
   const cacheKey = JSON.stringify({ query, variables });
   const cached = responseCache.get(cacheKey);
   const now = Date.now();
@@ -274,6 +275,7 @@ export async function fetchAnilistMediaById(id: string): Promise<AnilistMediaDet
               }
             }
             voiceActors(language: JAPANESE, sort: [RELEVANCE]) {
+              id
               name {
                 full
               }

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
@@ -51,7 +51,7 @@ interface DetailsErrorState {
   message: string;
 }
 
-function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boolean }) {
+function CastList({ cast, isLoading, personBasePath }: { cast: MediaCastMember[]; isLoading: boolean; personBasePath?: string }) {
   const [failedProfiles, setFailedProfiles] = useState<Set<string>>(new Set());
 
   if (isLoading) {
@@ -64,9 +64,17 @@ function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boo
 
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
-      {cast.map((member) => (
-        <div key={`${member.id ?? member.name}-${member.character ?? 'cast'}`} className="min-w-0">
-          <div className="relative mb-2 aspect-[2/3] overflow-hidden rounded-md bg-zinc-900">
+      {cast.map((member) => {
+        const href = personBasePath && member.id ? `${personBasePath}/${member.id}` : null;
+        const Wrapper = href ? Link : 'div';
+        return (
+        <Wrapper
+          key={`${member.id ?? member.name}-${member.character ?? 'cast'}`}
+          href={href ?? ''}
+          title={href ? `See all titles with ${member.name}` : undefined}
+          className={`group min-w-0 rounded-md ${href ? 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white' : ''}`}
+        >
+          <div className={`relative mb-2 aspect-[2/3] overflow-hidden rounded-md bg-zinc-900 ${href ? 'ring-white/70 transition group-hover:ring-2' : ''}`}>
             {member.profileUrl && !failedProfiles.has(member.profileUrl) ? (
               <Image
                 src={member.profileUrl}
@@ -88,10 +96,11 @@ function CastList({ cast, isLoading }: { cast: MediaCastMember[]; isLoading: boo
               </div>
             )}
           </div>
-          <p className="line-clamp-1 text-xs font-semibold text-white">{member.name}</p>
+          <p className={`line-clamp-1 text-xs font-semibold text-white ${href ? 'group-hover:underline' : ''}`}>{member.name}</p>
           {member.character ? <p className="line-clamp-1 text-[11px] text-zinc-500">{member.character}</p> : null}
-        </div>
-      ))}
+        </Wrapper>
+        );
+      })}
     </div>
   );
 }
@@ -120,6 +129,9 @@ function getTrailerEmbedUrl(trailer: MediaTrailer): string | null {
   return trailer.url.includes('/embed/') ? trailer.url : null;
 }
 
+const TRAILERS_COLLAPSED_COUNT = 3;
+const TRAILER_PEEK_PX = 72;
+
 function TrailerList({
   isLoading,
   onSelectTrailer,
@@ -130,6 +142,23 @@ function TrailerList({
   trailers: MediaTrailer[];
 }) {
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState(false);
+  const [collapsedHeight, setCollapsedHeight] = useState<number | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const trailerCount = trailers.length;
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || trailerCount <= TRAILERS_COLLAPSED_COUNT) return;
+    const measure = () => {
+      const firstHidden = list.children[TRAILERS_COLLAPSED_COUNT] as HTMLElement | undefined;
+      if (firstHidden) setCollapsedHeight(firstHidden.offsetTop + TRAILER_PEEK_PX);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [trailerCount, isLoading]);
 
   if (isLoading) {
     return <p className="text-sm text-zinc-500">Loading trailers...</p>;
@@ -139,12 +168,23 @@ function TrailerList({
     return <p className="text-sm text-zinc-500">Trailers unavailable.</p>;
   }
 
+  const collapsible = trailers.length > TRAILERS_COLLAPSED_COUNT;
+  const collapsed = collapsible && !expanded;
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {trailers.map((trailer) => (
+    <div>
+    <div className="relative">
+    <div
+      id="trailer-list"
+      ref={listRef}
+      className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${collapsed ? 'overflow-hidden' : ''}`}
+      style={collapsed && collapsedHeight ? { maxHeight: collapsedHeight } : undefined}
+    >
+      {trailers.map((trailer, index) => (
         <button
           key={`${trailer.youtubeId ?? trailer.url}-${trailer.title}`}
           type="button"
+          tabIndex={collapsed && index >= TRAILERS_COLLAPSED_COUNT ? -1 : undefined}
           onClick={() => onSelectTrailer(trailer)}
           className="group block overflow-hidden rounded-lg border border-white/10 bg-white/[0.035] transition hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-netflix-red"
         >
@@ -180,6 +220,23 @@ function TrailerList({
           </div>
         </button>
       ))}
+    </div>
+    {collapsed ? (
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#111] via-[#111]/85 to-transparent" />
+    ) : null}
+    </div>
+    {collapsible ? (
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls="trailer-list"
+        onClick={() => setExpanded((value) => !value)}
+        className="mx-auto mt-3 flex items-center gap-1.5 rounded-full border border-white/20 px-4 py-1.5 text-sm font-semibold text-white transition hover:border-white/50 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+      >
+        {expanded ? 'Show less' : `Show ${trailers.length - TRAILERS_COLLAPSED_COUNT} more`}
+        <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+    ) : null}
     </div>
   );
 }
@@ -713,7 +770,7 @@ export function MediaDetailsModal({
             <div className="space-y-8 px-5 pb-[calc(env(safe-area-inset-bottom)+2rem)] md:px-8">
               <section>
                 <h3 className="mb-3 text-base font-bold">Cast</h3>
-                <CastList cast={cast} isLoading={isLoading} />
+                <CastList cast={cast} isLoading={isLoading} personBasePath={experience.personBasePath} />
               </section>
 
               <section>
