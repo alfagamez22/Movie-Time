@@ -17,6 +17,8 @@
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\""
   },
   "dependencies": {
+    "@ably/chat": "^1.4.0",
+    "ably": "^2.29.0",
     "autoprefixer": "^10.4.21",
     "bcryptjs": "^3.0.3",
     "couchbase": "^4.7.1",

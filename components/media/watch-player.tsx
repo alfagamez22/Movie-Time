@@ -28,6 +28,8 @@ import { AnimeWatchPlayer } from './anime-watch-player';
 import { PlayerViewControls } from './player-view-controls';
 import type { WatchPlayerProps } from './watch-player.types';
 import { useWatchBeacon } from '@/lib/hooks/use-watch-beacon';
+import { emitPlayerProgress } from '@/lib/party/player-events';
+import { WatchPartyPlayerLayer, WatchPartyRoot, WatchPartySidebar, type FollowTarget } from '@/components/party/watch-party';
 
 interface NormalizedPlayerProgress {
   durationSeconds?: number;
@@ -366,6 +368,7 @@ function StandardWatchPlayer({
   const [playerMessage, setPlayerMessage] = useState('Opening Videasy now.');
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
+  const [partyStartAt, setPartyStartAt] = useState<number | null>(null);
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerShellRef = useRef<HTMLDivElement>(null);
@@ -417,8 +420,8 @@ function StandardWatchPlayer({
     ...initialPlayback,
     episode: embedPlayback.episode,
     language: initialPlayback.language,
-    progress: embedPlayback.season === initialPlayback.season && embedPlayback.episode === initialPlayback.episode
-      ? initialPlayback.progress : null,
+    progress: partyStartAt ?? (embedPlayback.season === initialPlayback.season && embedPlayback.episode === initialPlayback.episode
+      ? initialPlayback.progress : null),
     season: embedPlayback.season,
   };
   const embedUrl = buildVideasyEmbedUrl(entry, playbackOptions);
@@ -427,6 +430,7 @@ function StandardWatchPlayer({
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
     setPlayerMessage('Opening Videasy now.');
+    setPartyStartAt(null);
     setEpisode(newEpisode);
     setEmbedPlayback({ season: safeSeason, episode: newEpisode });
   }, [safeSeason]);
@@ -514,6 +518,7 @@ function StandardWatchPlayer({
         typeof parsedMessage.data.player_status === 'string'
         ? parsedMessage.data.player_status.toLowerCase()
         : '';
+      emitPlayerProgress(progress.progressSeconds, playerStatus);
       const isFinalPosition = ['paused', 'seeked', 'completed'].includes(playerStatus);
       if (now - lastProgressWriteRef.current < 5_000 && !isFinalPosition && progress.progressPercent !== 100) return;
       lastProgressWriteRef.current = now;
@@ -647,9 +652,22 @@ function StandardWatchPlayer({
   );
   */
 
+  const handlePartyFollow = useCallback((target: FollowTarget) => {
+    const nextSeason = isSeries && target.season ? target.season : safeSeason;
+    const nextEpisode = isSeries && target.episode ? target.episode : safeEpisode;
+    if (nextSeason !== safeSeason) setActiveSeasonDetails(null);
+    setIsPlayerLoading(true);
+    setSeason(nextSeason);
+    setEpisode(nextEpisode);
+    setEmbedPlayback({ season: nextSeason, episode: nextEpisode });
+    setPartyStartAt(Math.max(0, Math.floor(target.time)));
+    setIframeReloadKey((value) => value + 1);
+  }, [isSeries, safeEpisode, safeSeason]);
+
   const handleReloadPlayer = useCallback(() => {
     setIsPlayerLoading(true);
     setShowPlayerFallback(false);
+    setPartyStartAt(null);
     setPlayerMessage('Asking Videasy to load this title again…');
     setEmbedPlayback({ season: safeSeason, episode: safeEpisode });
     setIframeReloadKey((value) => value + 1);
@@ -659,6 +677,7 @@ function StandardWatchPlayer({
     async (newSeason: string) => {
       setIsPlayerLoading(true);
       setShowPlayerFallback(false);
+      setPartyStartAt(null);
       setSeason(newSeason);
       setEpisode('1');
       setEmbedPlayback({ season: newSeason, episode: '1' });
@@ -679,7 +698,33 @@ function StandardWatchPlayer({
     [entry.id, entry.slug, entry.type],
   );
 
+  const episodeSidebar = isSeries ? (
+    <EpisodeSidebar
+      safeSeason={safeSeason}
+      safeEpisode={safeEpisode}
+      safeEpisodeLimit={safeEpisodeLimit}
+      seasonOptions={seasonOptions}
+      seasonEpisodeCards={seasonEpisodeCards}
+      seasonDetailsError={seasonDetailsError}
+      watchedEpisodeKeys={watchedEpisodeKeys}
+      onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
+      onEpisodeChange={handleEpisodeChange}
+      onNextEpisode={() => {
+        handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1));
+        iframeRef.current?.focus();
+      }}
+    />
+  ) : null;
+
   return (
+    <WatchPartyRoot
+      entry={entry}
+      episode={isSeries ? safeEpisode : null}
+      experienceId="papiflix"
+      iframeRef={iframeRef}
+      onFollow={handlePartyFollow}
+      season={isSeries ? safeSeason : null}
+    >
     <div
       ref={playerShellRef}
       onPointerMove={(event) => {
@@ -770,26 +815,15 @@ function StandardWatchPlayer({
           referrerPolicy="strict-origin-when-cross-origin"
           title={`Watch ${entry.title}`}
         />
+        <WatchPartyPlayerLayer chromeVisible={isChromeVisible} />
       </div>
 
-      {isSeries && isEpisodeListVisible ? (
-          <EpisodeSidebar
-            safeSeason={safeSeason}
-            safeEpisode={safeEpisode}
-            safeEpisodeLimit={safeEpisodeLimit}
-            seasonOptions={seasonOptions}
-            seasonEpisodeCards={seasonEpisodeCards}
-            seasonDetailsError={seasonDetailsError}
-            watchedEpisodeKeys={watchedEpisodeKeys}
-            onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
-            onEpisodeChange={handleEpisodeChange}
-            onNextEpisode={() => {
-              handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1));
-              iframeRef.current?.focus();
-            }}
-          />
-      ) : null}
+      <WatchPartySidebar
+        episodes={episodeSidebar}
+        fallback={isEpisodeListVisible ? episodeSidebar : null}
+      />
     </div>
+    </WatchPartyRoot>
   );
 }
 

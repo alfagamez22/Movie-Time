@@ -24,6 +24,8 @@ import {
 import type { WatchPlayerProps } from './watch-player.types';
 import { PlayerViewControls } from './player-view-controls';
 import { useWatchBeacon } from '@/lib/hooks/use-watch-beacon';
+import { emitPlayerProgress } from '@/lib/party/player-events';
+import { WatchPartyPlayerLayer, WatchPartyRoot, WatchPartySidebar, type FollowTarget } from '@/components/party/watch-party';
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
 const VIDNEST_ORIGIN = 'https://vidnest.fun';
@@ -534,6 +536,7 @@ export function AnimeWatchPlayer({
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [savedStartAt, setSavedStartAt] = useState<number | null>(initialPlayback.progress ?? null);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
+  const [partyStartAt, setPartyStartAt] = useState<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerShellRef = useRef<HTMLDivElement>(null);
   const hasIframeLoadedRef = useRef(false);
@@ -553,7 +556,7 @@ export function AnimeWatchPlayer({
           experience.id,
         )
       : null;
-  const resumeStartSeconds = savedStartAt ?? savedProgress?.progressSeconds ?? 0;
+  const resumeStartSeconds = partyStartAt ?? savedStartAt ?? savedProgress?.progressSeconds ?? 0;
   const currentLanguage = initialPlayback.language;
 
   const embedUrl = buildVidnestAnimeEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
@@ -653,6 +656,7 @@ export function AnimeWatchPlayer({
       if (!progress) return;
 
       const eventType = typeof event.data === 'object' && event.data !== null ? (event.data as Record<string, unknown>).type as string ?? 'update' : 'update';
+      emitPlayerProgress(progress.progressSeconds, String(eventType).toLowerCase());
       saveProgress(progress, eventType);
 
       if (progress.progressPercent != null && progress.progressPercent >= 90) {
@@ -695,7 +699,7 @@ export function AnimeWatchPlayer({
   }, [canSyncWatchHistory, currentEpisode, currentLanguage, entry, experience.id, isSeries]);
 
   useEffect(() => {
-    const href = buildWatchHref(entry, {
+    let href = buildWatchHref(entry, {
       autoNext: autoNextEnabled,
       autoPlay: initialPlayback.autoPlay,
       basePath: experience.watchBasePath,
@@ -704,6 +708,13 @@ export function AnimeWatchPlayer({
       progress: null,
       skipIntro: false,
     });
+
+    const partyCode = new URLSearchParams(window.location.search).get('party');
+    if (partyCode) {
+      const withParty = new URL(href, window.location.origin);
+      withParty.searchParams.set('party', partyCode);
+      href = `${withParty.pathname}${withParty.search}`;
+    }
 
     const currentSearch = normalizeWatchSearch(window.location.search);
     const canonicalSearch = normalizeWatchSearch(href.includes('?') ? href.slice(href.indexOf('?')) : '');
@@ -730,6 +741,7 @@ export function AnimeWatchPlayer({
     setIframeError(null);
     setCurrentEpisode(Math.min(Math.max(1, episode), playableEpisodeLimit));
     setSavedStartAt(0);
+    setPartyStartAt(null);
   };
 
   const handleSeasonChange = (season: number) => {
@@ -739,6 +751,18 @@ export function AnimeWatchPlayer({
     setCurrentSeason(season);
     setCurrentEpisode(1);
     setSavedStartAt(0);
+    setPartyStartAt(null);
+  };
+
+  const handlePartyFollow = (target: FollowTarget) => {
+    const nextEpisode = isSeries && target.episode ? Number.parseInt(target.episode, 10) : currentEpisode;
+    const nextSeason = isSeries && target.season ? Number.parseInt(target.season, 10) : currentSeason;
+    setIsIframeLoading(true);
+    setIframeError(null);
+    if (Number.isFinite(nextSeason)) setCurrentSeason(nextSeason);
+    if (Number.isFinite(nextEpisode)) setCurrentEpisode(Math.min(Math.max(1, nextEpisode), playableEpisodeLimit));
+    setPartyStartAt(Math.max(0, Math.floor(target.time)));
+    setIframeReloadKey((value) => value + 1);
   };
 
   const handleReloadPlayer = useCallback(() => {
@@ -748,7 +772,31 @@ export function AnimeWatchPlayer({
     setIframeReloadKey((value) => value + 1);
   }, []);
 
+  const episodeSidebar = isSeries ? (
+    <SidebarControls
+      autoNextEnabled={autoNextEnabled}
+      currentEpisode={currentEpisode}
+      currentSeason={currentSeason}
+      episodeCards={episodeCards}
+      episodeLimit={episodeLimit}
+      episodesBySeason={entry.type === 'tv' ? (entry.episodesBySeason ?? { '1': episodeLimit }) : { '1': 1 }}
+      watchedEpisodeKeys={watchedEpisodeKeys}
+      onEpisodeChange={handleEpisodeChange}
+      onSeasonChange={handleSeasonChange}
+      onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
+      showPlaybackToggles
+    />
+  ) : null;
+
   return (
+    <WatchPartyRoot
+      entry={entry}
+      episode={isSeries ? String(currentEpisode) : null}
+      experienceId="papianime"
+      iframeRef={iframeRef}
+      onFollow={handlePartyFollow}
+      season={isSeries ? String(currentSeason) : null}
+    >
     <div
       ref={playerShellRef}
       className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
@@ -845,23 +893,11 @@ export function AnimeWatchPlayer({
           referrerPolicy="no-referrer"
           title={`Watch ${entry.title}`}
         />
+        <WatchPartyPlayerLayer chromeVisible />
       </div>
 
-      {isSeries && isEpisodeListVisible ? (
-        <SidebarControls
-          autoNextEnabled={autoNextEnabled}
-          currentEpisode={currentEpisode}
-          currentSeason={currentSeason}
-          episodeCards={episodeCards}
-          episodeLimit={episodeLimit}
-          episodesBySeason={entry.type === 'tv' ? (entry.episodesBySeason ?? { '1': episodeLimit }) : { '1': 1 }}
-          watchedEpisodeKeys={watchedEpisodeKeys}
-          onEpisodeChange={handleEpisodeChange}
-          onSeasonChange={handleSeasonChange}
-          onToggleAutoNext={() => setAutoNextEnabled((value) => !value)}
-          showPlaybackToggles
-        />
-      ) : null}
+      <WatchPartySidebar episodes={episodeSidebar} fallback={isEpisodeListVisible ? episodeSidebar : null} />
     </div>
+    </WatchPartyRoot>
   );
 }
