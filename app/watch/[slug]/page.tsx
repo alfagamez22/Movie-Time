@@ -3,11 +3,13 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { WatchPlayer } from '@/components/media/watch-player';
+import { auth } from '@/lib/auth';
 import { resolvePlaybackOptions } from '@/lib/media/embed';
 import { papiflixExperience } from '@/lib/media/experience';
 import { toPapiflixSeasonDetails, toTmdbSeasonNumber } from '@/lib/media/season-layout';
 import { resolveLiveMediaEntry } from '@/lib/media/resolve';
 import { buildWatchHref, parseMediaType } from '@/lib/media/routes';
+import { getResumePoint } from '@/lib/media/watch-history';
 import { normalizeSlug } from '@/lib/slugs/media';
 import { lookupTmdbSeasonDetails } from '@/lib/tmdb/client';
 import { isTvEntry, type SeasonDetails } from '@/lib/media/types';
@@ -74,7 +76,28 @@ export default async function WatchPage({ params, searchParams }: WatchPageProps
     );
   }
 
-  const initialPlayback = resolvePlaybackOptions(resolvedEntry.entry, resolvedSearchParams);
+  let initialPlayback = resolvePlaybackOptions(resolvedEntry.entry, resolvedSearchParams);
+  if (initialPlayback.progress === null) {
+    const session = await auth();
+    if (session?.user?.id) {
+      const isSeries = isTvEntry(resolvedEntry.entry);
+      const hasExplicitEpisode = Boolean(resolvedSearchParams.s || resolvedSearchParams.e);
+      const resume = await getResumePoint(
+        session.user.id,
+        resolvedEntry.entry,
+        isSeries && hasExplicitEpisode ? { episode: initialPlayback.episode, season: initialPlayback.season } : undefined,
+      ).catch(() => null);
+      if (resume) {
+        initialPlayback = {
+          ...initialPlayback,
+          ...(isSeries && !hasExplicitEpisode && resume.season && resume.episode
+            ? { episode: resume.episode, season: resume.season }
+            : {}),
+          progress: resume.progressSeconds,
+        };
+      }
+    }
+  }
   const canonicalHref = buildWatchHref(resolvedEntry.entry, {
     autoPlay: initialPlayback.autoPlay,
     basePath: papiflixExperience.watchBasePath,

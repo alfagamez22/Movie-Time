@@ -63,6 +63,31 @@ const watchedEpisodesRawValueCache = new Map<RecentlyWatchedNamespace, string>()
 const watchedEpisodesSetCache = new Map<RecentlyWatchedNamespace, Map<string, Set<string>>>();
 const serverHydratedNamespace = new Set<RecentlyWatchedNamespace>();
 const pendingWatchWrites = new Map<string, { entry: RecentlyWatchedEntry; namespace: RecentlyWatchedNamespace; active: boolean }>();
+const ALL_NAMESPACES = ['papiflix', 'papianime', 'papimanga'] as const satisfies readonly RecentlyWatchedNamespace[];
+// Local entries last watched before this time are already on the server, so a server list
+// without them means they were removed on another device.
+const serverBaseline = new Map<RecentlyWatchedNamespace, number>();
+const uploadedUsers = new Set<string>();
+
+async function pushNamespaceToServer(namespace: RecentlyWatchedNamespace) {
+  const startedAt = Date.now();
+  const localEntries = getRecentlyWatchedSnapshot(namespace);
+  if (localEntries.length > 0) {
+    const response = await fetch('/api/watch-history/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entries: localEntries.map((entry) => ({ ...entry, experience: namespace })),
+      }),
+    });
+    if (!response.ok) return;
+  }
+  serverBaseline.set(namespace, startedAt);
+}
+
+function isWritePending(namespace: RecentlyWatchedNamespace, entry: RecentlyWatchedEntry) {
+  return pendingWatchWrites.has(`${namespace}:${entry.provider}:${entry.type}:${entry.id}`);
+}
 
 function queueWatchWrite(entry: RecentlyWatchedEntry, namespace: RecentlyWatchedNamespace) {
   const key = `${namespace}:${entry.provider}:${entry.type}:${entry.id}`;
@@ -235,7 +260,7 @@ function writeSessionCookie(namespace: RecentlyWatchedNamespace, entries: Recent
     encodedValue = encodeURIComponent(JSON.stringify(cookieEntries));
   }
 
-  document.cookie = `${keys.recentlyWatchedCookie}=${encodedValue}; Path=/; SameSite=Lax`;
+  document.cookie = `${keys.recentlyWatchedCookie}=${encodedValue}; Path=/; Max-Age=${60 * 60 * 24 * 180}; SameSite=Lax`;
 }
 
 function readRawRecentlyWatched(namespace: RecentlyWatchedNamespace): string {
@@ -244,7 +269,9 @@ function readRawRecentlyWatched(namespace: RecentlyWatchedNamespace): string {
   const keys = getNamespaceKeys(namespace);
 
   try {
-    return sessionStorage.getItem(keys.recentlyWatchedStorageKey) || readCookie(keys.recentlyWatchedCookie);
+    return localStorage.getItem(keys.recentlyWatchedStorageKey)
+      || sessionStorage.getItem(keys.recentlyWatchedStorageKey)
+      || readCookie(keys.recentlyWatchedCookie);
   } catch {
     return readCookie(keys.recentlyWatchedCookie);
   }
@@ -532,7 +559,7 @@ export function trackRecentlyWatched(
 
   const rawValue = JSON.stringify(nextEntries);
   try {
-    sessionStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
+    localStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
   } catch {
     // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
   }
@@ -554,6 +581,7 @@ export function clearAccountWatchHistory() {
   for (const namespace of ['papiflix', 'papianime', 'papimanga'] as const) {
     const keys = getNamespaceKeys(namespace);
     try {
+      localStorage.removeItem(keys.recentlyWatchedStorageKey);
       sessionStorage.removeItem(keys.recentlyWatchedStorageKey);
       localStorage.removeItem(keys.watchedEpisodesStorageKey);
     } catch {
@@ -565,8 +593,10 @@ export function clearAccountWatchHistory() {
     watchedEpisodesRawValueCache.delete(namespace);
     watchedEpisodesSetCache.delete(namespace);
     serverHydratedNamespace.delete(namespace);
+    serverBaseline.delete(namespace);
     window.dispatchEvent(new Event(keys.eventName));
   }
+  uploadedUsers.clear();
 }
 
 export function getRecentlyWatchedEntry(
@@ -621,7 +651,7 @@ export function removeRecentlyWatched(
 
   const rawValue = JSON.stringify(nextEntries);
   try {
-    sessionStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
+    localStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
   } catch {
     // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
   }
@@ -686,16 +716,8 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
 
   const pushLocalToServer = useCallback(async () => {
     if (!userId || !isBrowser()) return;
-    const localEntries = getRecentlyWatchedSnapshot(namespace);
-    if (localEntries.length === 0) return;
     try {
-      await fetch('/api/watch-history/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entries: localEntries.map((entry) => ({ ...entry, experience: namespace })),
-        }),
-      });
+      await pushNamespaceToServer(namespace);
     } catch {
       // Network blip - non-critical.
     }
@@ -741,6 +763,7 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
     if (!userId) return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
+    const fetchStartedAt = Date.now();
     try {
       const [historyResponse, progressResponse] = await Promise.all([
         fetch(`/api/watch-history?experience=${encodeURIComponent(namespace)}`),
@@ -764,13 +787,18 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
           .filter((entry): entry is RecentlyWatchedEntry => Boolean(entry)),
         readRecentlyWatchedTombstones(namespace),
       );
-      const localEntries = getRecentlyWatchedSnapshot(namespace);
+      const baseline = serverBaseline.get(namespace);
+      const serverKeys = new Set(serverEntries.map((entry) => `${entry.provider}:${entry.type}:${entry.id}`));
+      const localEntries = getRecentlyWatchedSnapshot(namespace).filter((entry) => {
+        if (baseline === undefined || serverKeys.has(`${entry.provider}:${entry.type}:${entry.id}`)) return true;
+        return entry.watchedAt > baseline || isWritePending(namespace, entry);
+      });
       const merged = mergeRecentlyWatched({ localEntries, preferServer: true, serverEntries });
 
       const keys = getNamespaceKeys(namespace);
       const rawValue = JSON.stringify(merged);
       try {
-        sessionStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
+        localStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
       } catch {
         // Storage may be full - keep in-memory cache consistent.
       }
@@ -801,6 +829,7 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
       writeWatchedEpisodesMap(namespace, watchedEpisodesMap);
 
       serverHydratedNamespace.add(namespace);
+      if (baseline !== undefined) serverBaseline.set(namespace, Math.max(baseline, fetchStartedAt));
       lastSyncedRef.current = Date.now();
       window.dispatchEvent(new Event(keys.eventName));
     } finally {
@@ -818,11 +847,16 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
       fetchedRef.current = fetchKey;
       void (async () => {
         await flushTombstones();
-        await pushLocalToServer();
+        if (userId && !uploadedUsers.has(userId)) {
+          uploadedUsers.add(userId);
+          await Promise.all(ALL_NAMESPACES.map((name) => pushNamespaceToServer(name).catch(() => undefined)));
+        } else {
+          await pushLocalToServer();
+        }
         await fetchServer();
       })();
     }
-  }, [fetchKey, fetchServer, flushTombstones, namespace, pushLocalToServer]);
+  }, [fetchKey, fetchServer, flushTombstones, namespace, pushLocalToServer, userId]);
 
   useEffect(() => {
     if (!userId || !isBrowser()) return;

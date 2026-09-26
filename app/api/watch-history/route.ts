@@ -39,7 +39,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
   }
 
-  const { record, progress } = await upsertWatchHistoryWithProgress(session.user.id, entry, experience);
+  const result = await upsertWatchHistoryWithProgress(session.user.id, entry, experience);
+  if (!result) return NextResponse.json({ skipped: 'deleted' });
 
-  return NextResponse.json({ entry: record, progress });
+  return NextResponse.json({ entry: result.record, progress: result.progress });
 }

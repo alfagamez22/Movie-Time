@@ -1,4 +1,16 @@
-import { deleteRecord, findRecord, findRecords, saveRecord, stableRecordId, type AppRecord } from '@/lib/db/records';
+import { deleteRecord, findRecord, findRecords, readRecord, saveRecord, stableRecordId, type AppRecord } from '@/lib/db/records';
+
+const DELETED_TYPE = 'watchHistoryDeleted';
+
+function deletedMarkerId(userId: string, mediaId: string, mediaProvider: string, mediaType: string) {
+  return stableRecordId(userId, mediaId, mediaProvider, mediaType);
+}
+
+function experienceForProvider(mediaProvider: string) {
+  if (mediaProvider === 'tmdb') return 'papiflix';
+  if (mediaProvider === 'mangadex') return 'papimanga';
+  return 'papianime';
+}
 
 export const MAX_WATCH_HISTORY_ENTRIES = 24;
 export const PROGRESS_MERGE_EPSILON_SECONDS = 2;
@@ -122,11 +134,19 @@ export async function upsertWatchHistoryWithProgress(
   userId: string,
   entry: WatchEntry,
   experience: string,
-): Promise<UpsertHistoryResult> {
+): Promise<UpsertHistoryResult | null> {
   const normalized = normalizeProgress(entry);
   const incomingWatchedAtMs = typeof entry.watchedAt === 'number' && Number.isFinite(entry.watchedAt) &&
     entry.watchedAt > 0 && entry.watchedAt <= Date.now() + 60_000
     ? entry.watchedAt : Date.now();
+
+  const markerId = deletedMarkerId(userId, entry.id, entry.provider, entry.type);
+  const deletedMarker = await readRecord<AppRecord & { deletedAt: string }>(DELETED_TYPE, markerId);
+  if (deletedMarker) {
+    // A stale copy from another device must not resurrect an entry the user removed.
+    if (Date.parse(deletedMarker.deletedAt) >= incomingWatchedAtMs) return null;
+    await deleteRecord(DELETED_TYPE, markerId);
+  }
   const watchedAt = new Date(incomingWatchedAtMs);
   const completed = isCompleted(normalized.progressPercent, normalized.progressSeconds, normalized.durationSeconds);
 
@@ -235,4 +255,46 @@ export async function deleteWatchHistoryForUser(
   const progress = await findRecords<AppRecord & { id: string }>('watchProgress', key);
   if (history) await deleteRecord('watchHistory', history.id);
   await Promise.all(progress.map((item) => deleteRecord('watchProgress', item.id)));
+  await saveRecord(DELETED_TYPE, deletedMarkerId(userId, mediaId, mediaProvider, mediaType), {
+    deletedAt: new Date().toISOString(),
+    experience: experienceForProvider(mediaProvider),
+    mediaId,
+    mediaProvider,
+    mediaType,
+    userId,
+  });
+}
+
+export interface ResumePoint {
+  episode: string | null;
+  progressSeconds: number | null;
+  season: string | null;
+}
+
+export async function getResumePoint(
+  userId: string,
+  entry: { id: string; provider: string; type: string },
+  episodeKey?: { episode: string; season: string },
+): Promise<ResumePoint | null> {
+  const key = { userId, mediaId: entry.id, mediaProvider: entry.provider, mediaType: entry.type };
+  let season = episodeKey?.season ?? null;
+  let episode = episodeKey?.episode ?? null;
+
+  if (!episodeKey) {
+    const history = await findRecord<AppRecord & { episode: string | null; season: string | null }>('watchHistory', key);
+    if (!history) return null;
+    season = history.season ?? null;
+    episode = history.episode ?? null;
+  }
+
+  const progress = await findRecord<AppRecord & { completed?: boolean; progressSeconds?: number }>('watchProgress', {
+    ...key,
+    episode: entry.type === 'tv' ? episode ?? '' : '',
+    season: entry.type === 'tv' ? season ?? '' : '',
+  });
+  const seconds = progress && !progress.completed && typeof progress.progressSeconds === 'number' && progress.progressSeconds > 5
+    ? Math.floor(progress.progressSeconds)
+    : null;
+
+  return { episode, progressSeconds: seconds, season };
 }

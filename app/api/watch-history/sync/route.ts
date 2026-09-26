@@ -24,8 +24,9 @@ export async function POST(request: Request) {
     valid.map((entry) => upsertWatchHistoryWithProgress(session.user.id, entry, entry.experience)),
   );
 
-  const synced = results.filter((r) => r.status === 'fulfilled').length;
-  const failed = results.length - synced;
+  const synced = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+  const skipped = results.filter((r) => r.status === 'fulfilled' && !r.value).length;
+  const failed = results.length - synced - skipped;
 
-  return NextResponse.json({ synced, failed });
+  return NextResponse.json({ synced, skipped, failed });
 }
