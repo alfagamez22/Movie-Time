@@ -704,13 +704,21 @@ function useViewers() {
 function LiveBadge() {
   const viewers = useViewers();
   return (
-    <span className="flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-white shadow-[0_0_24px_rgba(220,38,38,0.55)]">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+    <span
+      className="flex items-center overflow-hidden rounded-full border border-white/15 bg-black/55 text-[11px] font-bold text-white shadow-lg backdrop-blur-md"
+      aria-label={`Live watch party, ${viewers.length} watching`}
+    >
+      <span className="flex items-center gap-1.5 bg-red-600 px-2.5 py-1 uppercase tracking-[0.14em]">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+        </span>
+        Live
       </span>
-      Live
-      <span className="tabular-nums">{viewers.length}</span>
+      <span className="flex items-center gap-1 px-2.5 py-1 tabular-nums">
+        <Users className="h-3 w-3 text-zinc-300" />
+        {viewers.length}
+      </span>
     </span>
   );
 }
@@ -914,24 +922,38 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
   ];
 
   if (collapsed) {
+    const railButton = 'relative flex h-10 w-10 items-center justify-center rounded-xl text-zinc-300 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white';
     return (
       <aside
         aria-label="Watch party (collapsed)"
-        className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#0b0b0b] p-2 landscape:h-full landscape:w-16 landscape:flex-col landscape:border-l landscape:border-t-0 landscape:py-3"
+        className="flex shrink-0 items-center gap-1.5 border-t border-white/10 bg-[#0b0b0b] px-2 py-1.5 landscape:h-full landscape:w-14 landscape:flex-col landscape:gap-2 landscape:border-l landscape:border-t-0 landscape:py-3"
       >
         <button
           type="button"
           onClick={() => setCollapsed(false)}
           aria-label="Show watch party panel"
           title="Show watch party panel"
-          className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          className={`${railButton} bg-white/10 text-white`}
         >
-          <PanelRightOpen className="h-5 w-5" />
+          <PanelRightOpen className="h-[18px] w-[18px]" />
         </button>
-        <span className="flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-1 text-[11px] font-black text-white landscape:flex-col landscape:gap-0.5 landscape:rounded-lg landscape:px-1.5">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-          <span className="tabular-nums">{viewers.length}</span>
-        </span>
+
+        <span className="hidden h-px w-6 bg-white/10 landscape:block" aria-hidden="true" />
+
+        <div
+          className="flex h-10 items-center gap-1.5 rounded-xl px-2 landscape:h-auto landscape:w-10 landscape:flex-col landscape:gap-1 landscape:px-0 landscape:py-2"
+          title={`${viewers.length} watching`}
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-600" />
+          </span>
+          <span className="flex items-center gap-1 text-xs font-bold tabular-nums text-white landscape:flex-col landscape:gap-0.5">
+            <Users className="h-3.5 w-3.5 text-zinc-400" />
+            {viewers.length}
+          </span>
+        </div>
+
         <button
           type="button"
           onClick={() => {
@@ -939,21 +961,30 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
             setCollapsed(false);
           }}
           aria-label={unread ? `Open chat, ${unread} unread` : 'Open chat'}
-          className="relative flex h-10 w-10 items-center justify-center rounded-lg text-zinc-300 hover:bg-white/10 hover:text-white"
+          title="Chat"
+          className={railButton}
         >
-          <MessageCircle className="h-5 w-5" />
+          <MessageCircle className="h-[18px] w-[18px]" />
           {unread ? (
-            <span className="absolute -right-1 -top-1 min-w-[1.1rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-bold text-white">
-              {unread > 99 ? '99+' : unread}
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white ring-2 ring-[#0b0b0b]">
+              {unread > 9 ? '9+' : unread}
             </span>
           ) : null}
         </button>
-        <ul className="ml-auto flex -space-x-2 landscape:ml-0 landscape:mt-auto landscape:flex-col landscape:space-x-0 landscape:-space-y-2">
-          {viewers.slice(0, 4).map((viewer) => (
-            <li key={viewer.clientId} className={`relative h-8 w-8 overflow-hidden rounded-full bg-zinc-800 ring-2 ${viewer.role === 'host' ? 'ring-red-600' : 'ring-[#0b0b0b]'}`} title={viewer.name}>
-              {viewer.image ? <Image src={viewer.image} alt="" fill sizes="32px" className="object-cover" /> : null}
+
+        <ul className="ml-auto flex -space-x-2 landscape:ml-0 landscape:mt-auto landscape:flex-col landscape:items-center landscape:space-x-0 landscape:-space-y-2">
+          {viewers.slice(0, 3).map((viewer) => (
+            <li key={viewer.clientId} className={`relative h-7 w-7 overflow-hidden rounded-full bg-zinc-800 ring-2 ${viewer.role === 'host' ? 'ring-red-600' : 'ring-[#0b0b0b]'}`} title={viewer.name}>
+              {viewer.image ? <Image src={viewer.image} alt="" fill sizes="28px" className="object-cover" /> : (
+                <span className="flex h-full items-center justify-center text-[10px] font-bold">{viewer.name.slice(0, 1).toUpperCase()}</span>
+              )}
             </li>
           ))}
+          {viewers.length > 3 ? (
+            <li className="relative flex h-7 w-7 items-center justify-center rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-300 ring-2 ring-[#0b0b0b]">
+              +{viewers.length - 3}
+            </li>
+          ) : null}
         </ul>
       </aside>
     );
@@ -965,48 +996,55 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
       className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden border-white/10 bg-[#0b0b0b] p-2 landscape:h-full landscape:w-[22rem] landscape:flex-none landscape:border-l xl:landscape:w-96"
     >
       <section className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm font-black">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600" />
-              </span>
-              Watch Party
-              <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-zinc-300">{party.code}</span>
-            </p>
-            <p className="mt-0.5 truncate text-xs text-zinc-500">
-              {party.isHost ? 'You are hosting' : `Hosted by ${party.party?.hostName ?? 'host'}`} · {viewers.length} watching
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-1.5">
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              aria-label="Hide watch party panel"
-              title="Hide panel"
-              className="flex items-center rounded-md bg-white/10 px-2 py-1.5 text-white hover:bg-white/20"
-            >
-              <PanelRightClose className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => void copyInvite()}
-              className="flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-black hover:bg-zinc-200"
-            >
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Copied' : 'Invite'}
-            </button>
-            <button
-              type="button"
-              onClick={party.isHost ? party.endParty : party.leaveParty}
-              title={party.isHost ? 'End the party for everyone' : 'Leave the party'}
-              className="flex items-center gap-1 rounded-md bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-600"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              {party.isHost ? 'End' : 'Leave'}
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600" />
+          </span>
+          <h2 className="whitespace-nowrap text-sm font-black">Watch Party</h2>
+          <button
+            type="button"
+            onClick={() => void copyInvite()}
+            title="Copy invite link"
+            className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[10px] tracking-widest text-zinc-300 transition hover:bg-white/20 hover:text-white"
+          >
+            {party.code}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            aria-label="Hide watch party panel"
+            title="Hide panel"
+            className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
+        </div>
+
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
+          <span className="truncate">{party.isHost ? 'You are hosting' : `Hosted by ${party.party?.hostName ?? 'host'}`}</span>
+          <span aria-hidden="true">·</span>
+          <span className="flex shrink-0 items-center gap-1 tabular-nums"><Users className="h-3 w-3" />{viewers.length} watching</span>
+        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => void copyInvite()}
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-white py-2 text-xs font-bold text-black transition hover:bg-zinc-200"
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Link copied' : 'Invite'}
+          </button>
+          <button
+            type="button"
+            onClick={party.isHost ? party.endParty : party.leaveParty}
+            title={party.isHost ? 'End the party for everyone' : 'Leave the party'}
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-white/10 py-2 text-xs font-bold text-white transition hover:bg-red-600"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            {party.isHost ? 'End party' : 'Leave'}
+          </button>
         </div>
       </section>
 
