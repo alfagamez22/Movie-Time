@@ -17,7 +17,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Check, Copy, ListVideo, LogOut, MessageCircle, Pause, Play, Radio, Send, Users, Volume2 } from 'lucide-react';
+import { Check, Copy, ListVideo, LogOut, MessageCircle, Pause, Play, Radio, RefreshCw, Send, Users, Volume2 } from 'lucide-react';
 
 import { PLAYER_PROGRESS_EVENT, type PlayerProgressDetail } from '@/lib/party/player-events';
 import {
@@ -30,7 +30,13 @@ import {
 
 const PUBLISH_INTERVAL_MS = 5_000;
 const DRIFT_TOLERANCE_S = 8;
-const RESYNC_COOLDOWN_MS = 10_000;
+const RESYNC_COOLDOWN_MS = 20_000;
+/** Embeds report 0:00 (or stale times) for a few seconds after loading before honouring `startAt`. */
+const RESYNC_SETTLE_MS = 8_000;
+const MAX_FAILED_RESYNCS = 2;
+const PAUSE_CONFIRM_MS = 1_500;
+const PAUSED_STATUSES = new Set(['paused', 'pause', 'ended', 'completed']);
+const PLAYING_STATUSES = new Set(['playing', 'play', 'resumed']);
 const HOST_STALE_MS = 30_000;
 const HOST_GONE_GRACE_MS = 8_000;
 const HEARTBEAT_MS = 30_000;
@@ -71,10 +77,12 @@ interface PartyContextValue {
   joined: boolean;
   leaveParty: () => void;
   needsSignIn: boolean;
+  outOfSync: boolean;
   party: WatchParty | null;
   pushActivity: (text: string) => void;
   ready: boolean;
   refreshParty: () => void;
+  resync: () => void;
   starting: boolean;
   startError: string | null;
   startParty: () => void;
@@ -131,12 +139,17 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
   const [startError, setStartError] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
   const [hostState, setHostState] = useState<PartySyncState | null>(null);
+  const hostStateRef = useRef<PartySyncState | null>(null);
   const [hostSeenAt, setHostSeenAt] = useState(0);
   const [now, setNow] = useState(0);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [clients, setClients] = useState<{ chat: ChatClient; realtime: Ably.Realtime } | null>(null);
   const localTimeRef = useRef<{ at: number; duration: number | null; playing: boolean; seconds: number }>({ at: 0, duration: null, playing: false, seconds: 0 });
   const guestPausedRef = useRef(false);
+  const settleUntilRef = useRef(0);
+  const awaitingResyncRef = useRef<number | null>(null);
+  const failedResyncsRef = useRef(0);
+  const [outOfSync, setOutOfSync] = useState(false);
   const refreshPartyRef = useRef<() => void>(() => undefined);
   const lastResyncRef = useRef(0);
   const onFollowRef = useRef(onFollow);
@@ -198,10 +211,20 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     const onProgress = (event: Event) => {
       const { duration, seconds, status: playerStatus } = (event as CustomEvent<PlayerProgressDetail>).detail;
       const previous = localTimeRef.current;
-      const advancing = seconds > previous.seconds && seconds - previous.seconds < 30;
-      const playing = playerStatus
-        ? !['paused', 'pause', 'ended', 'completed'].includes(playerStatus)
-        : advancing;
+      // Only explicit statuses change play state; repeated timestamps between ticks are not a pause.
+      const playing = PAUSED_STATUSES.has(playerStatus)
+        ? false
+        : PLAYING_STATUSES.has(playerStatus) || seconds !== previous.seconds
+          ? true
+          : previous.playing;
+      if (Date.now() < settleUntilRef.current) {
+        localTimeRef.current = { ...previous, duration: duration ?? previous.duration, playing };
+        return;
+      }
+      if (awaitingResyncRef.current !== null) {
+        if (Math.abs(seconds - awaitingResyncRef.current) <= DRIFT_TOLERANCE_S * 2) failedResyncsRef.current = 0;
+        awaitingResyncRef.current = null;
+      }
       localTimeRef.current = { at: Date.now(), duration: duration ?? previous.duration, playing, seconds };
     };
     window.addEventListener(PLAYER_PROGRESS_EVENT, onProgress);
@@ -265,6 +288,7 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
         return;
       }
       if (message.name === 'state') {
+        hostStateRef.current = message.data as PartySyncState;
         setHostState(message.data as PartySyncState);
         setHostSeenAt(Date.now());
       }
@@ -283,21 +307,30 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     }
     if (!joined) return;
 
-    const expected = hostState.time + (hostState.playing ? (Date.now() - hostState.sentAt) / 1000 : 0);
-    const follow = (paused: boolean) => {
+    const expectedAt = (state: PartySyncState) =>
+      state.time + (state.playing ? (Date.now() - state.sentAt) / 1000 : 0);
+    const follow = (paused: boolean, reason: 'episode' | 'drift' | 'play' | 'pause') => {
+      const target = expectedAt(hostState);
       lastResyncRef.current = Date.now();
       guestPausedRef.current = paused;
+      settleUntilRef.current = paused ? 0 : Date.now() + RESYNC_SETTLE_MS;
+      awaitingResyncRef.current = reason === 'drift' ? target : null;
       localTimeRef.current = { ...localTimeRef.current, at: 0 };
-      onFollowRef.current({ episode: hostState.episode, paused, season: hostState.season, time: expected });
+      onFollowRef.current({ episode: hostState.episode, paused, season: hostState.season, time: target });
     };
     const episodeChanged = (hostState.season ?? null) !== season || (hostState.episode ?? null) !== episode;
 
     if (!hostState.playing) {
-      if (!guestPausedRef.current || episodeChanged) follow(true);
-      return;
+      if (guestPausedRef.current && !episodeChanged) return;
+      // Ignore sub-second pauses (buffering, scrubbing) so guests don't unload and reload the embed.
+      const timer = setTimeout(() => {
+        const latest = hostStateRef.current;
+        if (latest && !latest.playing) follow(true, 'pause');
+      }, PAUSE_CONFIRM_MS);
+      return () => clearTimeout(timer);
     }
     if (guestPausedRef.current || episodeChanged) {
-      follow(false);
+      follow(false, episodeChanged ? 'episode' : 'play');
       if (episodeChanged && hostState.episode) {
         const id = setTimeout(() => pushActivity(
           `Host switched to ${hostState.season ? `S${hostState.season} · ` : ''}E${hostState.episode}`,
@@ -308,9 +341,18 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     }
 
     const local = localTimeRef.current;
-    const localNow = local.seconds + (local.playing && local.at ? (Date.now() - local.at) / 1000 : 0);
-    const drifted = local.at > 0 && Math.abs(localNow - expected) > DRIFT_TOLERANCE_S;
-    if (drifted && Date.now() - lastResyncRef.current > RESYNC_COOLDOWN_MS) follow(false);
+    if (!local.at || Date.now() < settleUntilRef.current) return;
+    const localNow = local.seconds + (local.playing ? (Date.now() - local.at) / 1000 : 0);
+    const drifted = Math.abs(localNow - expectedAt(hostState)) > DRIFT_TOLERANCE_S;
+    if (!drifted || Date.now() - lastResyncRef.current < RESYNC_COOLDOWN_MS) return;
+
+    // If reloading at the host's time keeps failing (embed ignores startAt), stop looping and let the viewer decide.
+    if (failedResyncsRef.current >= MAX_FAILED_RESYNCS) {
+      const id = setTimeout(() => setOutOfSync(true), 0);
+      return () => clearTimeout(id);
+    }
+    failedResyncsRef.current += 1;
+    follow(false, 'drift');
   }, [code, entry.id, episode, hostState, isHost, joined, pushActivity, router, season]);
 
   useEffect(() => {
@@ -436,12 +478,25 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     reset();
   }, [clients, code, reset]);
 
+  const resync = useCallback(() => {
+    const state = hostStateRef.current;
+    failedResyncsRef.current = 0;
+    setOutOfSync(false);
+    if (!state) return;
+    const target = state.time + (state.playing ? (Date.now() - state.sentAt) / 1000 : 0);
+    lastResyncRef.current = Date.now();
+    settleUntilRef.current = Date.now() + RESYNC_SETTLE_MS;
+    guestPausedRef.current = !state.playing;
+    onFollowRef.current({ episode: state.episode, paused: !state.playing, season: state.season, time: target });
+  }, []);
+
   const joinWithSound = useCallback(() => {
     setJoined(true);
     lastResyncRef.current = Date.now();
     if (hostState) {
       const expected = hostState.time + (hostState.playing ? (Date.now() - hostState.sentAt) / 1000 : 0);
       guestPausedRef.current = !hostState.playing;
+      settleUntilRef.current = Date.now() + RESYNC_SETTLE_MS;
       onFollowRef.current({ episode: hostState.episode, paused: !hostState.playing, season: hostState.season, time: expected });
     }
   }, [hostState]);
@@ -460,15 +515,17 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     joined: isHost || joined,
     leaveParty: reset,
     needsSignIn,
+    outOfSync: outOfSync && !isHost,
     party,
     pushActivity,
     ready: Boolean(clients && party),
     refreshParty,
+    resync,
     starting,
     startError,
     startParty: () => void startParty(),
     status,
-  }), [activity, buildState, claimHost, clients, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, party, pushActivity, refreshParty, reset, startError, startParty, starting, status]);
+  }), [activity, buildState, claimHost, clients, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, outOfSync, party, pushActivity, refreshParty, reset, resync, startError, startParty, starting, status]);
 
   const content = <PartyContext.Provider value={value}>{children}</PartyContext.Provider>;
   if (!clients || !code || !party) return content;
@@ -631,6 +688,19 @@ export function WatchPartyPlayerLayer({ chromeVisible }: { chromeVisible: boolea
             </p>
           ) : null}
           <p className="text-xs text-zinc-500">Playback resumes for everyone when the host presses play.</p>
+        </div>
+      ) : null}
+
+      {guestView && party.joined && party.outOfSync && !party.hostPaused ? (
+        <div className="absolute inset-x-0 bottom-16 z-40 flex justify-center">
+          <button
+            type="button"
+            onClick={party.resync}
+            className="flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-lg hover:bg-red-500"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Out of sync — jump to host
+          </button>
         </div>
       ) : null}
 
