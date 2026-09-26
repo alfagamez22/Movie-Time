@@ -369,6 +369,7 @@ function StandardWatchPlayer({
   const [iframeReloadKey, setIframeReloadKey] = useState(0);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const [partyStartAt, setPartyStartAt] = useState<number | null>(null);
+  const [partyPaused, setPartyPaused] = useState(false);
   const chromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerShellRef = useRef<HTMLDivElement>(null);
@@ -518,7 +519,7 @@ function StandardWatchPlayer({
         typeof parsedMessage.data.player_status === 'string'
         ? parsedMessage.data.player_status.toLowerCase()
         : '';
-      emitPlayerProgress(progress.progressSeconds, playerStatus);
+      emitPlayerProgress(progress.progressSeconds, playerStatus, progress.durationSeconds);
       const isFinalPosition = ['paused', 'seeked', 'completed'].includes(playerStatus);
       if (now - lastProgressWriteRef.current < 5_000 && !isFinalPosition && progress.progressPercent !== 100) return;
       lastProgressWriteRef.current = now;
@@ -661,7 +662,8 @@ function StandardWatchPlayer({
     setEpisode(nextEpisode);
     setEmbedPlayback({ season: nextSeason, episode: nextEpisode });
     setPartyStartAt(Math.max(0, Math.floor(target.time)));
-    setIframeReloadKey((value) => value + 1);
+    setPartyPaused(target.paused);
+    if (!target.paused) setIframeReloadKey((value) => value + 1);
   }, [isSeries, safeEpisode, safeSeason]);
 
   const handleReloadPlayer = useCallback(() => {
@@ -795,26 +797,28 @@ function StandardWatchPlayer({
           <RotateCcw className="h-5 w-5" />
         </button>
 
-        <iframe
-          key={`${entry.provider}-videasy-${embedPlayback.season}-${embedPlayback.episode}-${iframeReloadKey}`}
-          ref={iframeRef}
-          src={embedUrl}
-          className="h-full w-full border-0"
-          allowFullScreen
-          allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-          onError={() => {
-            hasIframeLoadedRef.current = false;
-            setIsPlayerLoading(false);
-            setShowPlayerFallback(true);
-          }}
-          onLoad={() => {
-            hasIframeLoadedRef.current = true;
-            setIsPlayerLoading(false);
-            setPlayerMessage('Videasy loaded. If playback is blank, reload to request another source.');
-          }}
-          referrerPolicy="strict-origin-when-cross-origin"
-          title={`Watch ${entry.title}`}
-        />
+        {partyPaused ? null : (
+          <iframe
+            key={`${entry.provider}-videasy-${embedPlayback.season}-${embedPlayback.episode}-${iframeReloadKey}`}
+            ref={iframeRef}
+            src={embedUrl}
+            className="h-full w-full border-0"
+            allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            onError={() => {
+              hasIframeLoadedRef.current = false;
+              setIsPlayerLoading(false);
+              setShowPlayerFallback(true);
+            }}
+            onLoad={() => {
+              hasIframeLoadedRef.current = true;
+              setIsPlayerLoading(false);
+              setPlayerMessage('Videasy loaded. If playback is blank, reload to request another source.');
+            }}
+            referrerPolicy="strict-origin-when-cross-origin"
+            title={`Watch ${entry.title}`}
+          />
+        )}
         <WatchPartyPlayerLayer chromeVisible={isChromeVisible} />
       </div>
 

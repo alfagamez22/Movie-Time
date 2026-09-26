@@ -1,12 +1,28 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
-import { createParty } from '@/lib/party/store';
+import { createParty, listLiveParties } from '@/lib/party/store';
 
 const EXPERIENCES = new Set(['papiflix', 'papianime']);
 
 function text(value: unknown, max = 300) {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null;
+}
+
+function imageUrl(value: unknown) {
+  const url = text(value, 500);
+  return url && (url.startsWith('https://') || (url.startsWith('/') && !url.startsWith('//'))) ? url : null;
+}
+
+function seconds(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+}
+
+export async function GET(request: Request) {
+  const experience = new URL(request.url).searchParams.get('experience') ?? '';
+  if (!EXPERIENCES.has(experience)) return NextResponse.json({ parties: [] });
+  const parties = await listLiveParties(experience).catch(() => []);
+  return NextResponse.json({ parties }, { headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=20' } });
 }
 
 export async function POST(request: Request) {
@@ -25,6 +41,9 @@ export async function POST(request: Request) {
   }
 
   const party = await createParty({
+    backdropUrl: imageUrl(body?.backdropUrl),
+    duration: seconds(body?.duration),
+    episode: text(body?.episode, 10),
     experience,
     hostId: session.user.id,
     hostImage: session.user.image ?? null,
@@ -32,6 +51,10 @@ export async function POST(request: Request) {
     mediaId,
     mediaProvider,
     mediaType,
+    posterUrl: imageUrl(body?.posterUrl),
+    season: text(body?.season, 10),
+    startTime: seconds(body?.time) ?? 0,
+    time: seconds(body?.time) ?? 0,
     title,
     watchPath,
   });

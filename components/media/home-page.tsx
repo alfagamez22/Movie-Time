@@ -17,6 +17,7 @@ import type { PersonSummary } from '@/lib/people/types';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
+import { LivePartiesRow } from '@/components/party/live-parties-row';
 import { HeroBanner } from './hero-banner';
 import { MatureToggle, filterMatureSections, useMatureUnlocked } from './mature-toggle';
 import { MediaDetailsModal } from './media-details-modal';
@@ -438,6 +439,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       ) : null}
 
       <div className="browse-shelves space-y-10 py-8">
+        {experience.id === 'papiflix' || experience.id === 'papianime' ? <LivePartiesRow experience={experience.id} /> : null}
         {recentlyWatched.length > 0 ? (
           <BrowseRow
             cinematic={experience.id !== 'papimanga'}

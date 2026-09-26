@@ -22,6 +22,7 @@ export const INDEXES = {
     ['idx_papiflix_record_user_media', ['type', 'userId', 'mediaId', 'mediaProvider', 'mediaType']],
     ['idx_papiflix_progress_episode', ['type', 'userId', 'mediaId', 'mediaProvider', 'mediaType', 'season', 'episode']],
     ['idx_papiflix_comment_media', ['type', 'mediaId', 'mediaType', 'mediaProvider', 'createdAt']],
+    ['idx_papiflix_experience_updated', ['type', 'experience', 'updatedAt']],
   ],
   papianime: [
     ['idx_papianime_user_updated', ['type', 'userId', 'updatedAt']],
@@ -30,6 +31,7 @@ export const INDEXES = {
     ['idx_papianime_progress_episode', ['type', 'userId', 'mediaId', 'mediaProvider', 'mediaType', 'season', 'episode']],
     ['idx_papianime_anime_list', ['type', 'userId', 'anilistId', 'updatedAt']],
     ['idx_papianime_comment_media', ['type', 'mediaId', 'mediaType', 'mediaProvider', 'createdAt']],
+    ['idx_papianime_experience_updated', ['type', 'experience', 'updatedAt']],
   ],
   mangadex: [
     ['idx_mangadex_user_updated', ['type', 'userId', 'updatedAt']],

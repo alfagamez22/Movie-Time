@@ -537,6 +537,7 @@ export function AnimeWatchPlayer({
   const [savedStartAt, setSavedStartAt] = useState<number | null>(initialPlayback.progress ?? null);
   const [isEpisodeListVisible, setIsEpisodeListVisible] = useState(true);
   const [partyStartAt, setPartyStartAt] = useState<number | null>(null);
+  const [partyPaused, setPartyPaused] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playerShellRef = useRef<HTMLDivElement>(null);
   const hasIframeLoadedRef = useRef(false);
@@ -656,7 +657,7 @@ export function AnimeWatchPlayer({
       if (!progress) return;
 
       const eventType = typeof event.data === 'object' && event.data !== null ? (event.data as Record<string, unknown>).type as string ?? 'update' : 'update';
-      emitPlayerProgress(progress.progressSeconds, String(eventType).toLowerCase());
+      emitPlayerProgress(progress.progressSeconds, String(eventType).toLowerCase(), progress.durationSeconds);
       saveProgress(progress, eventType);
 
       if (progress.progressPercent != null && progress.progressPercent >= 90) {
@@ -762,7 +763,8 @@ export function AnimeWatchPlayer({
     if (Number.isFinite(nextSeason)) setCurrentSeason(nextSeason);
     if (Number.isFinite(nextEpisode)) setCurrentEpisode(Math.min(Math.max(1, nextEpisode), playableEpisodeLimit));
     setPartyStartAt(Math.max(0, Math.floor(target.time)));
-    setIframeReloadKey((value) => value + 1);
+    setPartyPaused(target.paused);
+    if (!target.paused) setIframeReloadKey((value) => value + 1);
   };
 
   const handleReloadPlayer = useCallback(() => {
@@ -873,26 +875,28 @@ export function AnimeWatchPlayer({
           <RotateCcw className="h-5 w-5" />
         </button>
 
-        <iframe
-          key={`${anilistId}-${currentEpisode}-${currentLanguage}-${iframeReloadKey}`}
-          ref={iframeRef}
-          src={embedUrl}
-          className="h-full w-full border-0"
-          allow="autoplay; fullscreen; encrypted-media"
-          allowFullScreen
-          onLoad={() => {
-            hasIframeLoadedRef.current = true;
-            setIsIframeLoading(false);
-            setIframeError(null);
-          }}
-          onError={() => {
-            hasIframeLoadedRef.current = false;
-            setIsIframeLoading(false);
-            setIframeError('The anime player failed to load. Retry the player without leaving this episode.');
-          }}
-          referrerPolicy="no-referrer"
-          title={`Watch ${entry.title}`}
-        />
+        {partyPaused ? null : (
+          <iframe
+            key={`${anilistId}-${currentEpisode}-${currentLanguage}-${iframeReloadKey}`}
+            ref={iframeRef}
+            src={embedUrl}
+            className="h-full w-full border-0"
+            allow="autoplay; fullscreen; encrypted-media"
+            allowFullScreen
+            onLoad={() => {
+              hasIframeLoadedRef.current = true;
+              setIsIframeLoading(false);
+              setIframeError(null);
+            }}
+            onError={() => {
+              hasIframeLoadedRef.current = false;
+              setIsIframeLoading(false);
+              setIframeError('The anime player failed to load. Retry the player without leaving this episode.');
+            }}
+            referrerPolicy="no-referrer"
+            title={`Watch ${entry.title}`}
+          />
+        )}
         <WatchPartyPlayerLayer chromeVisible />
       </div>
 

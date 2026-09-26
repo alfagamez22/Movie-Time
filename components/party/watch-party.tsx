@@ -17,7 +17,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Check, Copy, ListVideo, LogOut, MessageCircle, Radio, Send, Users, Volume2 } from 'lucide-react';
+import { Check, Copy, ListVideo, LogOut, MessageCircle, Pause, Play, Radio, Send, Users, Volume2 } from 'lucide-react';
 
 import { PLAYER_PROGRESS_EVENT, type PlayerProgressDetail } from '@/lib/party/player-events';
 import {
@@ -29,14 +29,26 @@ import {
 } from '@/lib/party/types';
 
 const PUBLISH_INTERVAL_MS = 5_000;
-const DRIFT_TOLERANCE_S = 20;
-const RESYNC_COOLDOWN_MS = 20_000;
+const DRIFT_TOLERANCE_S = 8;
+const RESYNC_COOLDOWN_MS = 10_000;
 const HOST_STALE_MS = 30_000;
+const HOST_GONE_GRACE_MS = 8_000;
+const HEARTBEAT_MS = 30_000;
 
 export interface FollowTarget {
   episode: string | null;
+  /** Guests unload the embed while the host is paused, so everyone stops at the same frame. */
+  paused: boolean;
   season: string | null;
   time: number;
+}
+
+export function formatClock(totalSeconds: number) {
+  const value = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const secs = String(value % 60).padStart(2, '0');
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${secs}` : `${minutes}:${secs}`;
 }
 
 interface ActivityItem {
@@ -47,8 +59,11 @@ interface ActivityItem {
 
 interface PartyContextValue {
   activity: ActivityItem[];
+  claimHost: () => Promise<void>;
   code: string | null;
   endParty: () => void;
+  getSnapshot: () => PartySyncState;
+  hostState: PartySyncState | null;
   hostPaused: boolean;
   hostStale: boolean;
   isHost: boolean;
@@ -59,6 +74,7 @@ interface PartyContextValue {
   party: WatchParty | null;
   pushActivity: (text: string) => void;
   ready: boolean;
+  refreshParty: () => void;
   starting: boolean;
   startError: string | null;
   startParty: () => void;
@@ -96,7 +112,7 @@ function currentWatchPath() {
 
 interface WatchPartyRootProps {
   children: ReactNode;
-  entry: { id: string; provider: string; title: string; type: string };
+  entry: { backdropUrl?: string; id: string; posterUrl?: string; provider: string; title: string; type: string };
   episode: string | null;
   experienceId: 'papiflix' | 'papianime';
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -119,7 +135,9 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
   const [now, setNow] = useState(0);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [clients, setClients] = useState<{ chat: ChatClient; realtime: Ably.Realtime } | null>(null);
-  const localTimeRef = useRef({ at: 0, playing: false, seconds: 0 });
+  const localTimeRef = useRef<{ at: number; duration: number | null; playing: boolean; seconds: number }>({ at: 0, duration: null, playing: false, seconds: 0 });
+  const guestPausedRef = useRef(false);
+  const refreshPartyRef = useRef<() => void>(() => undefined);
   const lastResyncRef = useRef(0);
   const onFollowRef = useRef(onFollow);
   const isHost = Boolean(party && userId && party.hostId === userId);
@@ -178,13 +196,13 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
 
   useEffect(() => {
     const onProgress = (event: Event) => {
-      const { seconds, status: playerStatus } = (event as CustomEvent<PlayerProgressDetail>).detail;
+      const { duration, seconds, status: playerStatus } = (event as CustomEvent<PlayerProgressDetail>).detail;
       const previous = localTimeRef.current;
       const advancing = seconds > previous.seconds && seconds - previous.seconds < 30;
       const playing = playerStatus
         ? !['paused', 'pause', 'ended', 'completed'].includes(playerStatus)
         : advancing;
-      localTimeRef.current = { at: Date.now(), playing, seconds };
+      localTimeRef.current = { at: Date.now(), duration: duration ?? previous.duration, playing, seconds };
     };
     window.addEventListener(PLAYER_PROGRESS_EVENT, onProgress);
     return () => window.removeEventListener(PLAYER_PROGRESS_EVENT, onProgress);
@@ -194,6 +212,7 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     const local = localTimeRef.current;
     const elapsed = local.playing && local.at ? (Date.now() - local.at) / 1000 : 0;
     return {
+      duration: local.duration,
       episode,
       mediaId: entry.id,
       playing: local.playing,
@@ -208,10 +227,26 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
   useEffect(() => {
     if (!clients || !isHost || !code) return;
     const channel = clients.realtime.channels.get(partySyncChannel(code));
-    const publish = () => void channel.publish('state', buildState()).catch(() => undefined);
+    let last = buildState();
+    let lastPublishedAt = 0;
+    const publish = () => {
+      last = buildState();
+      lastPublishedAt = Date.now();
+      void channel.publish('state', last).catch(() => undefined);
+    };
+    const onProgress = () => {
+      const next = buildState();
+      const predicted = last.time + (last.playing ? (Date.now() - last.sentAt) / 1000 : 0);
+      const changed = next.playing !== last.playing || Math.abs(next.time - predicted) > 4;
+      if (changed && Date.now() - lastPublishedAt > 800) publish();
+    };
     publish();
     const timer = setInterval(publish, PUBLISH_INTERVAL_MS);
-    return () => clearInterval(timer);
+    window.addEventListener(PLAYER_PROGRESS_EVENT, onProgress);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(PLAYER_PROGRESS_EVENT, onProgress);
+    };
   }, [buildState, clients, code, isHost]);
 
   // Guests: follow the host.
@@ -219,6 +254,10 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     if (!clients || isHost || !code || !party) return;
     const channel = clients.realtime.channels.get(partySyncChannel(code), { params: { rewind: '1' } });
     const listener = (message: Ably.InboundMessage) => {
+      if (message.name === 'host') {
+        refreshPartyRef.current();
+        return;
+      }
       if (message.clientId !== party.hostId) return;
       if (message.name === 'end') {
         setStatus('ended');
@@ -245,22 +284,33 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     if (!joined) return;
 
     const expected = hostState.time + (hostState.playing ? (Date.now() - hostState.sentAt) / 1000 : 0);
-    const episodeChanged = (hostState.season ?? null) !== season || (hostState.episode ?? null) !== episode;
-    const local = localTimeRef.current;
-    const localNow = local.seconds + (local.playing && local.at ? (Date.now() - local.at) / 1000 : 0);
-    const drifted = local.at > 0 && Math.abs(localNow - expected) > DRIFT_TOLERANCE_S;
-    const coolingDown = Date.now() - lastResyncRef.current < RESYNC_COOLDOWN_MS;
-
-    if (episodeChanged || (drifted && !coolingDown)) {
+    const follow = (paused: boolean) => {
       lastResyncRef.current = Date.now();
-      onFollowRef.current({ episode: hostState.episode, season: hostState.season, time: expected });
+      guestPausedRef.current = paused;
+      localTimeRef.current = { ...localTimeRef.current, at: 0 };
+      onFollowRef.current({ episode: hostState.episode, paused, season: hostState.season, time: expected });
+    };
+    const episodeChanged = (hostState.season ?? null) !== season || (hostState.episode ?? null) !== episode;
+
+    if (!hostState.playing) {
+      if (!guestPausedRef.current || episodeChanged) follow(true);
+      return;
+    }
+    if (guestPausedRef.current || episodeChanged) {
+      follow(false);
       if (episodeChanged && hostState.episode) {
         const id = setTimeout(() => pushActivity(
           `Host switched to ${hostState.season ? `S${hostState.season} · ` : ''}E${hostState.episode}`,
         ), 0);
         return () => clearTimeout(id);
       }
+      return;
     }
+
+    const local = localTimeRef.current;
+    const localNow = local.seconds + (local.playing && local.at ? (Date.now() - local.at) / 1000 : 0);
+    const drifted = local.at > 0 && Math.abs(localNow - expected) > DRIFT_TOLERANCE_S;
+    if (drifted && Date.now() - lastResyncRef.current > RESYNC_COOLDOWN_MS) follow(false);
   }, [code, entry.id, episode, hostState, isHost, joined, pushActivity, router, season]);
 
   useEffect(() => {
@@ -278,6 +328,53 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     else iframe.removeAttribute('tabindex');
   });
 
+  const refreshParty = useCallback(() => {
+    if (!code) return;
+    void fetch(`/api/party/${code}`, { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json: { party?: WatchParty } | null) => {
+        if (!json?.party) return;
+        if (json.party.endedAt) {
+          setStatus('ended');
+          setPartyParam(null);
+          return;
+        }
+        setParty((current) => {
+          if (current && current.hostId !== json.party!.hostId) {
+            setTimeout(() => pushActivity(`${json.party!.hostName} is now the host`), 0);
+          }
+          return json.party!;
+        });
+      })
+      .catch(() => undefined);
+  }, [code, pushActivity]);
+  useEffect(() => {
+    refreshPartyRef.current = refreshParty;
+  }, [refreshParty]);
+
+  const claimHost = useCallback(async () => {
+    if (!code) return;
+    const response = await fetch(`/api/party/${code}/claim`, { method: 'POST' }).catch(() => null);
+    const json = await response?.json().catch(() => null) as { party?: WatchParty } | null;
+    if (response?.ok && json?.party) {
+      setParty(json.party);
+      setJoined(true);
+      if (guestPausedRef.current) {
+        guestPausedRef.current = false;
+        onFollowRef.current({
+          episode: hostState?.episode ?? null,
+          paused: false,
+          season: hostState?.season ?? null,
+          time: hostState?.time ?? 0,
+        });
+      }
+      pushActivity('You are now the host');
+      if (clients) void clients.realtime.channels.get(partySyncChannel(code)).publish('host', { hostId: json.party.hostId }).catch(() => undefined);
+    } else if (json?.party) {
+      setParty(json.party);
+    }
+  }, [clients, code, hostState, pushActivity]);
+
   const startParty = useCallback(async () => {
     if (!userId) {
       void signIn('google', { callbackUrl: window.location.href });
@@ -288,10 +385,16 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     try {
       const response = await fetch('/api/party', {
         body: JSON.stringify({
+          backdropUrl: entry.backdropUrl ?? null,
+          duration: localTimeRef.current.duration,
+          episode,
           experience: experienceId,
           mediaId: entry.id,
           mediaProvider: entry.provider,
           mediaType: entry.type,
+          posterUrl: entry.posterUrl ?? null,
+          season,
+          time: buildState().time,
           title: entry.title,
           watchPath: currentWatchPath(),
         }),
@@ -310,7 +413,7 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     } finally {
       setStarting(false);
     }
-  }, [entry.id, entry.provider, entry.title, entry.type, experienceId, pushActivity, userId]);
+  }, [buildState, entry.backdropUrl, entry.id, entry.posterUrl, entry.provider, entry.title, entry.type, episode, experienceId, pushActivity, season, userId]);
 
   const reset = useCallback(() => {
     setPartyParam(null);
@@ -338,14 +441,18 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     lastResyncRef.current = Date.now();
     if (hostState) {
       const expected = hostState.time + (hostState.playing ? (Date.now() - hostState.sentAt) / 1000 : 0);
-      onFollowRef.current({ episode: hostState.episode, season: hostState.season, time: expected });
+      guestPausedRef.current = !hostState.playing;
+      onFollowRef.current({ episode: hostState.episode, paused: !hostState.playing, season: hostState.season, time: expected });
     }
   }, [hostState]);
 
   const value = useMemo<PartyContextValue>(() => ({
     activity,
+    claimHost,
     code,
     endParty,
+    getSnapshot: buildState,
+    hostState: isHost ? null : hostState,
     hostPaused: Boolean(hostState && !hostState.playing),
     hostStale: !isHost && status === 'active' && (!hostSeenAt || now - hostSeenAt > HOST_STALE_MS),
     isHost,
@@ -356,11 +463,12 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     party,
     pushActivity,
     ready: Boolean(clients && party),
+    refreshParty,
     starting,
     startError,
     startParty: () => void startParty(),
     status,
-  }), [activity, clients, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, party, pushActivity, reset, startError, startParty, starting, status]);
+  }), [activity, buildState, claimHost, clients, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, party, pushActivity, refreshParty, reset, startError, startParty, starting, status]);
 
   const content = <PartyContext.Provider value={value}>{children}</PartyContext.Provider>;
   if (!clients || !code || !party) return content;
@@ -375,7 +483,10 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
             role: isHost ? 'host' : 'guest',
           }}
         />
-        <PartyContext.Provider value={value}>{children}</PartyContext.Provider>
+        <PartyContext.Provider value={value}>
+          <HostSuccession />
+          {children}
+        </PartyContext.Provider>
       </ChatRoomProvider>
     </ChatClientProvider>
   );
@@ -386,8 +497,63 @@ function PresenceEnter({ data }: { data: PartyPresenceData }) {
   return null;
 }
 
+/** Promotes the longest-present viewer when the host leaves, and keeps the public party listing fresh. */
+function HostSuccession() {
+  const party = useParty();
+  const { data: session } = useSession();
+  const { presenceData } = usePresenceListener();
+  const selfId = session?.user?.id ?? null;
+  const hostId = party.party?.hostId ?? null;
+  const { claimHost, code, getSnapshot, isHost, refreshParty } = party;
+
+  const members = useMemo(() => {
+    const byClient = new Map<string, number>();
+    for (const member of presenceData) {
+      const at = member.updatedAt instanceof Date ? member.updatedAt.getTime() : Number.POSITIVE_INFINITY;
+      byClient.set(member.clientId, Math.min(byClient.get(member.clientId) ?? Infinity, at));
+    }
+    return [...byClient.entries()].sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])).map(([clientId]) => clientId);
+  }, [presenceData]);
+  const hostPresent = !hostId || members.includes(hostId);
+  const nextInLine = members[0] ?? null;
+
+  useEffect(() => {
+    if (hostPresent || isHost || members.length === 0) return;
+    const timer = setTimeout(() => {
+      if (nextInLine === selfId) void claimHost();
+      else refreshParty();
+    }, HOST_GONE_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [claimHost, hostPresent, isHost, members.length, nextInLine, refreshParty, selfId]);
+
+  useEffect(() => {
+    if (!isHost || !code) return;
+    const beat = () => {
+      const snapshot = getSnapshot();
+      void fetch(`/api/party/${code}`, {
+        body: JSON.stringify({
+          duration: snapshot.duration,
+          episode: snapshot.episode,
+          season: snapshot.season,
+          time: snapshot.time,
+          viewerCount: Math.max(1, members.length),
+          watchPath: snapshot.watchPath,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH',
+      }).catch(() => undefined);
+    };
+    beat();
+    const timer = setInterval(beat, HEARTBEAT_MS);
+    return () => clearInterval(timer);
+  }, [code, getSnapshot, isHost, members.length]);
+
+  return null;
+}
+
 function useViewers() {
   const { presenceData } = usePresenceListener();
+  const hostId = useParty().party?.hostId;
   return useMemo(() => {
     const byClient = new Map<string, PartyPresenceData & { clientId: string }>();
     for (const member of presenceData) {
@@ -396,11 +562,11 @@ function useViewers() {
         clientId: member.clientId,
         image: data.image ?? null,
         name: data.name ?? 'Viewer',
-        role: data.role === 'host' ? 'host' : 'guest',
+        role: member.clientId === hostId ? 'host' : 'guest',
       });
     }
     return [...byClient.values()].sort((a, b) => (a.role === 'host' ? -1 : b.role === 'host' ? 1 : a.name.localeCompare(b.name)));
-  }, [presenceData]);
+  }, [hostId, presenceData]);
 }
 
 function LiveBadge() {
@@ -452,10 +618,26 @@ export function WatchPartyPlayerLayer({ chromeVisible }: { chromeVisible: boolea
         />
       ) : null}
 
-      {guestView && party.joined && (party.hostStale || party.hostPaused) ? (
+      {guestView && party.joined && party.hostPaused && !party.hostStale ? (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-white/5">
+            <Pause className="h-6 w-6 fill-current" />
+          </span>
+          <p className="text-lg font-bold">Paused by {party.party?.hostName ?? 'the host'}</p>
+          {party.hostState ? (
+            <p className="font-mono text-sm text-zinc-400">
+              {formatClock(party.hostState.time)}
+              {party.hostState.duration ? ` / ${formatClock(party.hostState.duration)}` : ''}
+            </p>
+          ) : null}
+          <p className="text-xs text-zinc-500">Playback resumes for everyone when the host presses play.</p>
+        </div>
+      ) : null}
+
+      {guestView && party.joined && party.hostStale ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-16 z-30 flex justify-center">
           <span className="rounded-full bg-black/75 px-4 py-2 text-sm font-semibold text-white backdrop-blur">
-            {party.hostStale ? 'Waiting for the host…' : 'The host paused'}
+            Waiting for the host…
           </span>
         </div>
       ) : null}
@@ -605,6 +787,8 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
         </ul>
       </section>
 
+      <PartyTimeline />
+
       <div role="tablist" className="grid gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         {tabs.map(({ icon: Icon, id, label }) => (
           <button
@@ -636,6 +820,47 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
         {tab === 'activity' ? <ActivityFeed /> : null}
       </section>
     </aside>
+  );
+}
+
+function PartyTimeline() {
+  const party = useParty();
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    const first = setTimeout(() => setNow(Date.now()), 0);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, []);
+
+  const state = party.isHost ? party.getSnapshot() : party.hostState;
+  if (!state) return null;
+  const time = state.time + (!party.isHost && state.playing && now ? Math.max(0, now - state.sentAt) / 1000 : 0);
+  const duration = state.duration;
+  const start = party.party?.startTime ?? 0;
+  const percent = duration ? Math.min(100, (time / duration) * 100) : 0;
+  const startPercent = duration ? Math.min(100, (start / duration) * 100) : 0;
+  const episodeLabel = state.episode ? `${state.season ? `S${state.season} · ` : ''}E${state.episode}` : null;
+
+  return (
+    <section className="rounded-xl border border-white/10 bg-white/[0.04] p-3" aria-label="Host timeline">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+          {state.playing ? <Play className="h-3.5 w-3.5 shrink-0 fill-current text-red-500" /> : <Pause className="h-3.5 w-3.5 shrink-0 fill-current text-zinc-400" />}
+          <span className="truncate">{party.isHost ? 'You are at' : 'Host is at'} {formatClock(time)}{episodeLabel ? ` · ${episodeLabel}` : ''}</span>
+        </p>
+        {duration ? <span className="shrink-0 font-mono text-[10px] text-zinc-500">{formatClock(duration)}</span> : null}
+      </div>
+      <div className="relative mt-2 h-1.5 rounded-full bg-white/10">
+        <div className="absolute inset-y-0 left-0 rounded-full bg-red-600 transition-[width] duration-1000 ease-linear" style={{ width: `${percent}%` }} />
+        {duration && start > 0 ? (
+          <span className="absolute -top-0.5 h-2.5 w-0.5 rounded bg-white/70" style={{ left: `${startPercent}%` }} title={`Party started at ${formatClock(start)}`} />
+        ) : null}
+      </div>
+      <p className="mt-1.5 text-[10px] text-zinc-500">Party started at {formatClock(start)}</p>
+    </section>
   );
 }
 
