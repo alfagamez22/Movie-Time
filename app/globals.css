@@ -280,3 +280,19 @@
 @media (min-width: 2560px) {
   .dashboard-shell { zoom: 1.5; }
 }
+
+/* Phones in portrait during a watch party: keep the video at 16:9 so chat gets the rest of the screen. */
+@media (orientation: portrait) {
+  [data-player-shell]:has(> [data-party-panel]) > [data-player-stage] {
+    flex: none;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+}
+
+/* While typing in party chat on a phone the keyboard eats half the screen: give it all to the conversation. */
+@media (orientation: portrait) {
+  [data-party-panel]:has(input:focus) [data-party-chrome] {
+    display: none;
+  }
+}

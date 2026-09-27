@@ -877,7 +877,7 @@ export function WatchPartyPlayerLayer({ chromeVisible }: { chromeVisible: boolea
   );
 }
 
-type PanelTab = 'episodes' | 'chat' | 'activity';
+type PanelTab = 'episodes' | 'chat' | 'viewers' | 'activity';
 
 /** Replaces the regular sidebar while a party is active; renders `fallback` otherwise. */
 export function WatchPartySidebar({ episodes, fallback }: { episodes: ReactNode | null; fallback: ReactNode }) {
@@ -915,9 +915,11 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
     }
   }, [party.code, party.party?.watchPath]);
 
-  const tabs: Array<{ icon: typeof ListVideo; id: PanelTab; label: string }> = [
+  const tabs: Array<{ icon: typeof ListVideo; id: PanelTab; label: string; portraitOnly?: boolean }> = [
     ...(episodes ? [{ icon: ListVideo, id: 'episodes' as const, label: 'Episodes' }] : []),
     { icon: MessageCircle, id: 'chat', label: 'Chat' },
+    // Phones in portrait hide the Viewers card to leave room for chat, so it becomes a tab there.
+    { icon: Users, id: 'viewers', label: 'Viewers', portraitOnly: true },
     { icon: Radio, id: 'activity', label: 'Activity' },
   ];
 
@@ -926,6 +928,7 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
     return (
       <aside
         aria-label="Watch party (collapsed)"
+        data-party-panel
         className="flex shrink-0 items-center gap-1.5 border-t border-white/10 bg-[#0b0b0b] px-2 py-1.5 landscape:h-full landscape:w-14 landscape:flex-col landscape:gap-2 landscape:border-l landscape:border-t-0 landscape:py-3"
       >
         <button
@@ -993,9 +996,10 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
   return (
     <aside
       aria-label="Watch party"
+      data-party-panel
       className="flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden border-white/10 bg-[#0b0b0b] p-2 landscape:h-full landscape:w-[22rem] landscape:flex-none landscape:border-l xl:landscape:w-96"
     >
-      <section className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+      <section data-party-chrome className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
@@ -1048,7 +1052,7 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+      <section className="hidden rounded-xl border border-white/10 bg-white/[0.04] p-3 landscape:block">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">Viewers</p>
         <ul className="flex gap-2 overflow-x-auto [scrollbar-width:none]">
           {viewers.map((viewer) => (
@@ -1064,17 +1068,19 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
         </ul>
       </section>
 
-      <PartyTimeline />
+      <div data-party-chrome>
+        <PartyTimeline />
+      </div>
 
-      <div role="tablist" className="grid gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
-        {tabs.map(({ icon: Icon, id, label }) => (
+      <div role="tablist" data-party-chrome className="flex shrink-0 gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
+        {tabs.map(({ icon: Icon, id, label, portraitOnly }) => (
           <button
             key={id}
             role="tab"
             type="button"
             aria-selected={tab === id}
             onClick={() => setTab(id)}
-            className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition ${tab === id ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${portraitOnly ? 'landscape:hidden' : ''} ${tab === id ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'}`}
           >
             <Icon className="h-3.5 w-3.5" />
             {label}
@@ -1097,6 +1103,21 @@ function PartyPanel({ episodes }: { episodes: ReactNode | null }) {
         <div className={tab === 'chat' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
           <PartyChat />
         </div>
+        {tab === 'viewers' ? (
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+            {viewers.map((viewer) => (
+              <li key={viewer.clientId} className="flex items-center gap-3">
+                <span className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-zinc-800 ring-2 ${viewer.role === 'host' ? 'ring-red-600' : 'ring-white/10'}`}>
+                  {viewer.image ? <Image src={viewer.image} alt="" fill sizes="36px" className="object-cover" /> : (
+                    <span className="flex h-full items-center justify-center text-sm font-bold">{viewer.name.slice(0, 1).toUpperCase()}</span>
+                  )}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm">{viewer.name}{viewer.clientId === party.selfId ? ' (you)' : ''}</span>
+                {viewer.role === 'host' ? <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase">Host</span> : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         {tab === 'activity' ? <ActivityFeed /> : null}
       </section>
     </aside>
@@ -1201,7 +1222,8 @@ function PartyChat() {
           maxLength={500}
           placeholder="Message the party…"
           aria-label="Chat message"
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-zinc-400 focus:border-white/30 focus:outline-none"
+          enterKeyHint="send"
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-base text-white sm:text-sm placeholder:text-zinc-400 focus:border-white/30 focus:outline-none"
         />
         <button type="submit" aria-label="Send message" disabled={!draft.trim()} className="rounded-lg bg-white px-3 text-black disabled:opacity-40">
           <Send className="h-4 w-4" />

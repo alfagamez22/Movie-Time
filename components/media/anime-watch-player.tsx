@@ -801,9 +801,11 @@ export function AnimeWatchPlayer({
     >
     <div
       ref={playerShellRef}
+      data-player-shell
       className="fixed inset-0 z-[70] flex h-[100dvh] flex-col overflow-hidden bg-black text-white landscape:flex-row"
     >
       <div
+        data-player-stage
         className={`relative w-full bg-black landscape:h-full landscape:min-h-0 landscape:min-w-0 landscape:flex-1 ${
           isSeries && isEpisodeListVisible ? 'aspect-video shrink-0' : 'min-h-0 flex-1'
         }`}

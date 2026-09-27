@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Info, Search, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -285,6 +285,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   }, [debouncedQuery, experience.searchEndpoint, experience.id, experience.peopleSource]);
 
   const featuredItems = getFeaturedItems(sections);
+  // Loads after first paint, so it sits below the first shelf: anything it pushes down is already off-screen (no CLS).
+  const partyRow = experience.id === 'papiflix' || experience.id === 'papianime'
+    ? <LivePartiesRow experience={experience.id} />
+    : null;
   const authPromptCopy = getAuthPromptCopy(authPromptReason);
   const matureUnlocked = useMatureUnlocked();
 
@@ -440,7 +444,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       ) : null}
 
       <div className="browse-shelves space-y-10 py-8">
-        {experience.id === 'papiflix' || experience.id === 'papianime' ? <LivePartiesRow experience={experience.id} /> : null}
         {recentlyWatched.length > 0 ? (
           <BrowseRow
             cinematic={experience.id !== 'papimanga'}
@@ -454,16 +457,19 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             prioritizeLeadPoster
           />
         ) : null}
+        {partyRow && recentlyWatched.length > 0 ? partyRow : null}
         {visibleSections.map((section, index) => (
-          <BrowseRow
-            cinematic={experience.id !== 'papimanga'}
-            anchorId={section.id}
-            key={section.id}
-            title={section.title}
-            entries={section.entries}
-            onEntrySelect={openDetails}
-            prioritizeLeadPoster={index === 0}
-          />
+          <Fragment key={section.id}>
+            <BrowseRow
+              cinematic={experience.id !== 'papimanga'}
+              anchorId={section.id}
+              title={section.title}
+              entries={section.entries}
+              onEntrySelect={openDetails}
+              prioritizeLeadPoster={index === 0}
+            />
+            {partyRow && recentlyWatched.length === 0 && index === 0 ? partyRow : null}
+          </Fragment>
         ))}
       </div>
 
