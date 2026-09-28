@@ -10,6 +10,15 @@ import { getGenreTiles } from '@/lib/tmdb/genres';
 
 export const revalidate = 86_400;
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&(?!amp;|lt;|gt;|quot;|apos;)/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 const COLLECTIONS = ['trending', 'discover', 'regional', 'genre', 'rating'];
 
 function uniqueEntries(sections: Array<{ entries: LibraryMediaEntry[]; tier?: string }>) {
@@ -66,5 +75,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }))
     : [];
 
-  return [...staticPages, ...titles, ...animeTitles];
+  // Next writes <loc> values verbatim, so a raw `&` in a query string makes the whole XML file invalid.
+  return [...staticPages, ...titles, ...animeTitles].map((item) => ({ ...item, url: escapeXml(item.url) }));
 }
