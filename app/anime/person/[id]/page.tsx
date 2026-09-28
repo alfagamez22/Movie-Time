@@ -15,6 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const person = await getAnilistStaff((await params).id);
   if (!person) return { title: 'Person not found' };
   return {
+    alternates: { canonical: `/anime/person/${person.id}` },
     description: person.biography?.slice(0, 160) || `Titles featuring ${person.name} on PapiAnime.`,
     openGraph: person.profileUrl ? { images: [person.profileUrl] } : undefined,
     title: person.name,

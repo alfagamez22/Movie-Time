@@ -34,6 +34,7 @@ export async function generateMetadata({ params }: { params: Promise<{ category:
   const { category } = await params;
   if (!isCategory(category)) return { title: 'Category' };
   return {
+    alternates: { canonical: `/categories/${category}` },
     description: CATEGORY_DESCRIPTIONS[category],
     title: `${CATEGORY_LABELS[category]} | Categories`,
   };

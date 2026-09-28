@@ -136,6 +136,7 @@ export async function generateMetadata(props: AnimeWatchPageProps): Promise<Meta
     }
 
     return {
+      alternates: { canonical: canonicalState.canonicalHref },
       description: canonicalState.lookup.entry.synopsis || undefined,
       title:
         canonicalState.lookup.entry.type === 'tv'

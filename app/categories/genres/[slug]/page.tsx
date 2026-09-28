@@ -15,7 +15,11 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const tile = await findGenreTile((await params).slug);
   return tile
-    ? { description: `Browse ${tile.name} movies and TV shows on PapiFlix.`, title: `${tile.name} | Categories` }
+    ? {
+      alternates: { canonical: `/categories/genres/${tile.slug}` },
+      description: `Browse popular, top rated and new ${tile.name} movies and TV shows on PapiFlix.`,
+      title: `${tile.name} Movies & TV Shows`,
+    }
     : { title: 'Genre not found' };
 }
 

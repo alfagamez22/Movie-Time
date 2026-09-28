@@ -9,6 +9,7 @@ export const revalidate = 3600;
 
 export const metadata = {
   description: 'Browse PapiFlix by genre, or explore curated collections like regional cinema, top rated and Vivamax.',
+  alternates: { canonical: '/categories' },
   title: 'Categories',
 };
 

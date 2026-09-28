@@ -3,6 +3,7 @@ import { SessionProvider } from 'next-auth/react';
 
 import { PwaServiceWorker } from '@/components/media/pwa-service-worker';
 import { appConfig } from '@/lib/config';
+import { SEO_KEYWORDS } from '@/lib/seo';
 
 import './globals.css';
 
@@ -15,10 +16,8 @@ const socialPreviewImage = {
   width: appConfig.socialPreviewImage.width,
 };
 
+// No root canonical: it would be inherited by every page and tell Google they're all duplicates of the home page.
 export const metadata: Metadata = {
-  alternates: {
-    canonical: appConfig.siteUrl,
-  },
   applicationName: appConfig.name,
   appleWebApp: {
     capable: true,
@@ -26,6 +25,15 @@ export const metadata: Metadata = {
     title: appConfig.name,
   },
   category: 'entertainment',
+  keywords: SEO_KEYWORDS,
+  robots: {
+    follow: true,
+    googleBot: { follow: true, index: true, 'max-image-preview': 'large', 'max-snippet': -1, 'max-video-preview': -1 },
+    index: true,
+  },
+  ...(process.env.GOOGLE_SITE_VERIFICATION?.trim()
+    ? { verification: { google: process.env.GOOGLE_SITE_VERIFICATION.trim() } }
+    : {}),
   title: {
     default: appConfig.name,
     template: `%s | ${appConfig.name}`,

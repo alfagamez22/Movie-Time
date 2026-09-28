@@ -15,6 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const person = await getTmdbPerson((await params).id);
   if (!person) return { title: 'Person not found' };
   return {
+    alternates: { canonical: `/person/${person.id}` },
     description: person.biography?.slice(0, 160) || `Titles featuring ${person.name} on PapiFlix.`,
     openGraph: person.profileUrl ? { images: [person.profileUrl] } : undefined,
     title: person.name,
