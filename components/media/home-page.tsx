@@ -154,7 +154,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const recentlyWatched = useRecentlyWatched(experience.id);
   useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
   const inputRef = useRef<HTMLInputElement>(null);
-  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const debouncedQuery = useDebouncedValue(query.trim(), 200);
   const isSearchPending = query.trim() !== debouncedQuery;
 
   useEffect(() => {

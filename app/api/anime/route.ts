@@ -18,7 +18,7 @@ function dedupeEntries(entries: LibraryMediaEntry[]): LibraryMediaEntry[] {
   return Array.from(uniqueEntries.values());
 }
 
-export async function GET(request: Request) {
+async function handleGet(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
   const type = parseMediaType(searchParams.get('type'));
   const query = searchParams.get('q')?.trim() || '';
@@ -78,4 +78,13 @@ export async function GET(request: Request) {
     total: browseEntries.length,
     totalResults: browseEntries.length,
   });
+}
+
+// Search/browse results are identical for everyone, so let the CDN answer repeat queries. Errors stay uncached.
+const SEARCH_CACHE_CONTROL = 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600';
+
+export async function GET(request: Request) {
+  const response = await handleGet(request);
+  if (response.status === 200) response.headers.set('Cache-Control', SEARCH_CACHE_CONTROL);
+  return response;
 }

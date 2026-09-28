@@ -10,8 +10,6 @@ export async function GET(request: Request) {
   return handleTmdbImageRequest(
     imagePath ?? '',
     size,
-    request.headers.get('accept'),
-    request.headers.get('save-data'),
     false,
   );
 }

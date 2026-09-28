@@ -16,6 +16,7 @@ export default auth((request) => {
   return NextResponse.next();
 });
 
+// Only the admin area needs a session check here; running auth on every image and search request added latency.
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|icons|manifest|api/auth|\\.well-known).*)'],
+  matcher: ['/dashboard', '/dashboard/:path*', '/api/admin/:path*'],
 };

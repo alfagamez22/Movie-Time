@@ -42,7 +42,21 @@ export function isPartyLive(party: WatchParty, now = Date.now()) {
   return !party.endedAt && now - Date.parse(party.lastActiveAt ?? party.createdAt) < PARTY_ACTIVE_WINDOW_MS;
 }
 
-export async function listLiveParties(experience: string): Promise<PublicParty[]> {
+const LIST_CACHE_MS = 10_000;
+type ListCacheState = typeof globalThis & { papiflixPartyList?: Map<string, { at: number; value: Promise<PublicParty[]> }> };
+const listCache = ((globalThis as ListCacheState).papiflixPartyList ??= new Map());
+
+/** Home pages poll this every 30s per viewer; a short per-instance cache keeps it off Couchbase. */
+export function listLiveParties(experience: string): Promise<PublicParty[]> {
+  const cached = listCache.get(experience);
+  if (cached && Date.now() - cached.at < LIST_CACHE_MS) return cached.value;
+  const value = queryLiveParties(experience);
+  listCache.set(experience, { at: Date.now(), value });
+  value.catch(() => listCache.delete(experience));
+  return value;
+}
+
+async function queryLiveParties(experience: string): Promise<PublicParty[]> {
   const rows = await findRecords<AppRecord & WatchParty>(RECORD_TYPE, { experience }, { direction: 'desc', limit: 60, orderBy: 'updatedAt' });
   const now = Date.now();
   return rows

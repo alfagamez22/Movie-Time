@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const experience = new URL(request.url).searchParams.get('experience') ?? '';
   if (!EXPERIENCES.has(experience)) return NextResponse.json({ parties: [] });
   const parties = await listLiveParties(experience).catch(() => []);
-  return NextResponse.json({ parties }, { headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=20' } });
+  return NextResponse.json({ parties }, { headers: { 'Cache-Control': 'public, max-age=10, s-maxage=15, stale-while-revalidate=60' } });
 }
 
 export async function POST(request: Request) {
