@@ -15,7 +15,8 @@ import {
 } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
 import { playbackBackTarget } from '@/lib/media/playback-return';
-import { buildVidnestAnimeEmbedUrl } from '@/lib/media/embed';
+// import { buildVidnestAnimeEmbedUrl } from '@/lib/media/embed';
+import { ANIEMBED_ORIGIN, buildAniEmbedUrl } from '@/lib/media/embed';
 import {
   getEpisodeLimit,
   type EpisodePreview,
@@ -28,7 +29,7 @@ import { emitPlayerProgress } from '@/lib/party/player-events';
 import { WatchPartyPlayerLayer, WatchPartyRoot, WatchPartySidebar, type FollowTarget } from '@/components/party/watch-party';
 
 const ANIME_EPISODE_GROUP_SIZE = 50;
-const VIDNEST_ORIGIN = 'https://vidnest.fun';
+// const VIDNEST_ORIGIN = 'https://vidnest.fun';
 
 interface NormalizedPlayerProgress {
   durationSeconds?: number;
@@ -543,6 +544,10 @@ export function AnimeWatchPlayer({
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
   const lastEventTypeRef = useRef<string | null>(null);
+  const handleEpisodeChangeRef = useRef<(episode: number) => void>(() => undefined);
+  /** True once AniEmbed reports `ready` for the current iframe; commands sent earlier would be dropped. */
+  const aniReadyRef = useRef(false);
+  const pendingCommandsRef = useRef(new Map<string, { name: string; onFail?: () => void }>());
   const savedProgressRef = useRef<PapiProgressPayload | null>(null);
 
   const savedProgress =
@@ -560,7 +565,13 @@ export function AnimeWatchPlayer({
   const resumeStartSeconds = partyStartAt ?? savedStartAt ?? savedProgress?.progressSeconds ?? 0;
   const currentLanguage = initialPlayback.language;
 
-  const embedUrl = buildVidnestAnimeEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
+  // Previous embed (VidNest), kept for rollback:
+  // const embedUrl = buildVidnestAnimeEmbedUrl(anilistId, currentEpisode, currentLanguage, resumeStartSeconds);
+  const embedUrl = buildAniEmbedUrl(anilistId, currentEpisode, currentLanguage === 'dub' ? 'dub' : 'sub', resumeStartSeconds, {
+    autoplay: initialPlayback.autoPlay !== false,
+    hasNext: isSeries && currentEpisode < playableEpisodeLimit,
+    hasPrev: isSeries && currentEpisode > 1,
+  });
   useWatchBeacon({ entry, episode: isSeries ? currentEpisode : null, experience: experience.id, season: isSeries ? currentSeason : null });
 
   useEffect(() => {
@@ -628,7 +639,8 @@ export function AnimeWatchPlayer({
   useEffect(() => {
     if (!embedUrl) return;
 
-    const expectedOrigin = VIDNEST_ORIGIN;
+    // const expectedOrigin = VIDNEST_ORIGIN;
+    const expectedOrigin = ANIEMBED_ORIGIN;
 
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== expectedOrigin) return;
@@ -653,10 +665,43 @@ export function AnimeWatchPlayer({
       setIsIframeLoading(false);
       setIframeError(null);
 
-      const progress = extractPlayerProgress(event.data);
+      // AniEmbed posts { source: 'aniembed', name, data }; flatten it so the generic progress parser can read it.
+      const raw = event.data as { data?: unknown; name?: unknown; source?: unknown } | null;
+      const isAniEmbed = isRecord(raw) && raw.source === 'aniembed' && typeof raw.name === 'string';
+      const aniEvent = isAniEmbed ? String(raw.name).toLowerCase() : null;
+      if (aniEvent === 'ready') aniReadyRef.current = true;
+      if (aniEvent === 'command-result') {
+        const result = isRecord(raw) ? (raw as { data?: { ok?: boolean }; requestId?: string }) : null;
+        const pending = result?.requestId ? pendingCommandsRef.current.get(result.requestId) : undefined;
+        if (pending && result?.requestId) {
+          pendingCommandsRef.current.delete(result.requestId);
+          if (result.data?.ok === false) pending.onFail?.();
+        }
+        return;
+      }
+      if (aniEvent === 'next' || aniEvent === 'previous') {
+        handleEpisodeChangeRef.current(currentEpisode + (aniEvent === 'next' ? 1 : -1));
+        return;
+      }
+      if (aniEvent === 'error') {
+        setIframeError('The anime player hit a playback error. Retry the player or switch language.');
+        return;
+      }
+      if (aniEvent === 'ended' && autoNextEnabled && isSeries && currentEpisode < playableEpisodeLimit) {
+        setCurrentEpisode((episode) => Math.min(playableEpisodeLimit, episode + 1));
+        return;
+      }
+
+      const progressSource = isAniEmbed
+        ? { ...(isRecord(raw.data) ? raw.data : {}), type: aniEvent }
+        : event.data;
+      const progress = extractPlayerProgress(progressSource);
       if (!progress) return;
 
-      const eventType = typeof event.data === 'object' && event.data !== null ? (event.data as Record<string, unknown>).type as string ?? 'update' : 'update';
+      const aniPaused = isAniEmbed && isRecord(raw.data) && typeof raw.data.paused === 'boolean' ? raw.data.paused : null;
+      const eventType = aniEvent
+        ? (aniEvent === 'progress' && aniPaused !== null ? (aniPaused ? 'paused' : 'playing') : aniEvent)
+        : (typeof event.data === 'object' && event.data !== null ? (event.data as Record<string, unknown>).type as string ?? 'update' : 'update');
       emitPlayerProgress(progress.progressSeconds, String(eventType).toLowerCase(), progress.durationSeconds);
       saveProgress(progress, eventType);
 
@@ -673,6 +718,7 @@ export function AnimeWatchPlayer({
 
   useEffect(() => {
     hasIframeLoadedRef.current = false;
+    aniReadyRef.current = false;
     startTransition(() => {
       setIsIframeLoading(true);
       setIframeError(null);
@@ -744,6 +790,9 @@ export function AnimeWatchPlayer({
     setSavedStartAt(0);
     setPartyStartAt(null);
   };
+  useEffect(() => {
+    handleEpisodeChangeRef.current = handleEpisodeChange;
+  });
 
   const handleSeasonChange = (season: number) => {
     if (season === currentSeason) return;
@@ -755,9 +804,18 @@ export function AnimeWatchPlayer({
     setPartyStartAt(null);
   };
 
-  const handlePartyFollow = (target: FollowTarget) => {
-    const nextEpisode = isSeries && target.episode ? Number.parseInt(target.episode, 10) : currentEpisode;
-    const nextSeason = isSeries && target.season ? Number.parseInt(target.season, 10) : currentSeason;
+  const sendAniCommand = (name: string, data: Record<string, unknown> = {}, onFail?: () => void) => {
+    const target = iframeRef.current?.contentWindow;
+    if (!target) return false;
+    const requestId = crypto.randomUUID();
+    pendingCommandsRef.current.set(requestId, { name, onFail });
+    // Forget unanswered commands so the map can't grow if the player never replies.
+    setTimeout(() => pendingCommandsRef.current.delete(requestId), 10_000);
+    target.postMessage({ data, name, requestId, source: 'aniembed', type: 'command', version: 1 }, ANIEMBED_ORIGIN);
+    return true;
+  };
+
+  const reloadForParty = (target: FollowTarget, nextEpisode: number, nextSeason: number) => {
     setIsIframeLoading(true);
     setIframeError(null);
     if (Number.isFinite(nextSeason)) setCurrentSeason(nextSeason);
@@ -765,6 +823,23 @@ export function AnimeWatchPlayer({
     setPartyStartAt(Math.max(0, Math.floor(target.time)));
     setPartyPaused(target.paused);
     if (!target.paused) setIframeReloadKey((value) => value + 1);
+  };
+
+  const handlePartyFollow = (target: FollowTarget) => {
+    const nextEpisode = isSeries && target.episode ? Number.parseInt(target.episode, 10) : currentEpisode;
+    const nextSeason = isSeries && target.season ? Number.parseInt(target.season, 10) : currentSeason;
+    const sameEpisode = nextEpisode === currentEpisode && nextSeason === currentSeason;
+
+    // AniEmbed accepts play/pause/seek, so same-episode sync happens in place: no reload, spinner or pre-roll.
+    if (sameEpisode && !partyPaused && aniReadyRef.current) {
+      const fallback = () => reloadForParty(target, nextEpisode, nextSeason);
+      const time = Math.max(0, target.time);
+      if (sendAniCommand('seek', { time }, fallback)) {
+        sendAniCommand(target.paused ? 'pause' : 'play', {}, fallback);
+        return;
+      }
+    }
+    reloadForParty(target, nextEpisode, nextSeason);
   };
 
   const handleReloadPlayer = useCallback(() => {
@@ -797,6 +872,7 @@ export function AnimeWatchPlayer({
       experienceId="papianime"
       iframeRef={iframeRef}
       onFollow={handlePartyFollow}
+      remotePlayback
       season={isSeries ? String(currentSeason) : null}
     >
     <div

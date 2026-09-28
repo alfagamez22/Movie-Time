@@ -246,6 +246,32 @@ export function buildPlayerEmbedUrl(
   return buildVideasyEmbedUrl(entry, options);
 }
 
+export const ANIEMBED_ORIGIN = 'https://aniembed.se';
+
+interface AniEmbedOptions {
+  autoplay?: boolean;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+}
+
+/** https://aniembed.se/#docs — `/e/{ANILIST_ID}/{EPISODE}?lang&autoplay&t&hasPrev&hasNext` */
+export function buildAniEmbedUrl(
+  anilistId: string,
+  episode: string | number,
+  language: 'sub' | 'dub',
+  startAt: number | null,
+  options: AniEmbedOptions = {},
+): string {
+  const url = new URL(`${ANIEMBED_ORIGIN}/e/${encodeURIComponent(anilistId)}/${encodeURIComponent(String(episode))}`);
+  url.searchParams.set('lang', language);
+  if (options.autoplay !== undefined) url.searchParams.set('autoplay', options.autoplay ? '1' : '0');
+  if (startAt != null && startAt > 0) url.searchParams.set('t', String(Math.floor(startAt)));
+  if (options.hasPrev !== undefined) url.searchParams.set('hasPrev', options.hasPrev ? '1' : '0');
+  if (options.hasNext !== undefined) url.searchParams.set('hasNext', options.hasNext ? '1' : '0');
+  return url.toString();
+}
+
+/** Previous PapiAnime embed, kept for rollback. */
 export function buildVidnestAnimeEmbedUrl(
   anilistId: string,
   episode: string | number,

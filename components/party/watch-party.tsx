@@ -96,6 +96,7 @@ interface PartyContextValue {
   pushActivity: (text: string) => void;
   ready: boolean;
   refreshParty: () => void;
+  remotePlayback: boolean;
   resync: () => void;
   selfId: string | null;
   sendChat: (text: string) => Promise<void>;
@@ -142,10 +143,12 @@ interface WatchPartyRootProps {
   experienceId: 'papiflix' | 'papianime';
   iframeRef: RefObject<HTMLIFrameElement | null>;
   onFollow: (target: FollowTarget) => void;
+  /** The embed can be paused/seeked in place, so guests keep the frozen frame instead of a blank curtain. */
+  remotePlayback?: boolean;
   season: string | null;
 }
 
-export function WatchPartyRoot({ children, entry, episode, experienceId, iframeRef, onFollow, season }: WatchPartyRootProps) {
+export function WatchPartyRoot({ children, entry, episode, experienceId, iframeRef, onFollow, remotePlayback = false, season }: WatchPartyRootProps) {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const userId = session?.user?.id ?? null;
@@ -683,6 +686,7 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     pushActivity,
     ready: Boolean(live && party),
     refreshParty,
+    remotePlayback,
     resync,
     selfId,
     sendChat,
@@ -691,7 +695,7 @@ export function WatchPartyRoot({ children, entry, episode, experienceId, iframeR
     startParty: () => void startParty(),
     status,
     viewers,
-  }), [messages, selfId, sendChat, viewers, activity, buildState, claimHost, live, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, outOfSync, party, pushActivity, refreshParty, reset, resync, startError, startParty, starting, status]);
+  }), [messages, remotePlayback, selfId, sendChat, viewers, activity, buildState, claimHost, live, code, endParty, hostSeenAt, hostState, isHost, joinWithSound, joined, needsSignIn, now, outOfSync, party, pushActivity, refreshParty, reset, resync, startError, startParty, starting, status]);
 
   // Never wrap the player in anything that appears later: a changed tree would remount it and reload the embed.
   return <PartyContext.Provider value={value}>{children}</PartyContext.Provider>;
@@ -802,7 +806,17 @@ export function WatchPartyPlayerLayer({ chromeVisible }: { chromeVisible: boolea
 
       {guestView && party.joined ? <GuestFullscreenButton visible={chromeVisible} /> : null}
 
-      {guestView && party.joined && party.hostPaused && !party.hostStale ? (
+      {guestView && party.joined && party.hostPaused && !party.hostStale && party.remotePlayback ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+4.25rem)] z-30 flex justify-center">
+          <span className="flex items-center gap-2 rounded-full border border-white/15 bg-black/70 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-md">
+            <Pause className="h-4 w-4 fill-current" />
+            Paused by {party.party?.hostName ?? 'the host'}
+            {party.hostState ? <span className="font-mono text-zinc-300">{formatClock(party.hostState.time)}</span> : null}
+          </span>
+        </div>
+      ) : null}
+
+      {guestView && party.joined && party.hostPaused && !party.hostStale && !party.remotePlayback ? (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black text-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-white/5">
             <Pause className="h-6 w-6 fill-current" />
