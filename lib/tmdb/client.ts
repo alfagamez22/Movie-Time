@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { isAnimeTitle } from './anime-filter';
 import {
   isTvEntry,
   toLibraryMediaEntry,
@@ -22,9 +23,15 @@ const TMDB_PUBLIC_DB_BASE_URL = process.env.TMDB_PUBLIC_DB_BASE_URL?.trim() || '
 const DEFAULT_TMDB_LANGUAGE = process.env.TMDB_LANGUAGE?.trim() || 'en-US';
 const VIVAMAX_COMPANY_ID = '149142';
 
-type TmdbLookupFailureReason = 'missing-config' | 'not-found' | 'upstream-error';
+type TmdbLookupFailureReason = 'anime-excluded' | 'missing-config' | 'not-found' | 'upstream-error';
 
-interface TmdbMovieResponse {
+interface TmdbAnimeFields {
+  genres?: Array<{ id: number }>;
+  origin_country?: string[];
+  original_language?: string;
+}
+
+interface TmdbMovieResponse extends TmdbAnimeFields {
   backdrop_path?: string;
   id: number;
   overview?: string;
@@ -40,7 +47,7 @@ interface TmdbSeasonSummary {
   season_number: number;
 }
 
-interface TmdbTvResponse {
+interface TmdbTvResponse extends TmdbAnimeFields {
   backdrop_path?: string;
   first_air_date?: string;
   id: number;
@@ -75,6 +82,9 @@ interface TmdbSeasonDetailsResponse {
 
 export interface TmdbBrowseResult {
   adult?: boolean;
+  genre_ids?: number[];
+  origin_country?: string[];
+  original_language?: string;
   backdrop_path?: string;
   first_air_date?: string;
   id: number;
@@ -334,14 +344,6 @@ const TMDB_BROWSE_SECTIONS: TmdbBrowseSectionDefinition[] = [
     id: 'korean-tv',
     pathname: '/discover/tv?with_original_language=ko&sort_by=popularity.desc',
     title: 'K-Drama',
-    type: 'tv',
-  },
-  {
-    category: 'regional',
-    description: 'Top anime series from Japan.',
-    id: 'anime',
-    pathname: '/discover/tv?with_original_language=ja&with_genres=16&sort_by=popularity.desc',
-    title: 'Anime',
     type: 'tv',
   },
   {
@@ -609,6 +611,9 @@ export function createLibraryEntryFromBrowseResult(
   if (!type) {
     return null;
   }
+  if (isAnimeTitle({ genreIds: result.genre_ids, originCountry: result.origin_country, originalLanguage: result.original_language })) {
+    return null;
+  }
 
   const title = type === 'movie' ? result.title : result.name;
   if (!title?.trim()) {
@@ -862,17 +867,24 @@ export async function lookupTmdbMediaEntry(tmdbId: string, type: MediaType): Pro
     return createUpstreamFailure(`TMDB lookup failed with status ${response.status}.`, 'upstream-error', 502);
   }
 
+  const payload = (await response.json()) as TmdbMovieResponse | TmdbTvResponse;
+  if (isAnimeTitle({
+    genreIds: payload.genres?.map((genre) => genre.id),
+    originCountry: payload.origin_country,
+    originalLanguage: payload.original_language,
+  })) {
+    return createUpstreamFailure('This title is anime. Watch it on PapiAnime.', 'anime-excluded', 404);
+  }
+
   if (type === 'movie') {
-    const payload = (await response.json()) as TmdbMovieResponse;
     return {
-      entry: createMovieEntry(payload, tmdbId),
+      entry: createMovieEntry(payload as TmdbMovieResponse, tmdbId),
       ok: true,
     };
   }
 
-  const payload = (await response.json()) as TmdbTvResponse;
   return {
-    entry: createTvEntry(payload, tmdbId),
+    entry: createTvEntry(payload as TmdbTvResponse, tmdbId),
     ok: true,
   };
 }

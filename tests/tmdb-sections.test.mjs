@@ -31,7 +31,6 @@ const expectedDefaultIds = new Set([
   'comedy-movies',
   'crime-movies',
   'korean-tv',
-  'anime',
   'spanish-movies',
 ]);
 

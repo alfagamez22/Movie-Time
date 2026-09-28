@@ -35,6 +35,7 @@ function loadTsModuleWithRequire(relativePath, options = {}) {
 const tmdb = loadTsModuleWithRequire('lib/tmdb/client.ts', {
   stubs: {
     'server-only': {},
+    './anime-filter': loadTsModuleWithRequire('lib/tmdb/anime-filter.ts'),
     '@/lib/media/types': {
       isTvEntry: (entry) => entry?.type === 'tv',
       toLibraryMediaEntry: (entry) => entry,
@@ -55,4 +56,21 @@ test('isReleasedTmdbBrowseResult rejects future TV first air dates', () => {
 test('isReleasedTmdbBrowseResult keeps released and undated entries', () => {
   assert.equal(isReleasedTmdbBrowseResult({ release_date: '2020-01-01' }, 'movie'), true);
   assert.equal(isReleasedTmdbBrowseResult({}, 'movie'), true);
+});
+
+const { isAnimeTitle } = loadTsModuleWithRequire('lib/tmdb/anime-filter.ts');
+
+test('isAnimeTitle flags Japanese animation only', () => {
+  assert.equal(isAnimeTitle({ genreIds: [16, 10759], originalLanguage: 'ja' }), true);
+  assert.equal(isAnimeTitle({ genreIds: [16], originCountry: ['JP'], originalLanguage: 'en' }), true);
+  assert.equal(isAnimeTitle({ genreIds: [16], originalLanguage: 'en', originCountry: ['US'] }), false);
+  assert.equal(isAnimeTitle({ genreIds: [18], originalLanguage: 'ja' }), false);
+  assert.equal(isAnimeTitle({}), false);
+});
+
+test('browse results that are anime are dropped from PapiFlix', () => {
+  const anime = { genre_ids: [16], id: 1, name: 'Naruto', original_language: 'ja', poster_path: '/a.jpg' };
+  const cartoon = { genre_ids: [16], id: 2, name: 'The Simpsons', original_language: 'en', poster_path: '/b.jpg' };
+  assert.equal(tmdb.createLibraryEntryFromBrowseResult(anime, 'tv'), null);
+  assert.equal(tmdb.createLibraryEntryFromBrowseResult(cartoon, 'tv')?.title, 'The Simpsons');
 });
