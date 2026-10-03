@@ -130,7 +130,7 @@ export default async function DashboardOverviewPage() {
         <StatCard label="Viewers 24h" value={overview.viewers24h} />
         <StatCard label="Viewers 7d" value={overview.viewers7d} hint={`${overview.signedIn7d} signed in · ${overview.anonymous7d} anonymous`} />
         <StatCard label="Watch time 7d" value={formatDuration(overview.watchSeconds7d)} />
-        <StatCard label="Accounts" value={users} hint="Registered users" />
+        <Link href="/dashboard/users" className="rounded-xl transition-colors hover:bg-white/5"><StatCard label="Accounts" value={users} hint="View registered users →" /></Link>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">

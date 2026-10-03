@@ -12,6 +12,7 @@ export function collectionForRecord(type, document = {}) {
 }
 
 export const INDEXES = {
+  feedback: [['idx_feedback_created', ['type', 'createdAt']]],
   identity: [
     ['idx_identity_user_email', ['type', 'email']],
     ['idx_identity_account_provider', ['type', 'provider', 'providerAccountId']],

@@ -68,6 +68,7 @@ export type MediaCollection = typeof MEDIA_COLLECTIONS[number];
 const IDENTITY_TYPES = new Set(['user', 'account', 'session', 'verificationToken']);
 
 export function collectionForRecord(type: string, document: Record<string, unknown> = {}): string {
+  if (type === 'feedback') return 'feedback';
   if (IDENTITY_TYPES.has(type)) return 'identity';
   if (type === 'papiAnimeProgress') return 'papianime';
   const experience = document.experience;
@@ -81,6 +82,7 @@ export function collectionForRecord(type: string, document: Record<string, unkno
 }
 
 export function collectionsForRecord(type: string, filters: Record<string, unknown> = {}): string[] {
+  if (type === 'feedback') return ['feedback'];
   if (IDENTITY_TYPES.has(type)) return ['identity'];
   if (type === 'papiAnimeProgress') return ['papianime'];
   if (filters.experience || filters.mediaProvider) return [collectionForRecord(type, filters)];

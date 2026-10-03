@@ -15,6 +15,7 @@ import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
 import type { PersonSummary } from '@/lib/people/types';
 import { AuthModal } from '@/components/auth/auth-modal';
+import { FeedbackButton } from '@/components/feedback/feedback-button';
 import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
 import { LivePartiesRow } from '@/components/party/live-parties-row';
@@ -341,6 +342,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                   <MatureToggle />
                 </div>
               ) : null}
+              <FeedbackButton />
               <UserMenu onSignInClick={() => openAuthModal('default')} />
               <button
                 type="button"

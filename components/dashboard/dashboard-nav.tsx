@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, ArrowLeft, LayoutDashboard } from 'lucide-react';
+import { Activity, ArrowLeft, LayoutDashboard, MessageSquare, Users } from 'lucide-react';
 
 const LINKS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
   { href: '/dashboard/analytics', icon: Activity, label: 'Analytics' },
+  { href: '/dashboard/users', icon: Users, label: 'Users' },
+  { href: '/dashboard/feedback', icon: MessageSquare, label: 'Feedback' },
 ];
 
 export function DashboardNav({ email }: { email: string }) {
@@ -31,7 +33,7 @@ export function DashboardNav({ email }: { email: string }) {
                   active ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4" aria-label={label} />
                 <span className="hidden sm:inline">{label}</span>
               </Link>
             );

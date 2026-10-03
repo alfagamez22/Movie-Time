@@ -77,7 +77,7 @@ export function MatureToggle() {
     setMatureUnlocked(!unlocked);
   }, [unlocked]);
 
-  const label = unlocked ? 'Hide VMX sections' : 'Reveal VMX sections';
+  const label = unlocked ? 'Hide Vivamax Movies' : 'Reaveal Vivamax Movies';
 
   if (!isHydrated) {
     return null;
