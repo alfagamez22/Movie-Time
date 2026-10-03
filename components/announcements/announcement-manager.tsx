@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarClock, ClipboardPaste, Eye, ImagePlus, LoaderCircle, Megaphone, Plus, Save } from 'lucide-react';
-import { announcementStatus, fromManilaInput, toManilaInput, validateAnnouncement, manilaDay, nextManilaDay, nextScheduleTime, type PublicAnnouncement } from '@/lib/announcements/validation';
+import { Ban, CalendarClock, ClipboardPaste, Eye, ImagePlus, LoaderCircle, Megaphone, Plus, Save, Trash2 } from 'lucide-react';
+import { announcementStatus, fromManilaInput, toManilaInput, validateAnnouncement, manilaDay, nextManilaDay, nextScheduleTime, type AnnouncementState, type PublicAnnouncement } from '@/lib/announcements/validation';
 import { AnnouncementDatePicker } from './date-picker';
 import { compressAnnouncementImage } from '@/lib/announcements/compress';
 import { AnnouncementDialog } from './announcement-dialog';
@@ -21,6 +21,9 @@ export function AnnouncementManager() {
   const [clock, setClock] = useState(() => Date.now());
   const requestVersion = useRef(0);
   const [id, setId] = useState<string | undefined>();
+  const [editingPost, setEditingPost] = useState<ListedPost | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ id: string; action: 'disable' | 'delete' } | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [publishAt, setPublishAt] = useState('');
@@ -55,16 +58,15 @@ export function AnnouncementManager() {
   }, [page]);
   useEffect(() => { let active = true; queueMicrotask(() => { if (active) void load(); }); return () => { active = false; }; }, [load]);
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
-  const reset = () => { imageAbort.current?.abort(); setImageNotice(''); imageVersion.current++; setReadingImage(false); setId(undefined); setTitle(''); setDescription(''); setPublishAt(''); setExpiresAt(''); setBannerData(undefined); setExistingBanner(null); setError(''); if (fileInput.current) fileInput.current.value = ''; };
+  const reset = () => { imageAbort.current?.abort(); setImageNotice(''); imageVersion.current++; setReadingImage(false); setId(undefined); setEditingPost(null); setDeleteTarget(null); setTitle(''); setDescription(''); setPublishAt(''); setExpiresAt(''); setBannerData(undefined); setExistingBanner(null); setError(''); if (fileInput.current) fileInput.current.value = ''; };
   const edit = (post: ListedPost) => {
-    reset(); setNotice(''); setId(post.id); setTitle(post.title); setDescription(post.description); setPublishAt(toManilaInput(post.publishAt)); setExpiresAt(toManilaInput(post.expiresAt)); setExistingBanner(post.hasBanner ? `/api/announcements/${post.id}/banner?v=${encodeURIComponent(post.updatedAt)}` : null);
+    reset(); setNotice(''); setId(post.id); setEditingPost(post); setTitle(post.title); setDescription(post.description); setPublishAt(toManilaInput(post.publishAt)); setExpiresAt(toManilaInput(post.expiresAt)); setExistingBanner(post.hasBanner ? `/api/announcements/${post.id}/banner?v=${encodeURIComponent(post.updatedAt)}` : null);
     editor.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  const editingPost = posts.find((post) => post.id === id);
   const publicationContext = { existingState: editingPost?.state, existingPublishAt: editingPost?.publishAt, existingExpiresAt: editingPost?.expiresAt };
-  const originalPostedTime = editingPost?.state === 'published' && publishAt === toManilaInput(editingPost.publishAt);
-  const input = (state: 'draft' | 'published') => ({ title, description, state, publishAt: originalPostedTime ? editingPost!.publishAt : fromManilaInput(publishAt), expiresAt: editingPost && expiresAt === toManilaInput(editingPost.expiresAt) ? editingPost.expiresAt : fromManilaInput(expiresAt), ...(bannerData !== undefined ? { bannerData } : {}) });
-  const save = async (state: 'draft' | 'published') => {
+  const originalPostedTime = editingPost && editingPost.state !== 'draft' && publishAt === toManilaInput(editingPost.publishAt);
+  const input = (state: AnnouncementState) => ({ title, description, state, publishAt: originalPostedTime ? editingPost!.publishAt : fromManilaInput(publishAt), expiresAt: editingPost && expiresAt === toManilaInput(editingPost.expiresAt) ? editingPost.expiresAt : fromManilaInput(expiresAt), ...(bannerData !== undefined ? { bannerData } : {}) });
+  const save = async (state: AnnouncementState) => {
     if (busy || readingImage) return;
     setError(''); setNotice('');
     let values;
@@ -74,10 +76,25 @@ export function AnnouncementManager() {
       const response = await fetch(id ? `/api/admin/announcements/${id}` : '/api/admin/announcements', { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not save announcement.');
-      reset(); setNotice(state === 'draft' ? 'Saved as draft. It is not visible to visitors.' : Date.parse(values.publishAt) > clock ? 'Announcement scheduled. It will appear at the selected publication time.' : 'Announcement published. It is now available to visitors.');
+      reset(); setNotice(state === 'disabled' ? 'Announcement disabled. It is hidden from visitors.' : state === 'draft' ? 'Saved as draft. It is not visible to visitors.' : Date.parse(values.publishAt) > clock ? 'Announcement scheduled. It will appear at the selected publication time.' : 'Announcement published. It is now available to visitors.');
       await load();
     } catch (error) { setError(error instanceof Error ? error.message : 'Could not save announcement.'); }
     finally { setBusy(false); }
+  };
+  const control = async (post: ListedPost, action: 'disable' | 'delete') => {
+    if (busy || readingImage) return;
+    setBusy(true); setPendingAction({ id: post.id, action }); setListError(''); setNotice('');
+    try {
+      const response = await fetch(`/api/admin/announcements/${post.id}`, { method: action === 'disable' ? 'PATCH' : 'DELETE', ...(action === 'disable' ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: 'disabled' }) } : {}) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? `Could not ${action} announcement.`);
+      if (id === post.id) reset();
+      setDeleteTarget(null);
+      setNotice(action === 'disable' ? 'Announcement disabled. It is hidden from visitors.' : 'Announcement and banner permanently deleted.');
+      if (action === 'delete' && posts.length === 1 && page > 1) { setLoading(true); setPage((value) => value - 1); }
+      else await load();
+    } catch (error) { setListError(error instanceof Error ? error.message : `Could not ${action} announcement.`); }
+    finally { setBusy(false); setPendingAction(null); }
   };
   const showPreview = () => {
     try {
@@ -120,7 +137,7 @@ export function AnnouncementManager() {
     {notice ? <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-300">{notice}</p> : null}
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
       <div ref={editor} className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
-        <div className="mb-5 flex items-center gap-3"><div className="rounded-lg bg-red-600/10 p-2 text-red-500"><Megaphone className="h-5 w-5" /></div><div><h2 className="font-bold">{id ? 'Edit announcement' : 'Create announcement'}</h2><p className="mt-0.5 text-xs text-zinc-500">{editingPost?.state === 'published' ? 'Saving a draft withdraws this post from visitors.' : 'Drafts are visible only to admins.'}</p></div></div>
+        <div className="mb-5 flex items-center gap-3"><div className="rounded-lg bg-red-600/10 p-2 text-red-500"><Megaphone className="h-5 w-5" /></div><div><h2 className="font-bold">{id ? 'Edit announcement' : 'Create announcement'}</h2><p className="mt-0.5 text-xs text-zinc-500">{editingPost?.state === 'published' ? 'Disable this post to hide it from visitors.' : editingPost?.state === 'disabled' ? 'This post stays hidden until you enable it.' : 'Drafts are visible only to admins.'}</p></div></div>
         <form noValidate onPaste={(event) => { const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith('image/')); if (file && !busy && !readingImage) { event.preventDefault(); void uploadImage(file); } }} className="space-y-5" onSubmit={(event) => { event.preventDefault(); void save('published'); }}>
           <fieldset disabled={busy || readingImage} className="space-y-5 disabled:opacity-70">
             <div><label htmlFor="announcement-image" className="text-sm font-semibold text-zinc-200">Banner image <span className="font-normal text-zinc-500">(optional)</span></label><div className="mt-2 overflow-hidden rounded-xl border border-dashed border-white/20 bg-zinc-950">{image ?
@@ -144,12 +161,15 @@ export function AnnouncementManager() {
             <label className="block text-sm font-semibold text-zinc-200">Preview background<select value={previewBackground} onChange={(event) => setPreviewBackground(event.target.value as 'home' | 'dashboard')} className={field}><option value="home">Visitor homepage</option><option value="dashboard">Admin dashboard</option></select><span className="mt-1.5 block text-xs font-normal leading-5 text-zinc-500">Homepage preview shows the real site behind your announcement. Guests and signed-in visitors see the same announcement.</span></label>
           </fieldset>
           {error ? <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">{error}</p> : null}
-          <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4"><button type="button" disabled={busy || readingImage} onClick={showPreview} className={`${button} border border-white/15 text-zinc-300 hover:bg-white/10`}><Eye className="h-4 w-4" />Preview</button><button type="button" disabled={busy || readingImage} onClick={() => void save('draft')} className={`${button} border border-white/15 text-zinc-300 hover:bg-white/10`}><Save className="h-4 w-4" />{editingPost?.state === 'published' ? 'Withdraw to draft' : 'Save draft'}</button><button type="submit" disabled={busy || readingImage} className={`${button} bg-red-600 text-white hover:bg-red-500`}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}{busy ? 'Saving…' : publishAt && Date.parse(`${publishAt}:00+08:00`) > clock ? 'Schedule post' : editingPost?.state === 'published' ? 'Update post' : 'Publish now'}</button></div>
+          <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4"><button type="button" disabled={busy || readingImage} onClick={showPreview} className={`${button} border border-white/15 text-zinc-300 hover:bg-white/10`}><Eye className="h-4 w-4" />Preview</button><button type="button" disabled={busy || readingImage} onClick={() => void save(editingPost && editingPost.state !== 'draft' ? 'disabled' : 'draft')} className={`${button} border border-white/15 text-zinc-300 hover:bg-white/10`}><Save className="h-4 w-4" />{editingPost?.state === 'published' ? 'Disable post' : editingPost?.state === 'disabled' ? 'Save changes' : 'Save draft'}</button><button type="submit" disabled={busy || readingImage} className={`${button} bg-red-600 text-white hover:bg-red-500`}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}{busy ? pendingAction ? 'Working…' : 'Saving…' : publishAt && Date.parse(`${publishAt}:00+08:00`) > clock ? 'Schedule post' : editingPost?.state === 'disabled' ? 'Enable post' : editingPost?.state === 'published' ? 'Update post' : 'Publish now'}</button></div>
         </form>
       </div>
       <section className="space-y-4"><div className="flex items-center justify-between"><h2 className="text-lg font-bold">Your announcements</h2><button type="button" onClick={() => { setLoading(true); void load(); }} disabled={loading} className="text-xs font-semibold text-zinc-400 hover:text-white">{loading ? 'Loading…' : 'Refresh'}</button></div>{listError ? <p role="alert" className="text-sm text-red-400">{listError}</p> : null}{!loading && !posts.length ? <div className="rounded-xl border border-dashed border-white/15 p-8 text-center text-sm text-zinc-500">No announcements yet. Create a draft to get started.</div> : null}{posts.map((post) => {
         const status = announcementStatus(post, clock);
-        return <article key={post.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-start justify-between gap-3"><h3 className="font-bold [overflow-wrap:anywhere]">{post.title}</h3><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${status === 'Live' ? 'bg-red-600/15 text-red-400' : status === 'Scheduled' ? 'bg-blue-500/15 text-blue-300' : 'bg-white/5 text-zinc-400'}`}>{status}</span></div><p className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-zinc-400 [overflow-wrap:anywhere]">{post.description}</p><dl className="mt-3 space-y-1 text-xs text-zinc-500"><div><dt className="inline">{post.state === 'draft' ? 'Planned publish: ' : 'Posted / scheduled: '}</dt><dd className="inline">{post.publishAt ? `${date(post.publishAt)} PHT` : 'On publish'}</dd></div><div><dt className="inline">Expires: </dt><dd className="inline">{date(post.expiresAt)}{post.expiresAt ? ' PHT' : ''}</dd></div></dl><button type="button" disabled={busy} onClick={() => edit(post)} className="mt-4 rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:bg-white/10 active:scale-95">Edit & preview</button></article>;
+        return <article key={post.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4"><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 font-bold [overflow-wrap:anywhere]">{post.title}</h3><span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold tracking-wide ${status === 'Live' ? 'border-red-500/20 bg-red-600/15 text-red-400' : status === 'POSTdated' ? 'border-amber-500/20 bg-amber-500/15 text-amber-300' : status === 'Disabled' ? 'border-zinc-500/30 bg-zinc-500/15 text-zinc-300' : 'border-white/10 bg-white/5 text-zinc-400'}`}>{status}</span></div><p className="mt-2 line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-zinc-400 [overflow-wrap:anywhere]">{post.description}</p><dl className="mt-3 space-y-1 text-xs text-zinc-500"><div><dt className="inline">{post.state === 'draft' ? 'Planned publish: ' : 'Posted / scheduled: '}</dt><dd className="inline">{post.publishAt ? `${date(post.publishAt)} PHT` : 'On publish'}</dd></div><div><dt className="inline">Expires: </dt><dd className="inline">{date(post.expiresAt)}{post.expiresAt ? ' PHT' : ''}</dd></div></dl>
+          <div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={busy || readingImage} onClick={() => edit(post)} className={`${button} min-h-8 border border-white/15 px-3 text-xs text-zinc-300 hover:bg-white/10`}>Edit & preview</button>{post.state === 'published' ? <button type="button" disabled={busy || readingImage} onClick={() => void control(post, 'disable')} className={`${button} min-h-8 border border-white/15 px-3 text-xs text-zinc-300 hover:bg-white/10`}>{pendingAction?.id === post.id && pendingAction.action === 'disable' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}{pendingAction?.id === post.id && pendingAction.action === 'disable' ? 'Disabling…' : 'Disable'}</button> : null}<button type="button" disabled={busy || readingImage} aria-expanded={deleteTarget === post.id} aria-controls={`delete-announcement-${post.id}`} onClick={() => setDeleteTarget(deleteTarget === post.id ? null : post.id)} className={`${button} min-h-8 border border-red-500/20 px-3 text-xs text-red-400 hover:bg-red-500/10`}><Trash2 className="h-3.5 w-3.5" />Force delete</button></div>
+          {deleteTarget === post.id ? <div id={`delete-announcement-${post.id}`} className="mt-3 rounded-lg border border-red-500/20 bg-red-500/5 p-3"><p className="text-xs leading-5 text-zinc-300">Permanently delete this announcement and its banner? This cannot be undone.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)} className={`${button} min-h-8 border border-white/15 px-3 text-xs text-zinc-300 hover:bg-white/10`}>Cancel</button><button type="button" disabled={busy || readingImage} onClick={() => void control(post, 'delete')} className={`${button} min-h-8 bg-red-600 px-3 text-xs text-white hover:bg-red-500`}>{pendingAction?.id === post.id && pendingAction.action === 'delete' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}{pendingAction?.id === post.id && pendingAction.action === 'delete' ? 'Deleting…' : 'Delete permanently'}</button></div></div> : null}
+        </article>;
       })}<nav aria-label="Announcement pages" className="flex items-center justify-between text-sm"><button type="button" disabled={page === 1 || loading} onClick={() => { setLoading(true); setPage((value) => value - 1); }} className="text-zinc-400 hover:text-white disabled:opacity-30">Previous</button><span className="text-xs text-zinc-500">Page {page}</span><button type="button" disabled={!hasNext || loading} onClick={() => { setLoading(true); setPage((value) => value + 1); }} className="text-zinc-400 hover:text-white disabled:opacity-30">Next</button></nav></section>
     </div>
     {preview ? <AnnouncementDialog post={preview} bannerSrc={image} onClose={closePreview} preview previewBackground={previewBackground} /> : null}

@@ -27,3 +27,29 @@ export async function announcementWrite(request: Request, save: (input: Announce
     return NextResponse.json({ error: 'Could not save announcement. Please try again.' }, { status: 503 });
   }
 }
+
+export async function announcementControl(request: Request, action: 'disable' | 'delete', perform: () => Promise<string>) {
+  if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
+  if (action === 'disable') {
+    try {
+      const reader = request.body?.getReader();
+      if (!reader) throw new Error('Choose the disable action.');
+      const chunks: Uint8Array[] = []; let length = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        length += value.length;
+        if (length > 1024) { await reader.cancel(); return NextResponse.json({ error: 'Request is too large.' }, { status: 413 }); }
+        chunks.push(value);
+      }
+      const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      if (!input || input.state !== 'disabled') throw new Error('Choose the disable action.');
+    } catch { return NextResponse.json({ error: 'Choose the disable action.' }, { status: 400 }); }
+  }
+  try { return NextResponse.json({ id: await perform() }); }
+  catch (error) {
+    if (error instanceof Error && (error.message === 'Announcement not found.' || error.name === 'DocumentNotFoundError')) return NextResponse.json({ error: 'Announcement not found.' }, { status: 404 });
+    console.error('Announcement control failed', { action, error: error instanceof Error ? error.name : 'UnknownError' });
+    return NextResponse.json({ error: `Could not ${action} announcement. Please try again.` }, { status: 503 });
+  }
+}

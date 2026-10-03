@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { Module, createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import * as validation from '../lib/announcements/validation.ts';
 import { announcementStatus, validateAnnouncement, fromManilaInput, toManilaInput } from '../lib/announcements/validation.ts';
 
 const now = Date.parse('2026-10-04T00:00:00.000Z');
 const input = { title: 'A new look', description: 'More to discover.\n\nTry the new search.', state: 'published', publishAt: '2026-10-04T00:00:00.000Z', expiresAt: '2026-10-05T00:00:00.000Z' };
 test('publication is live at its start and stops exactly at expiry', () => {
-  assert.equal(announcementStatus(input, now - 1), 'Scheduled');
+  assert.equal(announcementStatus(input, now - 1), 'POSTdated');
   assert.equal(announcementStatus(input, now), 'Live');
   assert.equal(announcementStatus(input, Date.parse(input.expiresAt) - 1), 'Live');
   assert.equal(announcementStatus(input, Date.parse(input.expiresAt)), 'Expired');
@@ -84,4 +88,51 @@ test('editing preserves the original posted date but cannot replace it with anot
   assert.throws(() => validateAnnouncement({ ...input, publishAt: past }, now, { ...context, existingState: 'draft' }), /backdated/);
   const expired = { ...input, state: 'draft', publishAt: past, expiresAt: new Date(now - 1000).toISOString() };
   assert.equal(validateAnnouncement(expired, now, { ...context, existingExpiresAt: expired.expiresAt }).state, 'draft');
+});
+
+test('disabled posts keep their tag regardless of publication/expiry and can retain their historical window', () => {
+  const post = { ...input, state: 'disabled', publishAt: new Date(now - 7200000).toISOString(), expiresAt: new Date(now - 1000).toISOString() };
+  for (const time of [now - 86400000, now, now + 86400000]) assert.equal(announcementStatus(post, time), 'Disabled');
+  const context = { existingState: 'published', existingPublishAt: post.publishAt, existingExpiresAt: post.expiresAt };
+  assert.equal(validateAnnouncement(post, now, context).state, 'disabled');
+  const disabledContext = { ...context, existingState: 'disabled' };
+  assert.equal(validateAnnouncement(post, now, disabledContext).publishAt, post.publishAt);
+  assert.throws(() => validateAnnouncement({ ...post, state: 'published' }, now, disabledContext), /tomorrow/);
+  const enabled = validateAnnouncement({ ...post, state: 'published', expiresAt: input.expiresAt }, now, disabledContext);
+  assert.equal(announcementStatus(enabled, now), 'Live');
+  assert.throws(() => validateAnnouncement({ ...post, publishAt: new Date(now - 86400000).toISOString() }, now, disabledContext), /backdated/);
+});
+
+// Load the Next.js response helper as CommonJS without changing production module resolution.
+function controlHandler() {
+  const require = createRequire(import.meta.url);
+  const ts = require('typescript');
+  const filename = fileURLToPath(new URL('../lib/announcements/write.ts', import.meta.url));
+  const source = ts.transpileModule(readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const compiledModule = new Module(filename);
+  compiledModule.filename = filename;
+  compiledModule.require = (name) => name === './validation' ? validation : require(name);
+  compiledModule._compile(source, filename);
+  return compiledModule.exports.announcementControl;
+}
+test('disable and delete reject cross-origin writes; disable bounds and validates its payload before any mutation', async () => {
+  const control = controlHandler();
+  const origin = 'https://papiflix.vercel.app'; const url = `${origin}/api/admin/announcements/test`;
+  let mutations = 0; const perform = async () => { mutations++; return 'test'; };
+  const request = (body, sender = origin, method = 'PATCH') => new Request(url, { method, headers: { Origin: sender }, ...(body === undefined ? {} : { body }) });
+  assert.equal((await control(request('{"state":"disabled"}', 'https://other.example'), 'disable', perform)).status, 403);
+  assert.equal((await control(request(undefined, 'https://other.example', 'DELETE'), 'delete', perform)).status, 403);
+  for (const body of ['{"state":"published"}', 'null', '{bad json']) assert.equal((await control(request(body), 'disable', perform)).status, 400);
+  assert.equal((await control(request(JSON.stringify({ state: 'disabled', padding: 'x'.repeat(2000) })), 'disable', perform)).status, 413);
+  assert.equal(mutations, 0);
+  assert.equal((await control(request('{"state":"disabled"}'), 'disable', perform)).status, 200);
+  assert.equal((await control(request(undefined, origin, 'DELETE'), 'delete', perform)).status, 200);
+  assert.equal(mutations, 2);
+});
+test('announcement controls report missing documents as 404 instead of exposing database errors', async () => {
+  const control = controlHandler();
+  const request = new Request('https://papiflix.vercel.app/api/admin/announcements/test', { method: 'DELETE', headers: { Origin: 'https://papiflix.vercel.app' } });
+  const response = await control(request, 'delete', async () => { const error = new Error('Private database details'); error.name = 'DocumentNotFoundError'; throw error; });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: 'Announcement not found.' });
 });

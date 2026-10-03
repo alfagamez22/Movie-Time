@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { forbidden, getAdminSession } from '@/lib/auth/require-admin';
-import { readAnnouncement, saveAnnouncement } from '@/lib/announcements/store';
-import { announcementWrite } from '@/lib/announcements/write';
+import { readAnnouncement, saveAnnouncement, disableAnnouncement, deleteAnnouncement } from '@/lib/announcements/store';
+import { announcementWrite, announcementControl } from '@/lib/announcements/write';
 
 export const dynamic = 'force-dynamic';
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -13,6 +13,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     void _banner;
     return NextResponse.json(fields, { headers: { 'Cache-Control': 'no-store' } });
   } catch { return NextResponse.json({ error: 'Could not load announcement.' }, { status: 503 }); }
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await getAdminSession())) return forbidden();
+  const { id } = await params;
+  return announcementControl(request, 'disable', () => disableAnnouncement(id));
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await getAdminSession())) return forbidden();
+  const { id } = await params;
+  return announcementControl(request, 'delete', () => deleteAnnouncement(id));
 }
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getAdminSession();

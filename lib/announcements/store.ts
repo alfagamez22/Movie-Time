@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { MutateInSpec } from 'couchbase';
 import { processAnnouncementBanner } from './banner';
 import { getCouchbase } from '@/lib/db/couchbase';
-import type { AnnouncementInput, PublicAnnouncement } from './validation';
+import type { AnnouncementInput, AnnouncementState, PublicAnnouncement } from './validation';
 
 export interface Announcement extends PublicAnnouncement {
   type: 'announcement';
-  state: 'draft' | 'published';
+  state: AnnouncementState;
   createdAt: string;
   updatedAt: string;
   authorId: string;
@@ -46,4 +47,20 @@ export async function saveAnnouncement(input: AnnouncementInput, authorId: strin
   if (existing) await collection.replace(`announcement::${post.id}`, post);
   else await collection.insert(`announcement::${post.id}`, post);
   return post.id;
+}
+
+export async function disableAnnouncement(id: string) {
+  if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Announcement not found.');
+  const { collection } = await database();
+  // Atomic field updates preserve the banner, content and publication window.
+  await collection.mutateIn(`announcement::${id}`, [MutateInSpec.replace('state', 'disabled'), MutateInSpec.upsert('updatedAt', new Date().toISOString())]);
+  return id;
+}
+
+export async function deleteAnnouncement(id: string) {
+  if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Announcement not found.');
+  const { collection } = await database();
+  // Banner bytes live in this same document and are deleted with the post.
+  await collection.remove(`announcement::${id}`);
+  return id;
 }

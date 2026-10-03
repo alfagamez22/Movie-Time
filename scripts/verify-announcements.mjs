@@ -14,7 +14,7 @@ try {
   const keys = [];
   const start = '2000-01-01T00:00:00.000Z'; const end = '2000-01-02T00:00:00.000Z';
   try {
-    for (const [id, state, publishAt, expiresAt] of [['active','published',start,end], ['draft','draft',start,end], ['scheduled','published',end,'2000-01-03T00:00:00.000Z']]) {
+    for (const [id, state, publishAt, expiresAt] of [['active','published',start,end], ['draft','draft',start,end], ['disabled','disabled',start,end], ['scheduled','published',end,'2000-01-03T00:00:00.000Z']]) {
       const key = `${type}::${id}`; keys.push(key);
       await collection.insert(key, { id, type, state, publishAt, expiresAt, title: 'Verification only', description: 'Not public', hasBanner: false, bannerData: 'private', authorId: 'private', createdAt: start }, { expiry: 60 });
     }
@@ -25,13 +25,20 @@ try {
     assert.deepEqual(active.map((row) => row.id), ['active']);
     assert.equal(active[0].authorId, undefined); assert.equal(active[0].bannerData, undefined);
     assert.deepEqual((await query(end)).rows.map((row) => row.id), ['scheduled']);
+    const activeKey = `${type}::active`;
+    await collection.mutateIn(activeKey, [couchbase.MutateInSpec.replace('state', 'disabled'), couchbase.MutateInSpec.upsert('updatedAt', new Date().toISOString())]);
+    assert.equal((await query(start)).rows.length, 0);
+    const disabled = (await collection.get(activeKey)).content;
+    assert.equal(disabled.state, 'disabled'); assert.equal(disabled.bannerData, 'private'); assert.equal(disabled.publishAt, start);
+    await collection.remove(activeKey);
+    await assert.rejects(() => collection.get(activeKey), (error) => error.name === 'DocumentNotFoundError');
     await query(new Date().toISOString(), 'announcement');
     await cluster.query(`SELECT d.id, d.title, d.state FROM ${keyspace} d WHERE d.type = "announcement" ORDER BY d.createdAt DESC, d.id LIMIT 21 OFFSET $offset`, { parameters: { offset: 0 } });
-    console.log('Database checks passed: scheduled/start/expiry/draft filtering, public field projection and dashboard query.');
+    console.log('Database checks passed: scheduling/expiry/draft/disabled filtering, atomic disable with preserved banner/dates, deletion, public field projection and dashboard query.');
   } finally { await Promise.all(keys.map((key) => collection.remove(key).catch(() => undefined))); }
 } finally { await cluster.close(); }
 const base = 'http://localhost:3011';
-for (const [path, method] of [['/api/admin/announcements','GET'], ['/api/admin/announcements','POST'], [`/api/admin/announcements/${randomUUID()}`,'PUT']]) {
+for (const [path, method] of [['/api/admin/announcements','GET'], ['/api/admin/announcements','POST'], [`/api/admin/announcements/${randomUUID()}`,'PUT'], [`/api/admin/announcements/${randomUUID()}`,'PATCH'], [`/api/admin/announcements/${randomUUID()}`,'DELETE']]) {
   const response = await fetch(`${base}${path}`, { method }); assert.equal(response.status, 403);
 }
 const publicResponse = await fetch(`${base}/api/announcements`); assert.equal(publicResponse.status, 200);
