@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, ArrowLeft, LayoutDashboard, MessageSquare, Users } from 'lucide-react';
+import { Activity, ArrowLeft, LayoutDashboard, MessageSquare, Users, Megaphone } from 'lucide-react';
 
 const LINKS = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Overview' },
   { href: '/dashboard/analytics', icon: Activity, label: 'Analytics' },
   { href: '/dashboard/users', icon: Users, label: 'Users' },
   { href: '/dashboard/feedback', icon: MessageSquare, label: 'Feedback' },
+  { href: '/dashboard/announcements', icon: Megaphone, label: 'Announcements' },
 ];
 
 export function DashboardNav({ email }: { email: string }) {
@@ -21,7 +22,7 @@ export function DashboardNav({ email }: { email: string }) {
           Papi<span className="text-red-600">Flix</span>
           <span className="ml-2 align-middle text-[10px] font-semibold not-italic uppercase tracking-[0.25em] text-zinc-500">Admin</span>
         </Link>
-        <nav className="ml-auto flex gap-1 md:ml-0 md:flex-col">
+        <nav className="ml-auto flex min-w-0 gap-1 overflow-x-auto md:ml-0 md:flex-col">
           {LINKS.map(({ href, icon: Icon, label }) => {
             const active = pathname === href;
             return (
@@ -29,7 +30,7 @@ export function DashboardNav({ email }: { email: string }) {
                 key={href}
                 href={href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
+                className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
                   active ? 'bg-white text-black' : 'text-zinc-400 hover:bg-white/10 hover:text-white'
                 }`}
               >

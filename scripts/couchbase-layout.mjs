@@ -12,6 +12,7 @@ export function collectionForRecord(type, document = {}) {
 }
 
 export const INDEXES = {
+  announcements: [['idx_announcements_publication', ['type', 'state', 'publishAt', 'expiresAt']], ['idx_announcements_created', ['type', 'createdAt']]],
   feedback: [['idx_feedback_created', ['type', 'createdAt']]],
   identity: [
     ['idx_identity_user_email', ['type', 'email']],

@@ -15,6 +15,7 @@ import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
 import type { PersonSummary } from '@/lib/people/types';
 import { AuthModal } from '@/components/auth/auth-modal';
+import { AnnouncementPopup } from '@/components/announcements/announcement-popup';
 import { FeedbackButton } from '@/components/feedback/feedback-button';
 import { UserMenu } from '@/components/auth/user-menu';
 import { BrowseRow } from './browse-row';
@@ -300,6 +301,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   return (
     <main className="min-h-screen bg-[#050505] text-white" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
+      <AnnouncementPopup />
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
           navScrolled ? 'bg-[#050505]/95 shadow-lg backdrop-blur-md' : 'bg-gradient-to-b from-black/70 to-transparent'
