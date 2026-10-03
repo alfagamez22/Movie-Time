@@ -17,3 +17,12 @@ test('enforces raw and normalized lengths, types and category allowlist', () => 
   assert.deepEqual(validateFeedback(input), { ...input, description: '' });
   assert.equal(validateFeedback({ ...input, title: 'a'.repeat(150), description: 'b'.repeat(1000) }).description.length, 1000);
 });
+
+test('server rejects missing and blank titles even when browser constraints are absent', () => {
+  for (const title of ['', '    ', '\t\n', '\u200b\u200d', '\u00a0\u3000']) {
+    assert.throws(() => validateFeedback({ ...input, title }), { message: 'Required field' });
+  }
+  assert.throws(() => validateFeedback({ category: 'Others' }));
+  assert.throws(() => validateFeedback({ ...input, title: 123 }));
+  assert.equal(validateFeedback({ ...input, title: '  Better   search  ' }).title, 'Better search');
+});

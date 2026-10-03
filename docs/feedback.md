@@ -2,7 +2,7 @@
 
 The home-page header across PapiFlix, PapiAnime and PapiManga opens the feedback modal. Guests see the Google sign-in prompt. Feedback requires an authenticated account on the server, regardless of client UI state.
 
-Fields: category (allowlist, Others last), required title (150 characters), optional description (1,000 characters). Client and server normalize whitespace; the server also normalizes Unicode and removes invisible/control characters. Titles must contain a letter or number. Dashboard output is escaped by React and long text wraps.
+Fields: category (allowlist, Others last), required title (150 characters), optional description (1,000 characters). Client and server normalize whitespace; the server also normalizes Unicode and removes invisible/control characters. Titles must contain a letter or number. The popup uses custom inline validation instead of native browser validation: an empty-title submission displays a red asterisk and Required field text, focuses the title, and does not send a request. The same title validator runs on the server before quota or storage operations, so editing browser attributes cannot permit a blank title. Dashboard output is escaped by React and long text wraps.
 
 Storage uses the configured Couchbase bucket and scope, in a separate `feedback` collection. Feedback records contain the submitting user ID, category, title, description, and creation timestamp. The admin list resolves the profile from the identity collection; account deletion therefore removes displayed profile details.
 
