@@ -18,5 +18,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const session = await getAdminSession();
   if (!session?.user?.id) return forbidden();
   const { id } = await params;
-  return announcementWrite(request, (input) => saveAnnouncement(input, session.user!.id!, id));
+  try {
+    const existing = await readAnnouncement(id);
+    if (!existing) return NextResponse.json({ error: 'Announcement not found.' }, { status: 404 });
+    return announcementWrite(request, (input) => saveAnnouncement(input, session.user!.id!, id), { existingPublishAt: existing.publishAt, existingState: existing.state, existingExpiresAt: existing.expiresAt });
+  } catch { return NextResponse.json({ error: 'Could not load announcement.' }, { status: 503 }); }
 }

@@ -14,6 +14,8 @@ export function AnnouncementPopup() {
   const current = useRef<PublicAnnouncement | null>(null);
   const closedThisVisit = useRef(false);
   useEffect(() => {
+    // Suppress only inside the admin's embedded homepage preview. Guests still receive the public feed.
+    if (window.self !== window.top && new URLSearchParams(window.location.search).get('announcement-preview') === '1') return;
     const controller = new AbortController();
     const refresh = async () => {
       if (document.visibilityState === 'hidden' || closedThisVisit.current) return;

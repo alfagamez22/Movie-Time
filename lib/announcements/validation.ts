@@ -20,7 +20,12 @@ export function announcementStatus(post: { state: string; publishAt: string; exp
   if (Date.parse(post.publishAt) > now) return 'Scheduled';
   return 'Live';
 }
-export function validateAnnouncement(value: unknown, now = Date.now()): AnnouncementInput {
+export interface PublicationContext { existingPublishAt?: string; existingState?: 'draft' | 'published'; existingExpiresAt?: string }
+export function manilaDay(now: number) { return new Date(now + 8 * 3600000).toISOString().slice(0, 10); }
+export function nextManilaDay(now: number) { return manilaDay(now + 86400000); }
+export function nextScheduleTime(now: number) { return toManilaInput(new Date(Math.ceil((now + 60000) / 900000) * 900000).toISOString()); }
+
+export function validateAnnouncement(value: unknown, now = Date.now(), context: PublicationContext = {}): AnnouncementInput {
   if (!value || typeof value !== 'object') throw new Error('Invalid announcement.');
   const input = value as Record<string, unknown>;
   if (typeof input.title !== 'string' || typeof input.description !== 'string') throw new Error('Title and description are required.');
@@ -33,11 +38,15 @@ export function validateAnnouncement(value: unknown, now = Date.now()): Announce
   if (input.state !== 'draft' && input.state !== 'published') throw new Error('Invalid publication state.');
   const parseDate = (value: unknown, fallback: number) => {
     if (value === '' || value == null) return fallback;
-    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value) || !Number.isFinite(Date.parse(value))) throw new Error('Use a valid publication and expiry date.');
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) throw new Error('Use a valid publication and expiry date.');
     return Date.parse(value);
   };
   const start = parseDate(input.publishAt, now);
   const end = parseDate(input.expiresAt, NaN);
+  const preservePostedDate = context.existingState === 'published' && input.publishAt === context.existingPublishAt;
+  if (input.publishAt && start < now && !preservePostedDate) throw new Error('Publication cannot be backdated. Choose Now / Today or a future time.');
+  const withdrawingExisting = input.state === 'draft' && preservePostedDate && input.expiresAt === context.existingExpiresAt;
+  if (!withdrawingExisting && Number.isFinite(end) && manilaDay(end) <= manilaDay(now)) throw new Error('Expiry must be tomorrow or later (Philippine time).');
   if (input.state === 'published' && !Number.isFinite(end)) throw new Error('An expiry date is required before publishing.');
   if (Number.isFinite(end) && (end <= start || (input.state === 'published' && end <= now))) throw new Error('Expiry must be later than publication and in the future.');
   const banner = input.bannerData;

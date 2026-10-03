@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { validateAnnouncement, type AnnouncementInput } from './validation';
+import { validateAnnouncement, type AnnouncementInput, type PublicationContext } from './validation';
 
-export async function announcementWrite(request: Request, save: (input: AnnouncementInput) => Promise<string>) {
+export async function announcementWrite(request: Request, save: (input: AnnouncementInput) => Promise<string>, context: PublicationContext = {}) {
   if (request.headers.get('origin') !== new URL(request.url).origin) return NextResponse.json({ error: 'Invalid request origin.' }, { status: 403 });
   let input;
   try {
@@ -16,7 +16,7 @@ export async function announcementWrite(request: Request, save: (input: Announce
       if (length > 2900000) { await reader.cancel(); return NextResponse.json({ error: 'Announcement upload is too large.' }, { status: 413 }); }
       chunks.push(value);
     }
-    input = validateAnnouncement(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    input = validateAnnouncement(JSON.parse(Buffer.concat(chunks).toString('utf8')), Date.now(), context);
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid announcement.' }, { status: 400 }); }
   try { return NextResponse.json({ id: await save(input) }, { status: 200 }); }
   catch (error) {
