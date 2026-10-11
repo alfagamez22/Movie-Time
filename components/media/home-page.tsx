@@ -25,7 +25,8 @@ import { HeroBanner } from './hero-banner';
 import { MatureToggle, filterMatureSections, useMatureUnlocked } from './mature-toggle';
 import { MediaDetailsModal } from './media-details-modal';
 import { consumePlaybackReturn } from '@/lib/media/playback-return';
-import { LoadingIndicator, LoadingScreen } from '@/components/ui/loading-indicator';
+import { LoadingIndicator } from '@/components/ui/loading-indicator';
+import { LoadingTransition } from '@/components/ui/loading-transition';
 
 interface HomePageProps {
   discoveryError: string | null;
@@ -304,8 +305,8 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   return (
     <>
-    {historySync.loading ? <LoadingScreen label="Syncing your continue watching list" /> : null}
-    <main inert={historySync.loading} aria-hidden={historySync.loading || undefined} style={historySync.loading ? { visibility: 'hidden' } : undefined} className="min-h-screen bg-[#050505] pb-20 text-white lg:pb-0" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
+    <LoadingTransition active={historySync.loading} label="Syncing your continue watching list" />
+    <main inert={historySync.loading} aria-hidden={historySync.loading || undefined} style={historySync.loading ? { visibility: 'hidden' } : undefined} className={`min-h-screen bg-[#050505] pb-20 text-white lg:pb-0${historySync.loading ? '' : ' loading-reveal'}`} data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
       <LibraryBottomNavigation experience={experience} />
       <AnnouncementPopup />
       <header

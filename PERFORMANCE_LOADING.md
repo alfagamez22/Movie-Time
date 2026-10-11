@@ -2,6 +2,8 @@
 
 Implemented locally. The startup screen uses the existing `/icons/papiflixbanner.png` asset and a red spinner. It disappears when the session has resolved and, on signed-in homepages, the visible experience's history has refreshed. Requests and errors drive the animation; there is no minimum splash duration. Off-screen posters, public announcements, and other experiences' uploads continue independently.
 
+After session or homepage history loading finishes, the startup screen fades out over 380 ms and the ready page fades in over 420 ms. Controls become available when loading settles; the fading overlay no longer intercepts clicks or announces loading. Reduced-motion users see the ready page immediately.
+
 ## Findings and changes
 
 | Finding | Change |
@@ -50,6 +52,7 @@ Read-only database inspection confirmed all 22 relevant identity/media/announcem
 - Pagination fixture: one next-page request, existing titles retained after an error, Retry succeeds.
 - Isolated production focus fixture: session account information updates after a visibility event.
 - Mobile and desktop loading screenshots are in `.playwright-mcp/performance-loading-mobile.png` and `.playwright-mcp/performance-loading-desktop.png`.
+- Startup reveal checks passed at 1440×900 and 390×900 with isolated session/history fixtures: delayed loading remains gated, the exiting screen fades without intercepting clicks or exposing a loading announcement, the final page is opaque and interactive, history failures still release the screen, and reduced-motion mode disables the transition. No runtime errors or horizontal overflow occurred.
 
 ## References
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
-import { LoadingScreen } from '@/components/ui/loading-indicator';
+import { LoadingTransition } from '@/components/ui/loading-transition';
 
 export function SessionBootstrap({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
@@ -18,10 +18,10 @@ export function SessionBootstrap({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div inert={pending} aria-hidden={pending || undefined} style={pending ? { visibility: 'hidden' } : undefined}>
+      <div inert={pending} aria-hidden={pending || undefined} style={pending ? { visibility: 'hidden' } : undefined} className={pending ? undefined : 'loading-reveal'}>
         {children}
       </div>
-      {pending ? <LoadingScreen label="Loading your session" /> : null}
+      <LoadingTransition active={pending} label="Loading your session" />
       {pending && slow ? (
         <div className="fixed inset-x-0 top-2/3 z-[201] px-6 text-center text-sm text-zinc-400" role="alert">
           <p>This is taking longer than usual. Check your connection and try again.</p>

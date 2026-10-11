@@ -7,6 +7,20 @@
   --color-player-purple: #9146ff;
 }
 
+/* Opacity preserves the positioning of fixed navigation and modal controls. */
+@keyframes papiflix-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.loading-reveal {
+  animation: papiflix-reveal 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-reveal { animation: none; }
+}
+
 @layer utilities {
   .glass {
     background-color: rgba(255, 255, 255, 0.03);
