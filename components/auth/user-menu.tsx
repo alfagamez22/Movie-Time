@@ -115,12 +115,12 @@ export function UserMenu({ onSignInClick }: UserMenuProps) {
               </div>
             </div>
             <Link
-              href="/bookmarks"
+              href="/my-papiflix"
               onClick={() => setOpen(false)}
               className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
             >
               <Bookmark className="h-4 w-4 shrink-0" />
-              Bookmarks
+              My PapiFlix
             </Link>
             <button
               type="button"

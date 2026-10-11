@@ -2,8 +2,10 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { LibraryBottomNavigation } from './library-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
+import { LoadingIndicator } from '@/components/ui/loading-indicator';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { consumePlaybackReturn } from '@/lib/media/playback-return';
@@ -54,9 +56,12 @@ export function GenrePageClient({ experience, initial, initialSort, initialType,
   const [page, setPage] = useState(initial.page);
   const [totalPages, setTotalPages] = useState(initial.totalPages);
   const [loading, setLoading] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(1);
+  const [error, setError] = useState(Boolean(initial.error));
   const [selectedEntry, setSelectedEntry] = useState<LibraryMediaEntry | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef(0);
+  const controllerRef = useRef<AbortController | null>(null);
   const hasBothTypes = Boolean(tile.movieGenreId && tile.tvGenreId);
 
   useEffect(() => {
@@ -67,12 +72,21 @@ export function GenrePageClient({ experience, initial, initialSort, initialType,
   }, [experience.id]);
 
   const load = useCallback(async (nextType: MediaType, nextSort: GenreSort, nextPage: number) => {
+    if (nextPage > 1 && controllerRef.current) return;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
     const requestId = ++requestRef.current;
     setLoading(true);
+    setLoadingPage(nextPage);
+    setError(false);
     try {
       const params = new URLSearchParams({ page: String(nextPage), sort: nextSort, type: nextType });
-      const response = await fetch(`/api/genres/${tile.slug}?${params}`);
+      const response = await fetch(`/api/genres/${tile.slug}?${params}`, {
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
+      });
       const data = (await response.json()) as GenrePageData;
+      if (!response.ok || data.error || !Array.isArray(data.entries)) throw new Error('Titles unavailable');
       if (requestId !== requestRef.current) return;
       setEntries((current) => {
         if (nextPage === 1) return data.entries;
@@ -82,11 +96,16 @@ export function GenrePageClient({ experience, initial, initialSort, initialType,
       setPage(data.page);
       setTotalPages(data.totalPages);
     } catch {
-      // Keep what is already on screen; the sentinel retries on the next scroll.
+      if (requestId === requestRef.current && !controller.signal.aborted) setError(true);
     } finally {
-      if (requestId === requestRef.current) setLoading(false);
+      if (requestId === requestRef.current) {
+        controllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [tile.slug]);
+
+  useEffect(() => () => controllerRef.current?.abort(), []);
 
   const applyFilters = useCallback((nextType: MediaType, nextSort: GenreSort) => {
     setType(nextType);
@@ -100,16 +119,17 @@ export function GenrePageClient({ experience, initial, initialSort, initialType,
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver((items) => {
-      if (items[0]?.isIntersecting && !loading && page < totalPages) void load(type, sort, page + 1);
+      if (items[0]?.isIntersecting && !loading && !error && page < totalPages) void load(type, sort, page + 1);
     }, { rootMargin: '800px' });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [load, loading, page, sort, totalPages, type]);
+  }, [error, load, loading, page, sort, totalPages, type]);
 
   const heroItems = entries.filter((entry) => entry.backdropUrl).slice(0, 5);
 
   return (
     <main className="min-h-dvh bg-[#050505] pb-20 text-white" data-browse-theme="cinema">
+      <LibraryBottomNavigation experience={experience} />
       <header className="fixed inset-x-0 top-0 z-50 bg-gradient-to-b from-black/95 via-black/70 to-transparent">
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-5 pt-[calc(env(safe-area-inset-top)+0.75rem)] md:px-12">
           <Link
@@ -159,22 +179,31 @@ export function GenrePageClient({ experience, initial, initialSort, initialType,
         <div className="h-28" />
       )}
 
-      <section className="relative mx-auto -mt-6 max-w-[1800px] px-4 md:px-12">
+      <section aria-busy={loading} className="relative mx-auto -mt-6 max-w-[1800px] px-4 md:px-12">
         <h2 className="mb-4 text-lg font-bold md:text-2xl">
           {SORT_OPTIONS.find((option) => option.value === sort)?.label} {tile.name} {type === 'movie' ? 'Movies' : 'TV Shows'}
         </h2>
-        {entries.length === 0 && !loading ? (
+        {entries.length === 0 && !loading && !error ? (
           <p className="py-16 text-center text-zinc-500">No titles found in this genre.</p>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
-            {entries.map((entry) => (
+            {!(loading && loadingPage === 1) ? entries.map((entry) => (
               <PosterCard key={`${entry.type}:${entry.id}`} entry={entry} onSelect={setSelectedEntry} />
-            ))}
+            )) : null}
+            {loading ? Array.from({ length: 6 }, (_, index) => (
+              <div key={`loading-${index}`} aria-hidden="true" className="aspect-[2/3] rounded-md bg-white/10 motion-safe:animate-pulse" />
+            )) : null}
           </div>
         )}
         <div ref={sentinelRef} className="flex h-20 items-center justify-center">
-          {loading ? <Loader2 className="h-6 w-6 animate-spin text-zinc-500" /> : null}
+          {loading ? <LoadingIndicator label={loadingPage === 1 ? 'Loading titles' : 'Loading more titles'} /> : null}
         </div>
+        {error ? (
+          <div role="alert" className="flex flex-wrap items-center justify-center gap-3 text-sm text-zinc-400">
+            <span>Titles couldn’t load. Please try again.</span>
+            <button type="button" onClick={() => void load(type, sort, loadingPage)} className="rounded-full border border-white/20 px-4 py-2 text-white">Retry</button>
+          </div>
+        ) : null}
       </section>
 
       <MediaDetailsModal

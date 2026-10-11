@@ -12,13 +12,24 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const experience = searchParams.get('experience');
-
-  const entries = await findRecords('watchHistory', {
+  if (experience && !['papiflix', 'papianime', 'papimanga'].includes(experience)) {
+    return NextResponse.json({ error: 'Unknown experience.' }, { status: 400 });
+  }
+  const filters = {
     userId: session.user.id,
     ...(experience ? { experience } : {}),
-  }, { orderBy: 'watchedAt', limit: MAX_WATCH_HISTORY_ENTRIES });
-
-  return NextResponse.json({ entries });
+  };
+  try {
+    const [entries, progress] = await Promise.all([
+      findRecords('watchHistory', filters, { orderBy: 'watchedAt', limit: MAX_WATCH_HISTORY_ENTRIES }),
+      searchParams.get('includeProgress') === '1'
+        ? findRecords('watchProgress', filters, { orderBy: 'updatedAt' })
+        : Promise.resolve(undefined),
+    ]);
+    return NextResponse.json({ entries, ...(progress ? { progress } : {}) }, { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch {
+    return NextResponse.json({ error: 'Your watch history is temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+  }
 }
 
 export async function POST(request: Request) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth';
 import { findRecord, findRecords, saveRecord, stableRecordId } from '@/lib/db/records';
+import { isBookmarkStatus } from '@/lib/media/user-actions';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
     ...(experience ? { experience } : {}),
   }, { orderBy: 'updatedAt' });
 
-  return NextResponse.json({ bookmarks });
+  return NextResponse.json({ bookmarks }, { headers: { 'Cache-Control': 'private, no-store' } });
 }
 
 export async function POST(request: Request) {
@@ -45,6 +46,9 @@ export async function POST(request: Request) {
 
   if (!body?.mediaId || !body.mediaType || !body.mediaProvider || !body.experience || !body.title) {
     return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
+  }
+  if (body.status != null && !isBookmarkStatus(body.status)) {
+    return NextResponse.json({ error: 'Invalid bookmark status.' }, { status: 400 });
   }
 
   const key = {

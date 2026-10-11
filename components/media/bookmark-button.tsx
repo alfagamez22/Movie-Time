@@ -1,189 +1,90 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { Bookmark, BookmarkCheck, Check, ChevronDown } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-
+import { Check, LoaderCircle, Plus, Trash2 } from 'lucide-react';
+import { IconButton } from '@/components/ui/icon-button';
 import type { LibraryMediaEntry } from '@/lib/media/types';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useBookmarks, type BookmarkStatus } from '@/lib/hooks/use-bookmarks';
 import { BOOKMARK_STATUSES, BOOKMARK_STATUS_LABELS } from '@/lib/media/user-actions';
 
-interface BookmarkButtonProps {
-  entry: LibraryMediaEntry;
-  experience: MediaExperienceConfig;
-  onSignInRequired?: () => void;
-}
-
-export function BookmarkButton({ entry, experience, onSignInRequired }: BookmarkButtonProps) {
+export function BookmarkButton({ entry, experience, onSignInRequired }: {
+  entry: LibraryMediaEntry; experience: MediaExperienceConfig; onSignInRequired?: () => void;
+}) {
   const { data: session } = useSession();
-  const { getBookmark, addBookmark, updateStatus, removeBookmark } = useBookmarks(experience.id);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
+  const { getBookmark, addBookmark, updateStatus, removeBookmark, error } = useBookmarks(experience.id);
   const existing = getBookmark(entry.id, entry.provider, entry.type);
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const id = useId();
 
   useEffect(() => {
-    if (!dropdownOpen) return;
-    const onPointer = (e: PointerEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
+    if (!open) return;
+    const dismiss = (event: Event) => {
+      if (event.type === 'scroll' && menu.current?.contains(event.target as Node)) return;
+      if (menu.current?.matches(':popover-open')) menu.current.hidePopover();
     };
-    document.addEventListener('pointerdown', onPointer);
-    return () => document.removeEventListener('pointerdown', onPointer);
-  }, [dropdownOpen]);
+    window.addEventListener('resize', dismiss);
+    window.addEventListener('scroll', dismiss, true);
+    return () => { window.removeEventListener('resize', dismiss); window.removeEventListener('scroll', dismiss, true); };
+  }, [open]);
 
-  const requireSignIn = useCallback(() => {
-    setDropdownOpen(false);
-    onSignInRequired?.();
-  }, [onSignInRequired]);
+  const toggleMenu = () => {
+    if (!session?.user?.id) { onSignInRequired?.(); return; }
+    if (!menu.current || !trigger.current) return;
+    if (menu.current.matches(':popover-open')) { menu.current.hidePopover(); return; }
+    const rect = trigger.current.getBoundingClientRect();
+    const height = existing ? 196 : 148;
+    setPosition({ left: Math.max(12, Math.min(rect.right - 224, window.innerWidth - 236)),
+      top: rect.bottom + height + 12 < window.innerHeight ? rect.bottom + 8 : Math.max(12, rect.top - height - 8) });
+    menu.current.showPopover();
+    requestAnimationFrame(() => menu.current?.querySelector('button')?.focus());
+  };
 
-  const addEntryBookmark = useCallback(
-    async (status: BookmarkStatus) => {
-      setPendingAction(true);
-      try {
-        await addBookmark({
-          mediaId: entry.id,
-          mediaType: entry.type,
-          mediaProvider: entry.provider,
-          experience: experience.id,
-          title: entry.title,
-          posterUrl: entry.posterUrl,
-          backdropUrl: entry.backdropUrl,
-          synopsis: entry.synopsis?.slice(0, 180),
-          rating: entry.rating,
-          year: entry.year,
-          anilistId: entry.anilistId,
-          malId: entry.malId,
-          animeFormat: entry.animeFormat,
-          status,
-        });
-      } finally {
-        setPendingAction(false);
-      }
-    },
-    [addBookmark, entry, experience.id],
-  );
+  const change = async (status?: BookmarkStatus) => {
+    if (!session?.user?.id) { onSignInRequired?.(); return; }
+    if (menu.current?.matches(':popover-open')) menu.current.hidePopover();
+    setPending(true);
+    try {
+      if (!status && existing) await removeBookmark(existing.id);
+      else if (existing && status) await updateStatus(existing.id, status);
+      else if (status) await addBookmark({ mediaId: entry.id, mediaType: entry.type, mediaProvider: entry.provider,
+        experience: experience.id, title: entry.title, posterUrl: entry.posterUrl, backdropUrl: entry.backdropUrl,
+        synopsis: entry.synopsis?.slice(0, 180), rating: entry.rating, year: entry.year, anilistId: entry.anilistId,
+        malId: entry.malId, animeFormat: entry.animeFormat, status });
+    } finally { setPending(false); trigger.current?.focus(); }
+  };
 
-  const handleMainClick = useCallback(async () => {
-    if (!session?.user) {
-      requireSignIn();
-      return;
-    }
-
-    if (existing) {
-      setDropdownOpen((v) => !v);
-      return;
-    }
-
-    await addEntryBookmark('favorite');
-  }, [session?.user, existing, requireSignIn, addEntryBookmark]);
-
-  const handleDropdownClick = useCallback(() => {
-    if (!session?.user) {
-      requireSignIn();
-      return;
-    }
-    setDropdownOpen((v) => !v);
-  }, [session?.user, requireSignIn]);
-
-  const handleStatusChange = useCallback(
-    async (status: BookmarkStatus) => {
-      if (!session?.user) {
-        requireSignIn();
-        return;
-      }
-
-      setDropdownOpen(false);
-      if (existing) {
-        await updateStatus(existing.id, status);
-        return;
-      }
-
-      await addEntryBookmark(status);
-    },
-    [session?.user, existing, updateStatus, addEntryBookmark, requireSignIn],
-  );
-
-  const handleRemove = useCallback(async () => {
-    if (!existing) return;
-    setDropdownOpen(false);
-    await removeBookmark(existing.id);
-  }, [existing, removeBookmark]);
-
-  const isBookmarked = Boolean(existing);
-  const currentStatus = existing?.status as BookmarkStatus | undefined;
-  const mainLabel = isBookmarked ? BOOKMARK_STATUS_LABELS[currentStatus ?? 'favorite'] : 'Bookmark';
-  const actionTone = isBookmarked
-    ? 'border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
-    : 'border-white/15 bg-white/5 text-white hover:border-white/25 hover:bg-white/10';
-
-  return (
-    <div ref={dropdownRef} className="relative inline-flex">
-      <button
-        type="button"
-        onClick={handleMainClick}
-        disabled={pendingAction}
-        aria-label={isBookmarked ? `Bookmarked as ${mainLabel}` : 'Add to bookmarks'}
-        className={`inline-flex items-center gap-2 rounded-l-md border border-r-0 px-4 py-2.5 text-sm font-bold transition-colors disabled:opacity-50 ${actionTone}`}
-      >
-        {isBookmarked ? (
-          <BookmarkCheck className="h-4 w-4 shrink-0" />
-        ) : (
-          <Bookmark className="h-4 w-4 shrink-0" />
-        )}
-        {mainLabel}
-      </button>
-      <button
-        type="button"
-        onClick={handleDropdownClick}
-        disabled={pendingAction}
-        aria-label="Choose bookmark status"
-        aria-expanded={dropdownOpen}
-        className={`inline-flex items-center justify-center rounded-r-md border px-2.5 py-2.5 transition-colors disabled:opacity-50 ${actionTone}`}
-      >
-        <ChevronDown className={`h-3.5 w-3.5 shrink-0 opacity-80 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence>
-        {dropdownOpen && session?.user ? (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97 }}
-            transition={{ duration: 0.1 }}
-            className="absolute left-0 top-full z-20 mt-1.5 min-w-[10rem] overflow-hidden rounded-xl border border-white/10 bg-zinc-900 shadow-2xl"
-          >
-            {BOOKMARK_STATUSES.map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => void handleStatusChange(status)}
-                className={`flex w-full items-center px-4 py-2.5 text-sm transition-colors hover:bg-white/8 ${
-                  currentStatus === status ? 'text-amber-400' : 'text-zinc-300'
-                }`}
-              >
-                {BOOKMARK_STATUS_LABELS[status]}
-                {currentStatus === status ? <Check className="ml-auto h-4 w-4 text-amber-400" /> : null}
-              </button>
-            ))}
-            {existing ? (
-              <div className="border-t border-white/8">
-                <button
-                  type="button"
-                  onClick={() => void handleRemove()}
-                  className="flex w-full items-center px-4 py-2.5 text-sm text-red-400 transition-colors hover:bg-red-500/10"
-                >
-                  Remove bookmark
-                </button>
-              </div>
-            ) : null}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+  return <div className="inline-flex flex-col items-start">
+    <IconButton ref={trigger} disabled={pending} onClick={toggleMenu}
+      label={pending ? 'Saving…' : existing ? `My List · ${BOOKMARK_STATUS_LABELS[existing.status]}` : 'My List'}
+      aria-label={existing ? `Bookmarked as ${BOOKMARK_STATUS_LABELS[existing.status]}` : 'Add to My List'}
+      aria-expanded={open} aria-controls={id} aria-haspopup="menu"
+      className={`flex h-11 w-11 items-center justify-center rounded-full border-2 transition hover:border-white hover:bg-white/10 disabled:opacity-40 ${existing ? 'border-white bg-white/15 text-white' : 'border-white/40 text-zinc-300'}`}>
+      {pending ? <LoaderCircle aria-hidden="true" className="h-5 w-5 motion-safe:animate-spin" /> : existing ? <Check aria-hidden="true" className="h-5 w-5" /> : <Plus aria-hidden="true" className="h-5 w-5" />}
+    </IconButton>
+    {/* The browser's top layer escapes artwork overflow and transformed modal ancestors. */}
+    <div ref={menu} id={id} popover="auto" role="menu" aria-label="Bookmark status"
+      onToggle={(event) => setOpen(event.newState === 'open')}
+      onKeyDown={(event) => {
+        const buttons = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault(); buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+        }
+      }}
+      style={{ top: position.top, left: position.left, margin: 0, insetInlineEnd: 'auto', bottom: 'auto' }}
+      className="fixed max-h-[calc(100dvh-24px)] w-56 max-w-[calc(100vw-24px)] overflow-y-auto rounded-md border border-white/20 bg-[#242424] p-1 text-white shadow-2xl">
+      {BOOKMARK_STATUSES.map((status) => <button key={status} role="menuitemradio" aria-checked={existing?.status === status}
+        type="button" onClick={() => void change(status)} className="flex min-h-11 w-full items-center justify-between rounded px-3 text-left text-sm hover:bg-white/15 focus:bg-white/15 focus:outline-none">
+        {BOOKMARK_STATUS_LABELS[status]}{existing?.status === status ? <Check className="h-4 w-4" /> : null}
+      </button>)}
+      {existing ? <button type="button" role="menuitem" onClick={() => void change()} className="flex min-h-11 w-full items-center gap-2 border-t border-white/10 px-3 text-sm text-red-300 hover:bg-white/10"><Trash2 className="h-4 w-4" />Remove bookmark</button> : null}
     </div>
-  );
+    {error ? <p role="alert" className="mt-2 max-w-64 text-xs text-red-300">{error}</p> : null}
+  </div>;
 }

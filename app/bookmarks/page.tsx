@@ -43,6 +43,9 @@ export default async function BookmarksPage() {
     posterUrl: bookmark.posterUrl,
     backdropUrl: bookmark.backdropUrl,
     synopsis: bookmark.synopsis,
+    anilistId: bookmark.anilistId as string | undefined,
+    malId: bookmark.malId as string | undefined,
+    animeFormat: bookmark.animeFormat as string | undefined,
     rating: bookmark.rating,
     year: bookmark.year,
     status: isBookmarkStatus(bookmark.status) ? bookmark.status : 'favorite',
@@ -51,6 +54,6 @@ export default async function BookmarksPage() {
   }));
 
   return (
-    <BookmarksPageClient initialBookmarks={initialBookmarks} />
+    <BookmarksPageClient initialBookmarks={initialBookmarks} initialUserId={session.user.id} />
   );
 }

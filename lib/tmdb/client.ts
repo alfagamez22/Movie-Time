@@ -48,6 +48,7 @@ interface TmdbSeasonSummary {
 }
 
 interface TmdbTvResponse extends TmdbAnimeFields {
+  status?: string;
   backdrop_path?: string;
   first_air_date?: string;
   id: number;
@@ -662,6 +663,7 @@ function createTvEntry(response: TmdbTvResponse, tmdbId: string): TvMediaEntry {
     aliases: [],
     backdropUrl: buildTmdbImageUrl(response.backdrop_path),
     episodesBySeason,
+    finishedEpisodeCount: (response.status === 'Ended' || response.status === 'Canceled') && response.number_of_episodes && response.number_of_episodes > 0 ? response.number_of_episodes : undefined,
     id: tmdbId,
     maxEpisodes: seasonEpisodeCounts.length > 0 ? Math.max(...seasonEpisodeCounts) : fallbackEpisodeCount,
     maxSeasons: seasonNumbers.length > 0 ? Math.max(...seasonNumbers) : fallbackSeasonCount,

@@ -51,7 +51,8 @@ export function playbackBackTarget(entry: LibraryMediaEntry, experience: MediaEx
   if (context?.experience === experience && context.entry.id === entry.id &&
       context.entry.provider === entry.provider && context.entry.type === entry.type &&
       (context.sourcePath === homeHref || context.sourcePath.startsWith(`${homeHref}?`) ||
-       context.sourcePath.startsWith(`${homeHref}#`) || context.sourcePath.startsWith('/categories'))) {
+       context.sourcePath.startsWith(`${homeHref}#`) || context.sourcePath.startsWith('/categories') ||
+       context.sourcePath.split(/[?#]/)[0] === '/my-papiflix' || context.sourcePath.split(/[?#]/)[0] === '/bookmarks')) {
     return context.sourcePath;
   }
   if (typeof window !== 'undefined') {

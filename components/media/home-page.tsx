@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { LibraryNavigation, LibraryBottomNavigation } from './library-navigation';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -24,6 +25,7 @@ import { HeroBanner } from './hero-banner';
 import { MatureToggle, filterMatureSections, useMatureUnlocked } from './mature-toggle';
 import { MediaDetailsModal } from './media-details-modal';
 import { consumePlaybackReturn } from '@/lib/media/playback-return';
+import { LoadingIndicator, LoadingScreen } from '@/components/ui/loading-indicator';
 
 interface HomePageProps {
   discoveryError: string | null;
@@ -154,10 +156,12 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [authOpen, setAuthOpen] = useState(false);
   const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>('default');
   const recentlyWatched = useRecentlyWatched(experience.id);
-  useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
+  const historySync = useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 200);
-  const isSearchPending = query.trim() !== debouncedQuery;
+  const [completedSearch, setCompletedSearch] = useState('');
+  const [searchError, setSearchError] = useState(false);
+  const isSearchPending = Boolean(query.trim()) && (query.trim() !== debouncedQuery || completedSearch !== debouncedQuery);
 
   useEffect(() => {
     const returnEntry = consumePlaybackReturn(experience.id);
@@ -169,6 +173,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const closeSearch = useCallback(() => {
     setSearchOpen(false);
     setQuery('');
+    setCompletedSearch('');
   }, []);
 
   const openDetails = useCallback(
@@ -257,31 +262,29 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
     const controller = new AbortController();
     const params = new URLSearchParams({ q: debouncedQuery });
 
-    void fetch(`${experience.searchEndpoint}?${params.toString()}`, { signal: controller.signal })
-      .then(async (res) => {
-        const json = (await res.json().catch(() => null)) as { data?: LibraryMediaEntry[] } | null;
-        if (!controller.signal.aborted) {
-          setSearchResults(json?.data ?? []);
-        }
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        if (!controller.signal.aborted) {
-          setSearchResults([]);
-        }
-      });
-
-    if (experience.peopleSource) {
-      const peopleParams = new URLSearchParams({ q: debouncedQuery, source: experience.peopleSource });
-      void fetch(`/api/people?${peopleParams.toString()}`, { signal: controller.signal })
-        .then(async (res) => {
-          const json = (await res.json().catch(() => null)) as { people?: PersonSummary[] } | null;
-          if (!controller.signal.aborted) setSearchPeople(json?.people ?? []);
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) setSearchPeople([]);
-        });
-    }
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]);
+    void (async () => {
+      const peopleParams = new URLSearchParams({ q: debouncedQuery, source: experience.peopleSource ?? '' });
+      const [titles, people] = await Promise.allSettled([
+        fetch(`${experience.searchEndpoint}?${params.toString()}`, { signal }).then(async (response) => {
+          const json = await response.json() as { data?: LibraryMediaEntry[]; error?: string };
+          if (!response.ok || json.error) throw new Error('Search unavailable');
+          return json.data ?? [];
+        }),
+        experience.peopleSource
+          ? fetch(`/api/people?${peopleParams.toString()}`, { signal }).then(async (response) => {
+              if (!response.ok) throw new Error('People search unavailable');
+              const json = await response.json() as { people?: PersonSummary[] };
+              return json.people ?? [];
+            })
+          : Promise.resolve([] as PersonSummary[]),
+      ]);
+      if (controller.signal.aborted) return;
+      setSearchResults(titles.status === 'fulfilled' ? titles.value : []);
+      setSearchPeople(people.status === 'fulfilled' ? people.value : []);
+      setSearchError(titles.status === 'rejected');
+      setCompletedSearch(debouncedQuery);
+    })();
 
     return () => controller.abort(new DOMException('Query changed', 'AbortError'));
   }, [debouncedQuery, experience.searchEndpoint, experience.id, experience.peopleSource]);
@@ -300,7 +303,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   );
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
+    <>
+    {historySync.loading ? <LoadingScreen label="Syncing your continue watching list" /> : null}
+    <main inert={historySync.loading} aria-hidden={historySync.loading || undefined} style={historySync.loading ? { visibility: 'hidden' } : undefined} className="min-h-screen bg-[#050505] pb-20 text-white lg:pb-0" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
+      <LibraryBottomNavigation experience={experience} />
       <AnnouncementPopup />
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
@@ -321,23 +327,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             >
               <span className="sr-only">{experience.brandName}</span>
             </Link>
-            <nav className="hidden items-center gap-8 text-sm font-medium text-zinc-300 md:flex">
-              {experience.navLinks.map((link) => (
-                <Link key={`${link.label}-${link.href}`} href={link.href} className="transition-colors hover:text-white">
-                  {link.label}
-                </Link>
-              ))}
-              {experience.id === 'papiflix' ? (
-                <Link href="/categories" className="transition-colors hover:text-white">
-                  Categories
-                </Link>
-              ) : null}
-              {isAuthenticated ? (
-                <Link href="/bookmarks" className="transition-colors hover:text-white">
-                  Bookmarks
-                </Link>
-              ) : null}
-            </nav>
+            <LibraryNavigation experience={experience} />
             <div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
               {experience.id === 'papiflix' ? (
                 <div className="hidden md:block">
@@ -379,7 +369,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                   ref={inputRef}
                   type="text"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => { setQuery(event.target.value); setCompletedSearch(''); }}
                   placeholder={experience.searchPlaceholder}
                   className="flex-1 bg-transparent text-base text-white placeholder:text-zinc-600 focus:outline-none sm:text-lg"
                 />
@@ -398,7 +388,9 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 {!debouncedQuery ? (
                   <p className="mt-10 text-center text-sm text-zinc-400">{experience.emptySearchText}</p>
                 ) : isSearchPending ? (
-                  <p className="text-center text-sm text-zinc-500">Searching...</p>
+                  <LoadingIndicator label="Searching" />
+                ) : searchError && searchResults.length === 0 && searchPeople.length === 0 ? (
+                  <p role="alert" className="text-center text-sm text-zinc-400">Search is temporarily unavailable. Please try again.</p>
                 ) : searchResults.length === 0 && searchPeople.length === 0 ? (
                   <p className="text-center text-sm text-zinc-500">
                     No results for &ldquo;{debouncedQuery}&rdquo;
@@ -448,6 +440,12 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       ) : null}
 
       <div className="browse-shelves space-y-10 py-8">
+        {historySync.error ? (
+          <div role="alert" className="safe-page-x flex flex-wrap items-center gap-3 text-sm text-zinc-400">
+            <span>Your watch history couldn’t refresh. Your saved local progress is still available.</span>
+            <button type="button" onClick={() => void historySync.retry()} className="rounded-full border border-white/20 px-4 py-2 text-white">Retry</button>
+          </div>
+        ) : null}
         {recentlyWatched.length > 0 ? (
           <BrowseRow
             cinematic={experience.id !== 'papimanga'}
@@ -500,5 +498,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         ) : null}
       </AnimatePresence>
     </main>
+    </>
   );
 }

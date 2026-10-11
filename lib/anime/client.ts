@@ -229,6 +229,7 @@ function createTvEntry(media: AnilistMedia): TvMediaEntry {
     backdropUrl: getBackdropUrl(media),
     defaultLanguage: 'sub',
     episodeCount,
+    finishedEpisodeCount: media.status === 'FINISHED' && media.episodes && media.episodes > 0 ? media.episodes : undefined,
     episodesBySeason: {
       '1': episodeCount,
     },

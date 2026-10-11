@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useSession } from 'next-auth/react';
 
 import type { LibraryMediaEntry, MediaEntry, MediaExperience } from '@/lib/media/types';
@@ -76,11 +76,14 @@ async function pushNamespaceToServer(namespace: RecentlyWatchedNamespace) {
     const response = await fetch('/api/watch-history/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(8_000),
       body: JSON.stringify({
         entries: localEntries.map((entry) => ({ ...entry, experience: namespace })),
       }),
     });
     if (!response.ok) return;
+    const result = await response.json() as { failed?: number };
+    if (result.failed) return;
   }
   serverBaseline.set(namespace, startedAt);
 }
@@ -204,6 +207,7 @@ function normalizeEntry(value: unknown): RecentlyWatchedEntry | null {
     durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
     episode: typeof entry.episode === 'string' ? entry.episode : undefined,
     episodeCount: typeof entry.episodeCount === 'number' ? entry.episodeCount : undefined,
+    finishedEpisodeCount: typeof entry.finishedEpisodeCount === 'number' ? entry.finishedEpisodeCount : undefined,
     episodeEmbedIds:
       entry.episodeEmbedIds && typeof entry.episodeEmbedIds === 'object'
         ? Object.fromEntries(
@@ -511,6 +515,7 @@ function compactEntry(
       (canCarryProgress ? previous?.durationSeconds : undefined),
     episode: options.episode,
     episodeCount: entry.episodeCount,
+    finishedEpisodeCount: entry.finishedEpisodeCount,
     episodeEmbedIds: entry.episodeEmbedIds,
     id: entry.id,
     malId: entry.malId,
@@ -712,7 +717,9 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
   const fetchKey = userId ? `${userId}:${namespace}` : null;
   const fetchedRef = useRef<string | null>(null);
   const lastSyncedRef = useRef<number>(0);
-  const inFlightRef = useRef<boolean>(false);
+  const inFlightRef = useRef<string | null>(null);
+  const initializingRef = useRef<string | null>(null);
+  const [initialSync, setInitialSync] = useState<{ key: string | null; error: boolean }>({ key: null, error: false });
 
   const pushLocalToServer = useCallback(async () => {
     if (!userId || !isBrowser()) return;
@@ -735,6 +742,7 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
           const response = await fetch('/api/watch-history/delete', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(8_000),
             body: JSON.stringify({
               mediaId: tomb.id,
               mediaProvider: tomb.provider,
@@ -759,27 +767,28 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
     }
   }, [namespace, userId]);
 
-  const fetchServer = useCallback(async () => {
-    if (!userId) return;
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+  const fetchServer = useCallback(async (force = false) => {
+    if (!userId) return false;
+    if (inFlightRef.current === fetchKey) return false;
+    if (!force && Date.now() - lastSyncedRef.current < 5_000) return true;
+    inFlightRef.current = fetchKey;
     const fetchStartedAt = Date.now();
     try {
-      const [historyResponse, progressResponse] = await Promise.all([
-        fetch(`/api/watch-history?experience=${encodeURIComponent(namespace)}`),
-        fetch(`/api/watch-history/progress?experience=${encodeURIComponent(namespace)}`),
-      ]);
+      const historyResponse = await fetch(`/api/watch-history?experience=${encodeURIComponent(namespace)}&includeProgress=1`, {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12_000),
+      });
 
       if (!historyResponse.ok) {
-        return;
+        return false;
       }
 
-      const historyJson = (await historyResponse.json().catch(() => ({}))) as {
+      const historyJson = (await historyResponse.json()) as {
         entries?: ServerWatchHistoryEntry[];
+        progress?: ServerWatchProgressEntry[];
       };
-      const progressJson = (progressResponse.ok
-        ? ((await progressResponse.json().catch(() => ({}))) as { progress?: ServerWatchProgressEntry[] })
-        : { progress: [] });
+      if (!Array.isArray(historyJson.entries) || !Array.isArray(historyJson.progress)) return false;
+      if (fetchedRef.current !== fetchKey) return false;
 
       const serverEntries = applyTombstones(
         (historyJson.entries ?? [])
@@ -806,7 +815,7 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
       setCachedRawValue(namespace, rawValue);
       setCachedEntries(namespace, merged);
 
-      const progressMap = watchedEpisodesFromProgress(progressJson.progress ?? []);
+      const progressMap = watchedEpisodesFromProgress(historyJson.progress ?? []);
       const cachedSets = new Map<string, Set<string>>();
       Object.entries(parseWatchedEpisodesMap(readRawWatchedEpisodes(namespace))).forEach(([mediaKey, episodes]) => {
         const fromServer = progressMap.get(mediaKey);
@@ -832,10 +841,41 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
       if (baseline !== undefined) serverBaseline.set(namespace, Math.max(baseline, fetchStartedAt));
       lastSyncedRef.current = Date.now();
       window.dispatchEvent(new Event(keys.eventName));
+      setInitialSync((current) => current.key === fetchKey && !current.error ? current : { key: fetchKey, error: false });
+      return true;
+    } catch {
+      // Preserve local progress when the network or database is unavailable.
+      return false;
     } finally {
-      inFlightRef.current = false;
+      if (inFlightRef.current === fetchKey) inFlightRef.current = null;
     }
-  }, [namespace, userId]);
+  }, [fetchKey, namespace, userId]);
+
+  const initialize = useCallback(async () => {
+    if (!fetchKey || !userId || initializingRef.current === fetchKey) return;
+    initializingRef.current = fetchKey;
+    setInitialSync({ key: null, error: false });
+    const timer = window.setTimeout(() => {
+      if (fetchedRef.current === fetchKey) setInitialSync({ key: fetchKey, error: true });
+    }, 15_000);
+    try {
+      // Only the visible app belongs on the startup path. Other apps sync afterward.
+      await flushTombstones();
+      if (fetchedRef.current !== fetchKey) return;
+      await pushLocalToServer();
+      if (fetchedRef.current !== fetchKey) return;
+      const ok = await fetchServer(true);
+      if (fetchedRef.current !== fetchKey) return;
+      setInitialSync({ key: fetchKey, error: !ok });
+      if (ok && !uploadedUsers.has(userId)) {
+        uploadedUsers.add(userId);
+        void Promise.all(ALL_NAMESPACES.filter((name) => name !== namespace).map((name) => pushNamespaceToServer(name).catch(() => undefined)));
+      }
+    } finally {
+      window.clearTimeout(timer);
+      if (initializingRef.current === fetchKey) initializingRef.current = null;
+    }
+  }, [fetchKey, fetchServer, flushTombstones, namespace, pushLocalToServer, userId]);
 
   useEffect(() => {
     if (!fetchKey) {
@@ -845,27 +885,19 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
     }
     if (fetchedRef.current !== fetchKey) {
       fetchedRef.current = fetchKey;
-      void (async () => {
-        await flushTombstones();
-        if (userId && !uploadedUsers.has(userId)) {
-          uploadedUsers.add(userId);
-          await Promise.all(ALL_NAMESPACES.map((name) => pushNamespaceToServer(name).catch(() => undefined)));
-        } else {
-          await pushLocalToServer();
-        }
-        await fetchServer();
-      })();
+      lastSyncedRef.current = 0;
+      void initialize();
     }
-  }, [fetchKey, fetchServer, flushTombstones, namespace, pushLocalToServer, userId]);
+  }, [fetchKey, initialize, namespace]);
 
   useEffect(() => {
     if (!userId || !isBrowser()) return;
     const onFocus = () => {
-      void fetchServer();
+      if (!initializingRef.current) void fetchServer();
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        void fetchServer();
+        if (!initializingRef.current) void fetchServer();
       }
     };
     window.addEventListener('focus', onFocus);
@@ -875,7 +907,7 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
     if (intervalMs > 0) {
       interval = setInterval(() => {
         if (document.visibilityState === 'visible') {
-          void fetchServer();
+          if (!initializingRef.current) void fetchServer();
         }
       }, intervalMs);
     }
@@ -889,10 +921,13 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
   return useMemo(
     () => ({
       hydrated: serverHydratedNamespace.has(namespace),
+      loading: Boolean(fetchKey && initialSync.key !== fetchKey),
+      error: Boolean(fetchKey && initialSync.key === fetchKey && initialSync.error),
       pushLocalToServer,
       refetch: fetchServer,
+      retry: initialize,
     }),
-    [fetchServer, namespace, pushLocalToServer],
+    [fetchKey, fetchServer, initialSync, initialize, namespace, pushLocalToServer],
   );
 }
 

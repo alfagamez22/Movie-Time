@@ -85,6 +85,9 @@ const SEARCH_CACHE_CONTROL = 'public, max-age=60, s-maxage=300, stale-while-reva
 
 export async function GET(request: Request) {
   const response = await handleGet(request);
-  if (response.status === 200) response.headers.set('Cache-Control', SEARCH_CACHE_CONTROL);
+  const body = await response.clone().json() as { error?: string; source?: string | null };
+  response.headers.set('Cache-Control', response.status === 200 && !body.error && body.source
+    ? SEARCH_CACHE_CONTROL
+    : 'no-store');
   return response;
 }

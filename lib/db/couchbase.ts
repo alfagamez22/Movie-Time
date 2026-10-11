@@ -89,9 +89,9 @@ export function collectionsForRecord(type: string, filters: Record<string, unkno
   return [...MEDIA_COLLECTIONS];
 }
 
-export async function getDocument<T>(type: string, id: string): Promise<T | null> {
+export async function getDocument<T>(type: string, id: string, routing: Record<string, unknown> = {}): Promise<T | null> {
   const { scope } = await getCouchbase();
-  for (const name of collectionsForRecord(type)) {
+  for (const name of collectionsForRecord(type, routing)) {
     try {
       const result = await scope.collection(name).get(couchbaseDocumentKey(type, id));
       return result.content as T;

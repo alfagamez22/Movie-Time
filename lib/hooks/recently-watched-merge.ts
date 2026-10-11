@@ -10,6 +10,7 @@ export interface RecentlyWatchedEntry {
   durationSeconds?: number;
   episode?: string;
   episodeCount?: number;
+  finishedEpisodeCount?: number;
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
@@ -50,6 +51,7 @@ export interface ServerWatchHistoryEntry {
   animeFormat: string | null;
   defaultLanguage: string | null;
   episodeCount: number | null;
+  finishedEpisodeCount?: number | null;
   watchedAt: string | number | Date;
   updatedAt: string | number | Date;
 }
@@ -123,6 +125,7 @@ export function serverEntryToClient(entry: ServerWatchHistoryEntry): RecentlyWat
     durationSeconds: typeof entry.durationSeconds === 'number' ? entry.durationSeconds : undefined,
     episode: entry.episode ?? undefined,
     episodeCount: typeof entry.episodeCount === 'number' ? entry.episodeCount : undefined,
+    finishedEpisodeCount: typeof entry.finishedEpisodeCount === 'number' ? entry.finishedEpisodeCount : undefined,
     id: entry.mediaId,
     malId: entry.malId ?? undefined,
     posterUrl: entry.posterUrl ?? undefined,
@@ -189,6 +192,7 @@ export function mergeRecentlyWatched({ localEntries, preferServer, serverEntries
         durationSeconds: entry.durationSeconds ?? existing.durationSeconds,
         episode: entry.episode ?? existing.episode,
         episodeCount: entry.episodeCount ?? existing.episodeCount,
+        finishedEpisodeCount: entry.finishedEpisodeCount,
         episodeEmbedIds: entry.episodeEmbedIds ?? existing.episodeEmbedIds,
         id: entry.id,
         malId: entry.malId ?? existing.malId,

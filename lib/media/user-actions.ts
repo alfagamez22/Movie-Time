@@ -8,7 +8,7 @@ export const BOOKMARK_STATUS_LABELS: Record<BookmarkStatus, string> = {
   plan_to_watch: 'Plan to Watch',
 };
 
-export type AuthPromptReason = 'default' | 'bookmark' | 'comment';
+export type AuthPromptReason = 'default' | 'bookmark' | 'comment' | 'like';
 
 interface AuthPromptCopy {
   title: string;
@@ -16,6 +16,10 @@ interface AuthPromptCopy {
 }
 
 const AUTH_PROMPT_COPY: Record<AuthPromptReason, AuthPromptCopy> = {
+  like: {
+    title: 'Sign in to like titles',
+    description: 'Keep the movies, series, and anime you like together in My PapiFlix.',
+  },
   default: {
     title: 'Sign in to PapiFlix',
     description: 'Log in or create an account to keep your profile, watch history, bookmarks, and comments synced.',

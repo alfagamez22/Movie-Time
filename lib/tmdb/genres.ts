@@ -20,6 +20,7 @@ export interface GenreTile {
 
 export interface GenrePage {
   entries: LibraryMediaEntry[];
+  error?: string;
   page: number;
   totalPages: number;
 }
@@ -48,7 +49,7 @@ function discoverQuery(type: MediaType, genreId: number, sort: GenreSort, page: 
   };
 }
 
-export async function getGenreTiles(): Promise<GenreTile[]> {
+async function getGenreDefinitions(): Promise<GenreTile[]> {
   const [movieGenres, tvGenres] = await Promise.all([fetchGenreList('movie'), fetchGenreList('tv')]);
   const tiles = new Map<string, GenreTile>();
   for (const genre of movieGenres) {
@@ -62,7 +63,11 @@ export async function getGenreTiles(): Promise<GenreTile[]> {
     else tiles.set(genre.name, { name: genre.name, slug: normalizeSlug(genre.name), tvGenreId: genre.id });
   }
 
-  const list = [...tiles.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...tiles.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getGenreTiles(): Promise<GenreTile[]> {
+  const list = await getGenreDefinitions();
   const candidates = await Promise.all(list.map(async (tile) => {
     const type: MediaType = tile.movieGenreId ? 'movie' : 'tv';
     const payload = await requestOfficialTmdb<{ results?: TmdbBrowseResult[] }>(
@@ -87,7 +92,8 @@ export async function getGenreTiles(): Promise<GenreTile[]> {
 }
 
 export async function findGenreTile(slug: string): Promise<GenreTile | null> {
-  const tiles = await getGenreTiles();
+  // A title-page lookup needs genre IDs, not artwork for every category tile.
+  const tiles = await getGenreDefinitions();
   return tiles.find((tile) => tile.slug === slug) ?? null;
 }
 
@@ -99,7 +105,7 @@ export async function getGenreTitles(tile: GenreTile, type: MediaType, sort: Gen
     `/discover/${type}`,
     discoverQuery(type, genreId, sort, safePage),
   );
-  if (isTmdbFailure(payload)) return { entries: [], page: safePage, totalPages: 0 };
+  if (isTmdbFailure(payload)) return { entries: [], error: 'Titles are temporarily unavailable.', page: safePage, totalPages: 0 };
   const entries = (payload.results ?? [])
     .map((result) => createLibraryEntryFromBrowseResult(result, type))
     .filter((entry): entry is LibraryMediaEntry => Boolean(entry?.posterUrl));

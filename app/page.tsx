@@ -5,6 +5,7 @@ import { HomePage } from '@/components/media/home-page';
 import { papiflixExperience } from '@/lib/media/experience';
 import { jsonLdScript, websiteJsonLd } from '@/lib/seo';
 import { getTmdbLibrarySections } from '@/lib/tmdb/client';
+import { LoadingScreen } from '@/components/ui/loading-indicator';
 
 export const revalidate = 3600;
 
@@ -20,7 +21,7 @@ export default async function Page() {
   return (
     <>
     <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(websiteJsonLd())} />
-    <Suspense fallback={null}>
+    <Suspense fallback={<LoadingScreen label="Loading your library" />}>
       <HomePage
         experience={papiflixExperience}
         sections={liveLibrary.ok ? liveLibrary.sections : []}

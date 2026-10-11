@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { SessionProvider } from 'next-auth/react';
+import { SessionBootstrap } from '@/components/auth/session-bootstrap';
 
 import { PwaServiceWorker } from '@/components/media/pwa-service-worker';
 import { appConfig } from '@/lib/config';
@@ -115,8 +116,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <SessionProvider refetchOnWindowFocus={false}>
-          {children}
+        <SessionProvider refetchOnWindowFocus refetchWhenOffline={false}>
+          <SessionBootstrap>{children}</SessionBootstrap>
         </SessionProvider>
         <PwaServiceWorker />
       </body>

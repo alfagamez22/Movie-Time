@@ -24,7 +24,7 @@ export async function listAnnouncements(page = 1) {
 }
 export async function activeAnnouncements() {
   const { cluster, keyspace } = await database();
-  const result = await cluster.query<PublicAnnouncement>(`SELECT d.id, d.title, d.description, d.publishAt, d.expiresAt, d.hasBanner FROM ${keyspace} d WHERE d.type = "announcement" AND d.state = "published" AND d.publishAt <= $now AND d.expiresAt > $now ORDER BY d.publishAt DESC, d.id LIMIT 20`, { parameters: { now: new Date().toISOString() }, scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency });
+  const result = await cluster.query<PublicAnnouncement>(`SELECT d.id, d.title, d.description, d.publishAt, d.expiresAt, d.hasBanner FROM ${keyspace} d WHERE d.type = "announcement" AND d.state = "published" AND d.publishAt <= $now AND d.expiresAt > $now ORDER BY d.publishAt DESC, d.id LIMIT 20`, { adhoc: false, parameters: { now: new Date().toISOString() }, scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency });
   return result.rows;
 }
 export async function readAnnouncement(id: string): Promise<Announcement | null> {

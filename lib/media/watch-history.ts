@@ -37,6 +37,7 @@ export type WatchEntry = {
   animeFormat?: string;
   defaultLanguage?: string;
   episodeCount?: number;
+  finishedEpisodeCount?: number;
   watchedAt?: number;
 };
 
@@ -141,7 +142,7 @@ export async function upsertWatchHistoryWithProgress(
     ? entry.watchedAt : Date.now();
 
   const markerId = deletedMarkerId(userId, entry.id, entry.provider, entry.type);
-  const deletedMarker = await readRecord<AppRecord & { deletedAt: string }>(DELETED_TYPE, markerId);
+  const deletedMarker = await readRecord<AppRecord & { deletedAt: string }>(DELETED_TYPE, markerId, { experience });
   if (deletedMarker) {
     // A stale copy from another device must not resurrect an entry the user removed.
     if (Date.parse(deletedMarker.deletedAt) >= incomingWatchedAtMs) return null;
@@ -194,52 +195,54 @@ export async function upsertWatchHistoryWithProgress(
     : watchedAt.toISOString();
   const progressWatchedAt = decision.isNewer ? watchedAt.toISOString() :
     (existingProgress?.watchedAt as string | undefined) ?? watchedAt.toISOString();
-  const record = await saveRecord('watchHistory', existingHistory?.id ?? stableRecordId(...Object.values(historyKey)), {
-    ...existingHistory,
-    ...historyKey,
-    experience,
-    title: entry.title,
-    posterUrl: entry.posterUrl ?? existingProgress?.posterUrl ?? null,
-    backdropUrl: entry.backdropUrl ?? existingProgress?.backdropUrl ?? null,
-    synopsis: entry.synopsis ?? '',
-    rating: entry.rating ?? null,
-    year: entry.year ?? null,
-    episode: entry.episode ?? null,
-    season: entry.season ?? null,
-    progressSeconds: decision.merged.progressSeconds,
-    progressPercent: decision.merged.progressPercent ?? null,
-    durationSeconds: decision.merged.durationSeconds ?? null,
-    anilistId: entry.anilistId ?? null,
-    malId: entry.malId ?? null,
-    animeFormat: entry.animeFormat ?? null,
-    defaultLanguage: entry.defaultLanguage ?? null,
-    episodeCount: entry.episodeCount ?? null,
-    watchedAt: historyWatchedAt,
-    createdAt: existingHistory?.createdAt ?? now,
-    updatedAt: now,
-  }) as AppRecord;
-
-  const progressRecord = await saveRecord('watchProgress', existingProgress?.id ?? stableRecordId(...Object.values(progressKey)), {
-    ...existingProgress,
-    ...progressKey,
-    experience,
-    title: entry.title,
-    posterUrl: entry.posterUrl ?? null,
-    backdropUrl: entry.backdropUrl ?? null,
-    rating: entry.rating ?? null,
-    year: entry.year ?? null,
-    progressSeconds: decision.merged.progressSeconds,
-    progressPercent: decision.merged.progressPercent ?? 0,
-    durationSeconds: decision.merged.durationSeconds ?? null,
-    completed: completed || existingProgress?.completed === true,
-    anilistId: entry.anilistId ?? null,
-    malId: entry.malId ?? null,
-    animeFormat: entry.animeFormat ?? null,
-    defaultLanguage: entry.defaultLanguage ?? null,
-    watchedAt: progressWatchedAt,
-    createdAt: existingProgress?.createdAt ?? now,
-    updatedAt: now,
-  }) as AppRecord;
+  const [record, progressRecord] = await Promise.all([
+    saveRecord('watchHistory', existingHistory?.id ?? stableRecordId(...Object.values(historyKey)), {
+      ...existingHistory,
+      ...historyKey,
+      experience,
+      title: entry.title,
+      posterUrl: entry.posterUrl ?? existingProgress?.posterUrl ?? null,
+      backdropUrl: entry.backdropUrl ?? existingProgress?.backdropUrl ?? null,
+      synopsis: entry.synopsis ?? '',
+      rating: entry.rating ?? null,
+      year: entry.year ?? null,
+      episode: entry.episode ?? null,
+      season: entry.season ?? null,
+      progressSeconds: decision.merged.progressSeconds,
+      progressPercent: decision.merged.progressPercent ?? null,
+      durationSeconds: decision.merged.durationSeconds ?? null,
+      anilistId: entry.anilistId ?? null,
+      malId: entry.malId ?? null,
+      animeFormat: entry.animeFormat ?? null,
+      defaultLanguage: entry.defaultLanguage ?? null,
+      episodeCount: entry.episodeCount ?? null,
+      finishedEpisodeCount: sanitizeNonNegativeInt(entry.finishedEpisodeCount) ?? null,
+      watchedAt: historyWatchedAt,
+      createdAt: existingHistory?.createdAt ?? now,
+      updatedAt: now,
+    }),
+    saveRecord('watchProgress', existingProgress?.id ?? stableRecordId(...Object.values(progressKey)), {
+      ...existingProgress,
+      ...progressKey,
+      experience,
+      title: entry.title,
+      posterUrl: entry.posterUrl ?? null,
+      backdropUrl: entry.backdropUrl ?? null,
+      rating: entry.rating ?? null,
+      year: entry.year ?? null,
+      progressSeconds: decision.merged.progressSeconds,
+      progressPercent: decision.merged.progressPercent ?? 0,
+      durationSeconds: decision.merged.durationSeconds ?? null,
+      completed: completed || existingProgress?.completed === true,
+      anilistId: entry.anilistId ?? null,
+      malId: entry.malId ?? null,
+      animeFormat: entry.animeFormat ?? null,
+      defaultLanguage: entry.defaultLanguage ?? null,
+      watchedAt: progressWatchedAt,
+      createdAt: existingProgress?.createdAt ?? now,
+      updatedAt: now,
+    }),
+  ]);
 
   return { record, progress: progressRecord };
 }

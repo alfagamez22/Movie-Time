@@ -22,6 +22,8 @@ import {
 } from '@/lib/media/types';
 import type { AuthPromptReason } from '@/lib/media/user-actions';
 import { BookmarkButton } from './bookmark-button';
+import { LikeButton } from './like-button';
+import { TrailerPlayer } from './trailer-player';
 import { MediaComments } from './media-comments';
 
 interface MediaDetailsModalProps {
@@ -115,18 +117,6 @@ function findResumeEntry(entry: LibraryMediaEntry | null, recentlyWatched: Recen
       return candidate.type === entry.type && candidate.id === entry.id && candidate.provider === entry.provider;
     }) ?? null
   );
-}
-
-function getTrailerEmbedUrl(trailer: MediaTrailer): string | null {
-  if (trailer.embedUrl) {
-    return trailer.embedUrl;
-  }
-
-  if (trailer.youtubeId) {
-    return `https://www.youtube-nocookie.com/embed/${trailer.youtubeId}?enablejsapi=1&rel=0`;
-  }
-
-  return trailer.url.includes('/embed/') ? trailer.url : null;
 }
 
 const TRAILERS_COLLAPSED_COUNT = 3;
@@ -237,51 +227,6 @@ function TrailerList({
         <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
     ) : null}
-    </div>
-  );
-}
-
-function TrailerPlayer({
-  onClose,
-  trailer,
-}: {
-  onClose: () => void;
-  trailer: MediaTrailer;
-}) {
-  const embedUrl = getTrailerEmbedUrl(trailer);
-  if (!embedUrl) {
-    return null;
-  }
-
-  return (
-    <div
-      className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close trailer"
-          className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-zinc-200 transition-colors hover:bg-black/80 hover:text-white"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <div className="aspect-video w-full bg-black">
-          <iframe
-            src={embedUrl}
-            title={`${trailer.title} trailer`}
-            className="h-full w-full border-0"
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
-        </div>
-      </div>
     </div>
   );
 }
@@ -610,6 +555,7 @@ export function MediaDetailsModal({
         return;
       }
 
+      if (document.querySelector('[popover="auto"]:popover-open')) return;
       onClose();
     };
 
@@ -649,15 +595,16 @@ export function MediaDetailsModal({
   const trailers = activeDetails?.trailers ?? [];
   const backdropUrl = displayEntry?.backdropUrl ?? entry?.backdropUrl;
   const posterUrl = displayEntry?.posterUrl ?? entry?.posterUrl;
-  const resumeEntry = findResumeEntry(displayEntry ?? entry, recentlyWatched) as ResumeMediaEntry | null;
-  const primaryTrailer = trailers[0];
+  const recentEntry = findResumeEntry(displayEntry ?? entry, recentlyWatched) as (ResumeMediaEntry & { progressPercent?: number }) | null;
+  const completedMovie = displayEntry?.type === 'movie' && (recentEntry?.progressPercent ?? 0) >= 95;
+  const resumeEntry = completedMovie ? null : recentEntry;
   const isManga = displayEntry ? isMangaProvider(displayEntry.provider) : false;
   const playHref = displayEntry
     ? buildWatchHref(displayEntry, {
         basePath: experience.watchBasePath,
         episode: resumeEntry?.provider === 'mangadex' ? resumeEntry.episode : resumeEntry?.type === 'tv' ? resumeEntry.episode : undefined,
     language: resumeEntry?.defaultLanguage ?? preferredAnimeLanguage,
-        progress: resumeEntry?.progressSeconds,
+        progress: completedMovie ? 0 : resumeEntry?.progressSeconds,
         season: resumeEntry?.provider === 'mangadex' ? resumeEntry.season : resumeEntry?.type === 'tv' ? resumeEntry.season : undefined,
       })
     : '#';
@@ -744,22 +691,21 @@ export function MediaDetailsModal({
                       {isManga ? <BookOpen className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
                       {playLabel}
                     </Link>
-                    {primaryTrailer ? (
-                      <button
-                        type="button"
-                        onClick={() => openTrailer(primaryTrailer)}
-                        className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:border-white/25 hover:bg-white/10"
-                      >
-                        <Play className="h-4 w-4 fill-current" />
-                        Watch Trailer
-                      </button>
-                    ) : null}
                     {displayEntry ? (
-                      <BookmarkButton
-                        entry={displayEntry}
-                        experience={experience}
-                        onSignInRequired={() => onSignInRequired?.('bookmark')}
-                      />
+                      <div className="inline-flex items-start gap-3">
+                        <BookmarkButton
+                          entry={displayEntry}
+                          experience={experience}
+                          onSignInRequired={() => onSignInRequired?.('bookmark')}
+                        />
+                        {!isManga ? (
+                          <LikeButton
+                            key={`${displayEntry.provider}:${displayEntry.type}:${displayEntry.id}`}
+                            entry={displayEntry}
+                            onSignInRequired={() => onSignInRequired?.('like')}
+                          />
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                   {activeError ? <p className="mt-4 text-sm text-amber-300">{activeError}</p> : null}
@@ -808,7 +754,7 @@ export function MediaDetailsModal({
               </section>
             </div>
 
-            {activeTrailer ? <TrailerPlayer trailer={activeTrailer} onClose={closeTrailer} /> : null}
+            {activeTrailer ? <TrailerPlayer key={`${displayEntry.provider}:${displayEntry.id}:${activeTrailer.youtubeId ?? activeTrailer.url}`} entry={displayEntry} trailer={activeTrailer} onClose={closeTrailer} /> : null}
           </motion.section>
         </motion.div>
       ) : null}

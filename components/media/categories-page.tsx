@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { LibraryNavigation, LibraryBottomNavigation } from './library-navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ChevronRight, Lock } from 'lucide-react';
 
@@ -97,6 +98,8 @@ function CategoryNav({ experience }: { experience: MediaExperienceConfig }) {
             Categories
           </Link>
         </div>
+        <LibraryNavigation experience={experience} />
+        <LibraryBottomNavigation experience={experience} />
       </div>
     </header>
   );

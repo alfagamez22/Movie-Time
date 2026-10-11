@@ -37,6 +37,7 @@ interface CatalogEntryBase {
   backdropUrl?: string;
   defaultLanguage?: PlaybackLanguage;
   episodeCount?: number;
+  finishedEpisodeCount?: number;
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
@@ -79,6 +80,7 @@ export interface LibraryMediaEntry {
   backdropUrl?: string;
   defaultLanguage?: PlaybackLanguage;
   episodeCount?: number;
+  finishedEpisodeCount?: number;
   episodeEmbedIds?: Record<string, string>;
   id: string;
   malId?: string;
@@ -171,6 +173,7 @@ export function toLibraryMediaEntry(entry: CatalogEntry | MediaEntry): LibraryMe
     backdropUrl: entry.backdropUrl,
     defaultLanguage: entry.defaultLanguage,
     episodeCount: entry.episodeCount,
+    finishedEpisodeCount: entry.finishedEpisodeCount,
     episodeEmbedIds: entry.episodeEmbedIds,
     id: entry.id,
     malId: entry.malId,

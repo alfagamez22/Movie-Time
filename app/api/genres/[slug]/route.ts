@@ -14,5 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   const type = searchParams.get('type') === 'tv' ? 'tv' : 'movie';
   const page = Number.parseInt(searchParams.get('page') ?? '1', 10) || 1;
   const result = await getGenreTitles(tile, type, parseGenreSort(searchParams.get('sort')), page);
-  return NextResponse.json(result, { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } });
+  return NextResponse.json(result, {
+    status: result.error ? 503 : 200,
+    headers: { 'Cache-Control': result.error ? 'no-store' : 'public, s-maxage=3600, stale-while-revalidate=86400' },
+  });
 }

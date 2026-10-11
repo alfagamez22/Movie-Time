@@ -47,3 +47,7 @@ public/.img-cache/
 
 # The project installs with pnpm (see pnpm-lock.yaml); npm's lockfile only drifts.
 package-lock.json
+.claude/
+admin-feedback-dashboard-2026-09-25.pdf
+admin-feedback-dashboard-2026-09-25.xlsx
+docs/

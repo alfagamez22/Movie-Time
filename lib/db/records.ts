@@ -51,6 +51,7 @@ export async function findRecords<T extends AppRecord>(
     const query = `SELECT d.* FROM ${quoteIdentifier(bucket.name)}.${quoteIdentifier(scope.name)}.${quoteIdentifier(name)} AS d WHERE ${where.join(' AND ')}${order}${limit}`;
     try {
       const result = await cluster.query<T>(query, {
+        adhoc: false,
         parameters,
         scanConsistency: 'request_plus' as import('couchbase').QueryScanConsistency,
       });
@@ -70,11 +71,24 @@ export async function findRecords<T extends AppRecord>(
 }
 
 export async function findRecord<T extends AppRecord>(type: string, filters: RecordFilters): Promise<T | null> {
+  for (const field of Object.keys(filters)) {
+    if (!FILTER_FIELDS.has(field)) throw new Error(`Unsupported Couchbase filter field: ${field}`);
+  }
+  // Modern records have deterministic keys. Legacy migrated IDs still use the indexed fallback.
+  const keyFields = type === 'account' ? ['provider', 'providerAccountId']
+    : type === 'watchProgress' ? ['userId', 'mediaId', 'mediaProvider', 'mediaType', 'season', 'episode']
+    : type === 'watchHistory' || type === 'bookmark' ? ['userId', 'mediaId', 'mediaProvider', 'mediaType']
+    : null;
+  if (keyFields?.every((field) => typeof filters[field] === 'string')) {
+    const id = stableRecordId(...keyFields.map((field) => filters[field] as string));
+    const record = await getDocument<T>(type, id, filters);
+    if (record && Object.entries(filters).every(([field, value]) => record[field] === value)) return record;
+  }
   return (await findRecords<T>(type, filters, { limit: 1 }))[0] ?? null;
 }
 
-export async function readRecord<T extends AppRecord>(type: string, id: string): Promise<T | null> {
-  return getDocument<T>(type, id);
+export async function readRecord<T extends AppRecord>(type: string, id: string, routing: RecordFilters = {}): Promise<T | null> {
+  return getDocument<T>(type, id, routing);
 }
 
 export async function saveRecord<T extends Record<string, unknown>>(
