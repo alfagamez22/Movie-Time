@@ -27,6 +27,7 @@ import { MediaDetailsModal } from './media-details-modal';
 import { consumePlaybackReturn } from '@/lib/media/playback-return';
 import { LoadingIndicator } from '@/components/ui/loading-indicator';
 import { LoadingTransition } from '@/components/ui/loading-transition';
+import { MovieDiscovery } from './movie-discovery';
 
 interface HomePageProps {
   discoveryError: string | null;
@@ -484,6 +485,8 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         onSignInRequired={openAuthModal}
         recentlyWatched={recentlyWatched}
       />
+
+      {experience.id === 'papiflix' ? <MovieDiscovery /> : null}
 
       <footer className="border-t border-white/6 px-6 py-8 text-center text-sm text-zinc-400 md:px-12">
         {experience.footerText}

@@ -30,13 +30,24 @@ export async function generateStaticParams() {
   return Object.keys(CATEGORY_LABELS).map((category) => ({ category }));
 }
 
+// Search-facing titles/descriptions; the on-page copy above stays unchanged.
+const CATEGORY_SEO: Record<LibrarySectionCategory, { description: string; title: string } | undefined> = {
+  discover: { description: 'Discover free movies and TV series online on PapiFlix. Headline picks across every genre, with synopsis, trailers and playback options.', title: 'Discover Free Movies & TV Series Online' },
+  genre: { description: 'Find where to watch action, comedy, horror, sci-fi and more. Browse every movie genre on PapiFlix.', title: 'Watch Movies by Genre Online' },
+  mature: undefined,
+  rating: { description: 'Watch the highest-rated and most-watched movies and TV series online free on PapiFlix.', title: 'Top Rated & Trending Movies to Watch Online' },
+  regional: { description: 'Watch Filipino movies and international cinema online free on PapiFlix, organized by language and country.', title: 'Watch Filipino & International Movies Online' },
+  trending: { description: 'See the trending movies and TV series everyone is watching right now and watch them online free on PapiFlix.', title: 'Trending Movies & TV Series to Watch Now' },
+};
+
 export async function generateMetadata({ params }: { params: Promise<{ category: string }> }) {
   const { category } = await params;
   if (!isCategory(category)) return { title: 'Category' };
+  const seo = CATEGORY_SEO[category];
   return {
     alternates: { canonical: `/categories/${category}` },
-    description: CATEGORY_DESCRIPTIONS[category],
-    title: `${CATEGORY_LABELS[category]} | Categories`,
+    description: seo?.description ?? CATEGORY_DESCRIPTIONS[category],
+    title: seo?.title ?? `${CATEGORY_LABELS[category]} | Categories`,
   };
 }
 

@@ -49,7 +49,7 @@ function discoverQuery(type: MediaType, genreId: number, sort: GenreSort, page: 
   };
 }
 
-async function getGenreDefinitions(): Promise<GenreTile[]> {
+export async function getGenreDefinitions(): Promise<GenreTile[]> {
   const [movieGenres, tvGenres] = await Promise.all([fetchGenreList('movie'), fetchGenreList('tv')]);
   const tiles = new Map<string, GenreTile>();
   for (const genre of movieGenres) {

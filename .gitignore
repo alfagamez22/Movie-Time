@@ -51,3 +51,5 @@ package-lock.json
 admin-feedback-dashboard-2026-09-25.pdf
 admin-feedback-dashboard-2026-09-25.xlsx
 docs/
+.vscode/
+.pnpm-store/v10/

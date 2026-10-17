@@ -11,6 +11,7 @@ import { resolveLiveMediaEntry } from '@/lib/media/resolve';
 import { buildWatchHref, parseMediaType } from '@/lib/media/routes';
 import { getResumePoint } from '@/lib/media/watch-history';
 import { canonicalWatchPath, jsonLdScript, titleJsonLd } from '@/lib/seo';
+import { titleSeoKeywords, truncateSeo } from '@/lib/seo-content';
 import { normalizeSlug } from '@/lib/slugs/media';
 import { lookupTmdbMediaEntry, lookupTmdbSeasonDetails } from '@/lib/tmdb/client';
 import { isTvEntry, type SeasonDetails } from '@/lib/media/types';
@@ -94,7 +95,8 @@ export async function generateMetadata({ params, searchParams }: WatchPageProps)
 
   return {
     alternates: { canonical },
-    description: entry.synopsis?.slice(0, 160) || `Stream ${entry.title} on PapiFlix.`,
+    description: truncateSeo(`Where to watch ${entry.title}${entry.year ? ` (${entry.year})` : ''}? Watch online free on PapiFlix. ${entry.synopsis || 'Explore the synopsis, trailer and playback options.'}`, 160),
+    keywords: titleSeoKeywords(entry.title, entry.year, isTvEntry(entry)),
     openGraph: {
       description: entry.synopsis?.slice(0, 200) || undefined,
       images: image ? [{ url: image }] : undefined,
@@ -102,7 +104,7 @@ export async function generateMetadata({ params, searchParams }: WatchPageProps)
       type: isTvEntry(entry) ? 'video.tv_show' : 'video.movie',
       url: canonical,
     },
-    title,
+    title: `Watch ${title} Online`,
     twitter: { card: 'summary_large_image', images: image ? [image] : undefined, title: heading },
   };
 }

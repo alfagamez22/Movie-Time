@@ -135,12 +135,18 @@ export function MangaReaderClient({
 
         <div ref={pageContainerRef} className="flex-1 overflow-y-auto">
           <div className={`mx-auto flex flex-col items-center ${scaleMode === 'fit' ? 'max-w-4xl' : ''}`}>
-            {payload.pages.map((page) => (
+            {payload.pages.map((page, index) => (
+              // Native srcSet uses our cached proxy; Next optimization is disabled and chapter dimensions are unknown.
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={page.index}
                 alt={`${mangaTitle} ${chapterLabel} p.${page.index + 1}`}
                 className={`w-full ${scaleMode === 'fit' ? 'object-contain' : ''}`}
-                loading="lazy"
+                decoding="async"
+                fetchPriority={index === 0 ? 'high' : 'auto'}
+                loading={index === 0 ? 'eager' : 'lazy'}
+                sizes={scaleMode === 'fit' ? '(max-width: 896px) 100vw, 896px' : undefined}
+                srcSet={scaleMode === 'fit' ? [640, 960, 1440].map((width) => `${page.src}&width=${width} ${width}w`).join(', ') : undefined}
                 src={page.src}
               />
             ))}
