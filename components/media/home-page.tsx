@@ -26,7 +26,6 @@ import { MatureToggle, filterMatureSections, useMatureUnlocked } from './mature-
 import { MediaDetailsModal } from './media-details-modal';
 import { consumePlaybackReturn } from '@/lib/media/playback-return';
 import { LoadingIndicator } from '@/components/ui/loading-indicator';
-import { LoadingTransition } from '@/components/ui/loading-transition';
 import { MovieDiscovery } from './movie-discovery';
 
 interface HomePageProps {
@@ -147,7 +146,7 @@ function ExperienceSwitcher({ experience }: { experience: MediaExperienceConfig 
 }
 
 export function HomePage({ discoveryError, experience, sections }: HomePageProps) {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -157,8 +156,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const [navScrolled, setNavScrolled] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>('default');
-  const recentlyWatched = useRecentlyWatched(experience.id);
+  const localHistory = useRecentlyWatched(experience.id);
   const historySync = useWatchHistorySync(experience.id, { pollIntervalMs: 60_000 });
+  // Public browsing can paint immediately; account progress waits for fresh validation.
+  const recentlyWatched = sessionStatus === 'loading' || historySync.loading || historySync.error ? [] : localHistory;
   const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 200);
   const [completedSearch, setCompletedSearch] = useState('');
@@ -306,8 +307,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
 
   return (
     <>
-    <LoadingTransition active={historySync.loading} label="Syncing your continue watching list" />
-    <main inert={historySync.loading} aria-hidden={historySync.loading || undefined} style={historySync.loading ? { visibility: 'hidden' } : undefined} className={`min-h-screen bg-[#050505] pb-20 text-white lg:pb-0${historySync.loading ? '' : ' loading-reveal'}`} data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
+    <main className="min-h-screen bg-[#050505] pb-20 text-white lg:pb-0" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
       <LibraryBottomNavigation experience={experience} />
       <AnnouncementPopup />
       <header
@@ -442,9 +442,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
       ) : null}
 
       <div className="browse-shelves space-y-10 py-8">
+        {historySync.loading ? <div className="safe-page-x"><LoadingIndicator label="Updating your watch history" /></div> : null}
         {historySync.error ? (
           <div role="alert" className="safe-page-x flex flex-wrap items-center gap-3 text-sm text-zinc-400">
-            <span>Your watch history couldn’t refresh. Your saved local progress is still available.</span>
+            <span>Your watch history couldn’t refresh. Your saved progress is preserved. Reconnect or retry to update your list.</span>
             <button type="button" onClick={() => void historySync.retry()} className="rounded-full border border-white/20 px-4 py-2 text-white">Retry</button>
           </div>
         ) : null}

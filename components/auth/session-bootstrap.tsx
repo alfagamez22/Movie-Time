@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
+import { isPublicBrowsePath } from '@/lib/cache/public-pages';
 
 import { LoadingTransition } from '@/components/ui/loading-transition';
 
 export function SessionBootstrap({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
-  const pending = status === 'loading';
+  const pathname = usePathname();
+  const pending = status === 'loading' && !isPublicBrowsePath(pathname);
   const [slow, setSlow] = useState(false);
 
   useEffect(() => {

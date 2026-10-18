@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 const image = z.string().max(2000).refine((value) => {
+  // TMDB entries use our same-origin optimized artwork, not an external HTTPS URL.
+  if (/^\/api\/images\/tmdb\/(?:w92|w300|w780)\/[A-Za-z0-9/_-]+\.(?:avif|gif|jpe?g|png|webp)$/i.test(value)) return true;
   try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; }
 }).optional();
 export const titleIdentitySchema = z.object({ mediaId: z.string().trim().min(1).max(128),

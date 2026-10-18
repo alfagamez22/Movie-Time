@@ -64,6 +64,15 @@ test('title payloads reject malformed identities and unsafe image URLs', () => {
   assert.equal(validation.trailerHistorySchema.safeParse({ ...row('42'), trailer: { title: 'Official trailer', youtubeId: '../bad' } }).success, false);
 });
 
+test('title artwork accepts app TMDB proxy paths while rejecting unsafe relative URLs', () => {
+  for (const posterUrl of ['/api/images/tmdb/w300/poster.jpg', '/api/images/tmdb/w780/backdrop.webp', 'https://image.tmdb.org/t/p/w500/poster.jpg']) {
+    assert.equal(validation.personalTitleSchema.safeParse({ ...row('42'), posterUrl }).success, true, posterUrl);
+  }
+  for (const posterUrl of ['//evil.example/poster.jpg', '/api/images/tmdb/w300/../poster.jpg', '/api/images/tmdb/w300/poster.jpg?redirect=https://evil.example', '/unrelated/poster.jpg', 'https://user:pass@example.com/poster.jpg']) {
+    assert.equal(validation.personalTitleSchema.safeParse({ ...row('42'), posterUrl }).success, false, posterUrl);
+  }
+});
+
 function routes(relativePath, authenticated = true) {
   const calls = [];
   const auth = async () => authenticated ? { user: { id: 'current-user' } } : null;
@@ -78,6 +87,19 @@ function routes(relativePath, authenticated = true) {
   return { calls, api: load(relativePath, { 'next/server': { NextResponse }, '@/lib/auth': { auth }, '@/lib/db/records': records, '@/lib/media/personal-library-validation': validation }) };
 }
 const request = (method, body) => new Request('http://localhost/api/test', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+test('like accepts the actual movie entry payload with optimized artwork and supports unlike', async () => {
+  const { api, calls } = routes('app/api/likes/route.ts');
+  const entry = { id: '42', provider: 'tmdb', type: 'movie', title: 'Example Movie', synopsis: 'Synopsis',
+    posterUrl: '/api/images/tmdb/w300/poster.jpg', backdropUrl: '/api/images/tmdb/w780/backdrop.jpg' };
+  const body = library.entryPayload(entry);
+  const response = await api.POST(request('POST', body));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { liked: true });
+  assert.equal(calls[0][3].posterUrl, entry.posterUrl);
+  assert.equal(calls[0][3].userId, 'current-user');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal((await api.DELETE(request('DELETE', body))).status, 200);
+});
 test('account APIs reject unsigned users before touching Couchbase', async () => {
   for (const file of ['app/api/likes/route.ts', 'app/api/trailer-history/route.ts', 'app/api/my-papiflix/route.ts']) {
     const { api, calls } = routes(file, false);

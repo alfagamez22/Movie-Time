@@ -5,7 +5,7 @@ import { HomePage } from '@/components/media/home-page';
 import { browseManga } from '@/lib/manga/browse';
 import { papimangaExperience } from '@/lib/media/experience';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 900;
 
 export const metadata: Metadata = {
   alternates: { canonical: '/manga' },
