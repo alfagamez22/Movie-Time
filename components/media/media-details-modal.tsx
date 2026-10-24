@@ -53,6 +53,87 @@ interface DetailsErrorState {
   message: string;
 }
 
+interface CachedMediaDetails {
+  data: MediaDetailsPayload;
+  requestedKey: string;
+  savedAt: number;
+}
+
+const DETAILS_CACHE_STORAGE_KEY = 'papiflix-media-details-cache-v1';
+const DETAILS_CACHE_MAX_ENTRIES = 12;
+const DETAILS_CACHE_FRESH_MS = 60 * 60 * 1000;
+const DETAILS_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const mediaDetailsCache = new Map<string, CachedMediaDetails>();
+let mediaDetailsCacheLoaded = false;
+
+function getDetailsCacheKey(experienceId: string, requestKey: string): string {
+  return `${experienceId}:${requestKey}`;
+}
+
+function isCachedMediaDetails(value: unknown): value is { key: string; cached: CachedMediaDetails } {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Partial<{ key: unknown; cached: Partial<CachedMediaDetails> }>;
+  const cached = record.cached;
+  return Boolean(
+    typeof record.key === 'string' &&
+      cached &&
+      typeof cached.savedAt === 'number' &&
+      Number.isFinite(cached.savedAt) &&
+      typeof cached.requestedKey === 'string' &&
+      cached.data &&
+      typeof cached.data === 'object' &&
+      cached.data.entry &&
+      typeof cached.data.entry === 'object' &&
+      Array.isArray(cached.data.cast) &&
+      Array.isArray(cached.data.recommendations) &&
+      Array.isArray(cached.data.trailers),
+  );
+}
+
+function loadMediaDetailsCache() {
+  if (mediaDetailsCacheLoaded || typeof window === 'undefined') return;
+  mediaDetailsCacheLoaded = true;
+
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(DETAILS_CACHE_STORAGE_KEY) || '[]') as unknown;
+    if (!Array.isArray(parsed)) return;
+
+    parsed
+      .filter(isCachedMediaDetails)
+      .filter(({ cached }) => Date.now() - cached.savedAt <= DETAILS_CACHE_MAX_AGE_MS)
+      .sort((a, b) => b.cached.savedAt - a.cached.savedAt)
+      .slice(0, DETAILS_CACHE_MAX_ENTRIES)
+      .forEach(({ key, cached }) => mediaDetailsCache.set(key, cached));
+  } catch {
+    // Keep the details modal usable when browser storage is unavailable.
+  }
+}
+
+function getCachedMediaDetails(key: string): CachedMediaDetails | null {
+  loadMediaDetailsCache();
+  return mediaDetailsCache.get(key) ?? null;
+}
+
+function cacheMediaDetails(key: string, value: CachedMediaDetails) {
+  loadMediaDetailsCache();
+  mediaDetailsCache.set(key, value);
+
+  const entries = Array.from(mediaDetailsCache.entries())
+    .sort((a, b) => b[1].savedAt - a[1].savedAt)
+    .slice(0, DETAILS_CACHE_MAX_ENTRIES);
+  mediaDetailsCache.clear();
+  entries.forEach(([entryKey, cached]) => mediaDetailsCache.set(entryKey, cached));
+
+  try {
+    sessionStorage.setItem(
+      DETAILS_CACHE_STORAGE_KEY,
+      JSON.stringify(Array.from(mediaDetailsCache.entries(), ([entryKey, cached]) => ({ key: entryKey, cached }))),
+    );
+  } catch {
+    // Keep the in-memory cache even if session storage is full or disabled.
+  }
+}
+
 function CastList({ cast, isLoading, personBasePath }: { cast: MediaCastMember[]; isLoading: boolean; personBasePath?: string }) {
   const [failedProfiles, setFailedProfiles] = useState<Set<string>>(new Set());
 
@@ -499,12 +580,21 @@ export function MediaDetailsModal({
   const [requestedDetailsKey, setRequestedDetailsKey] = useState<string | null>(null);
   const [error, setError] = useState<DetailsErrorState | null>(null);
   const [activeTrailer, setActiveTrailer] = useState<MediaTrailer | null>(null);
+  const selectedKey = entry ? `${entry.provider}:${entry.type}:${entry.id}` : null;
+  const detailsCacheKey = selectedKey ? getDetailsCacheKey(experience.id, selectedKey) : null;
+  const cachedDetails = detailsCacheKey ? getCachedMediaDetails(detailsCacheKey) : null;
 
   useEffect(() => {
     if (!entry) return;
 
-    const controller = new AbortController();
     const requestKey = `${entry.provider}:${entry.type}:${entry.id}`;
+    const cacheKey = getDetailsCacheKey(experience.id, requestKey);
+    const cached = getCachedMediaDetails(cacheKey);
+    if (cached && Date.now() - cached.savedAt < DETAILS_CACHE_FRESH_MS) {
+      return;
+    }
+
+    const controller = new AbortController();
     const slug = buildWatchSlug(entry.title, entry.id);
     const searchParams = new URLSearchParams({
       id: entry.id,
@@ -524,8 +614,14 @@ export function MediaDetailsModal({
           throw new Error(json?.error ?? 'Could not load details.');
         }
 
+        const requestedKey = json.requestedKey ?? requestKey;
+        cacheMediaDetails(cacheKey, {
+          data: json.data,
+          requestedKey,
+          savedAt: Date.now(),
+        });
         setDetails(json.data);
-        setRequestedDetailsKey(json.requestedKey ?? requestKey);
+        setRequestedDetailsKey(requestedKey);
         setError(null);
       })
       .catch((err: unknown) => {
@@ -539,7 +635,7 @@ export function MediaDetailsModal({
       });
 
     return () => controller.abort(new DOMException('Details request changed', 'AbortError'));
-  }, [entry, experience.detailsApiBasePath]);
+  }, [entry, experience.detailsApiBasePath, experience.id]);
 
   useEffect(() => {
     if (!entry) return;
@@ -583,10 +679,11 @@ export function MediaDetailsModal({
     setActiveTrailer(null);
   }, []);
 
-  const selectedKey = entry ? `${entry.provider}:${entry.type}:${entry.id}` : null;
   const detailsKey = details ? `${details.entry.provider}:${details.entry.type}:${details.entry.id}` : null;
-  const activeDetails = details && (selectedKey === detailsKey || selectedKey === requestedDetailsKey) ? details : null;
-  const activeError = error?.key === selectedKey ? error.message : null;
+  const activeDetails = details && (selectedKey === detailsKey || selectedKey === requestedDetailsKey)
+    ? details
+    : cachedDetails?.data ?? null;
+  const activeError = !activeDetails && error?.key === selectedKey ? error.message : null;
   const isLoading = Boolean(entry && !activeDetails && !activeError);
   const displayEntry = activeDetails?.entry ?? entry;
   const cast = activeDetails?.cast ?? [];

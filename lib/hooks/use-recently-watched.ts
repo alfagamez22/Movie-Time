@@ -55,6 +55,7 @@ interface NamespaceKeys {
   recentlyWatchedStorageKey: string;
   restoreHomeScrollKey: string;
   watchedEpisodesStorageKey: string;
+  watchedEpisodesEventName: string;
 }
 
 const rawValueCache = new Map<RecentlyWatchedNamespace, string>();
@@ -143,6 +144,7 @@ function getNamespaceKeys(namespace: RecentlyWatchedNamespace): NamespaceKeys {
     recentlyWatchedStorageKey: `${prefix}-recently-watched-v1`,
     restoreHomeScrollKey: `${prefix}-restore-home-scroll`,
     watchedEpisodesStorageKey: `${prefix}-watched-episodes-v1`,
+    watchedEpisodesEventName: `${prefix}-watched-episodes-change`,
   };
 }
 
@@ -323,20 +325,30 @@ function getServerRecentlyWatchedSnapshot(): RecentlyWatchedEntry[] {
   return EMPTY_RECENTLY_WATCHED;
 }
 
-function subscribeRecentlyWatched(namespace: RecentlyWatchedNamespace, onStoreChange: () => void) {
+function subscribeRecentlyWatched(
+  namespace: RecentlyWatchedNamespace,
+  onStoreChange: () => void,
+  store: 'recently-watched' | 'watched-episodes',
+) {
   const keys = getNamespaceKeys(namespace);
+  const storageKey = store === 'recently-watched'
+    ? keys.recentlyWatchedStorageKey
+    : keys.watchedEpisodesStorageKey;
+  const eventName = store === 'recently-watched'
+    ? keys.eventName
+    : keys.watchedEpisodesEventName;
   const onStorage = (event: StorageEvent) => {
-    if (event.key === keys.recentlyWatchedStorageKey || event.key === keys.watchedEpisodesStorageKey) {
+    if (event.key === storageKey) {
       onStoreChange();
     }
   };
 
   window.addEventListener('storage', onStorage);
-  window.addEventListener(keys.eventName, onStoreChange);
+  window.addEventListener(eventName, onStoreChange);
 
   return () => {
     window.removeEventListener('storage', onStorage);
-    window.removeEventListener(keys.eventName, onStoreChange);
+    window.removeEventListener(eventName, onStoreChange);
   };
 }
 
@@ -475,14 +487,14 @@ function markEpisodeWatched(
   options: TrackPlaybackOptions,
   previous: RecentlyWatchedEntry | undefined,
   namespace: RecentlyWatchedNamespace,
-) {
+): boolean {
   if (entry.type !== 'tv' || !options.episode || !shouldMarkEpisodeWatched(options, previous)) {
-    return;
+    return false;
   }
 
   const episodeStorageKey = buildEpisodeStorageKey(options.season, options.episode);
   if (!episodeStorageKey) {
-    return;
+    return false;
   }
 
   const watchedEpisodesMap = getWatchedEpisodesMap(namespace);
@@ -490,11 +502,12 @@ function markEpisodeWatched(
   const existingEpisodes = watchedEpisodesMap[mediaStorageKey] ?? [];
 
   if (existingEpisodes.includes(episodeStorageKey)) {
-    return;
+    return false;
   }
 
   watchedEpisodesMap[mediaStorageKey] = [...existingEpisodes, episodeStorageKey];
   writeWatchedEpisodesMap(namespace, watchedEpisodesMap);
+  return true;
 }
 
 function compactEntry(
@@ -569,10 +582,13 @@ export function trackRecentlyWatched(
     // Browser storage can be full in dev/PWA sessions; keep the in-memory snapshot usable.
   }
   writeSessionCookie(namespace, nextEntries);
-  markEpisodeWatched(entry, options, previousEntry, namespace);
+  const watchedEpisodesChanged = markEpisodeWatched(entry, options, previousEntry, namespace);
   setCachedRawValue(namespace, rawValue);
   setCachedEntries(namespace, nextEntries);
   window.dispatchEvent(new Event(keys.eventName));
+  if (watchedEpisodesChanged) {
+    window.dispatchEvent(new Event(keys.watchedEpisodesEventName));
+  }
 
   if (!syncToServer) {
     return;
@@ -600,6 +616,7 @@ export function clearAccountWatchHistory() {
     serverHydratedNamespace.delete(namespace);
     serverBaseline.delete(namespace);
     window.dispatchEvent(new Event(keys.eventName));
+    window.dispatchEvent(new Event(keys.watchedEpisodesEventName));
   }
   uploadedUsers.clear();
 }
@@ -694,7 +711,7 @@ export function removeRecentlyWatched(
 
 export function useRecentlyWatched(namespace: RecentlyWatchedNamespace = 'papiflix') {
   return useSyncExternalStore(
-    (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange),
+    (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange, 'recently-watched'),
     () => getRecentlyWatchedSnapshot(namespace),
     getServerRecentlyWatchedSnapshot,
   );
@@ -705,7 +722,7 @@ export function useWatchedEpisodes(
   namespace: RecentlyWatchedNamespace = 'papiflix',
 ) {
   return useSyncExternalStore(
-    (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange),
+    (onStoreChange) => subscribeRecentlyWatched(namespace, onStoreChange, 'watched-episodes'),
     () => getWatchedEpisodeSnapshot(entry, namespace),
     () => EMPTY_WATCHED_EPISODES,
   );
@@ -806,14 +823,20 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
 
       const keys = getNamespaceKeys(namespace);
       const rawValue = JSON.stringify(merged);
-      try {
-        localStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
-      } catch {
-        // Storage may be full - keep in-memory cache consistent.
+      const historyChanged = rawValue !== readRawRecentlyWatched(namespace);
+      const historyNeedsUpdate = historyChanged || rawValue !== getCachedRawValue(namespace);
+      if (historyChanged) {
+        try {
+          localStorage.setItem(keys.recentlyWatchedStorageKey, rawValue);
+        } catch {
+          // Storage may be full - keep in-memory cache consistent.
+        }
+        writeSessionCookie(namespace, merged);
       }
-      writeSessionCookie(namespace, merged);
-      setCachedRawValue(namespace, rawValue);
-      setCachedEntries(namespace, merged);
+      if (historyNeedsUpdate) {
+        setCachedRawValue(namespace, rawValue);
+        setCachedEntries(namespace, merged);
+      }
 
       const progressMap = watchedEpisodesFromProgress(historyJson.progress ?? []);
       const cachedSets = new Map<string, Set<string>>();
@@ -835,12 +858,23 @@ export function useWatchHistorySync(namespace: RecentlyWatchedNamespace = 'papif
       cachedSets.forEach((episodes, mediaKey) => {
         watchedEpisodesMap[mediaKey] = Array.from(episodes);
       });
-      writeWatchedEpisodesMap(namespace, watchedEpisodesMap);
+      const watchedEpisodesRawValue = JSON.stringify(watchedEpisodesMap);
+      const watchedEpisodesChanged = watchedEpisodesRawValue !== readRawWatchedEpisodes(namespace);
+      const watchedEpisodesNeedUpdate =
+        watchedEpisodesChanged || watchedEpisodesRawValue !== getCachedWatchedEpisodesRawValue(namespace);
+      if (watchedEpisodesNeedUpdate) {
+        writeWatchedEpisodesMap(namespace, watchedEpisodesMap);
+      }
 
       serverHydratedNamespace.add(namespace);
       if (baseline !== undefined) serverBaseline.set(namespace, Math.max(baseline, fetchStartedAt));
       lastSyncedRef.current = Date.now();
-      window.dispatchEvent(new Event(keys.eventName));
+      if (historyNeedsUpdate) {
+        window.dispatchEvent(new Event(keys.eventName));
+      }
+      if (watchedEpisodesNeedUpdate) {
+        window.dispatchEvent(new Event(keys.watchedEpisodesEventName));
+      }
       setInitialSync((current) => current.key === fetchKey && !current.error ? current : { key: fetchKey, error: false });
       return true;
     } catch {

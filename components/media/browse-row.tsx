@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Info, Play, X } from 'lucide-react';
 
 import { isAnimeProvider, isMangaProvider, type LibraryMediaEntry } from '@/lib/media/types';
@@ -258,7 +258,16 @@ function PosterCard({
   );
 }
 
-export function BrowseRow({ cinematic = false, anchorId, entries, loop = true, onEntryRemove, onEntrySelect, prioritizeLeadPoster = false, title }: BrowseRowProps) {
+export const BrowseRow = memo(function BrowseRow({
+  cinematic = false,
+  anchorId,
+  entries,
+  loop = true,
+  onEntryRemove,
+  onEntrySelect,
+  prioritizeLeadPoster = false,
+  title,
+}: BrowseRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   // Flag to prevent the scroll handler from re-triggering during a silent jump
   const isJumping = useRef(false);
@@ -362,4 +371,4 @@ export function BrowseRow({ cinematic = false, anchorId, entries, loop = true, o
       </div>
     </div>
   );
-}
+});

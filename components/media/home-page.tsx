@@ -203,15 +203,13 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   const removeRecentEntry = useCallback(
     (entry: LibraryMediaEntry) => {
       removeRecentlyWatched(entry, experience.id, isAuthenticated);
-      if (
-        selectedEntry?.type === entry.type &&
-        selectedEntry.id === entry.id &&
-        selectedEntry.provider === entry.provider
-      ) {
-        setSelectedEntry(null);
-      }
+      setSelectedEntry((current) =>
+        current?.type === entry.type && current.id === entry.id && current.provider === entry.provider
+          ? null
+          : current,
+      );
     },
-    [experience.id, isAuthenticated, selectedEntry],
+    [experience.id, isAuthenticated],
   );
 
   useEffect(() => {
