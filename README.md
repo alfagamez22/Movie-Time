@@ -44,6 +44,14 @@ infrastructure/
 
 ## Deployment
 
+For editing the live `papiflix.vercel.app` site using Vercel's existing server environment:
+
+1. Sign in with `vercel login` and link the existing project with `vercel link --project papiflix`.
+2. Run `npm run dev:live`. It deploys once, then watches application source and deploys again after saves settle for three seconds. Changes saved during a build queue a subsequent deployment.
+3. Refresh the live domain after Vercel reports that the deployment is ready. Each update requires a cloud build; this command publishes production changes for all visitors.
+
+This workflow uses the environment settings already configured on Vercel and does not require downloading or creating local environment files. The Vercel CLI must be installed and authenticated. Use `npm run deploy:live` for a single deployment, or `npm run dev` for localhost hot reload, which still requires local server dependencies and configuration.
+
 - Use the root `Dockerfile` for container-based deployment.
 - Use `.github/workflows/validate.yml` as the validation gate in CI.
 - See `infrastructure/README.md` for environment variables and deployment notes.

@@ -330,7 +330,7 @@ export const BrowseRow = memo(function BrowseRow({
 
   return (
     <div id={anchorId} className="group/row content-auto-section scroll-mt-24">
-      <h2 className="mb-3 px-5 text-base font-bold text-white sm:px-6 md:px-12 md:text-lg">{title}</h2>
+      <h2 className={`mb-3 px-5 text-base font-bold text-white sm:px-6 md:px-12 md:text-lg ${anchorId === 'recently-watched' || anchorId === 'trending' ? 'pt-[5px]' : ''}`}>{title}</h2>
       <div className="relative">
         {/* Left arrow */}
         <button
@@ -345,7 +345,7 @@ export const BrowseRow = memo(function BrowseRow({
         {/* No scroll-smooth class so direct el.scrollLeft assignments stay instant for the silent jump. */}
         <div
           ref={rowRef}
-          className="flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-hide sm:px-6 md:gap-2 md:px-12"
+          className={`flex gap-3 overflow-x-auto px-5 pb-2 scrollbar-hide sm:px-6 md:gap-2 md:px-12 ${onEntryRemove ? 'pt-2' : ''}`}
         >
           {rowItems.map((entry, i) => (
             <PosterCard

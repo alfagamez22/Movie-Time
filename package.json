@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:live": "node scripts/dev-live.mjs",
+    "deploy:live": "vercel deploy --prod --yes",
     "build": "npm run clean && next build",
     "start": "next start",
     "db:migrate:couchbase": "node scripts/migrate-postgres-to-couchbase.mjs",
