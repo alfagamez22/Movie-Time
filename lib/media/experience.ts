@@ -26,8 +26,9 @@ export interface MediaExperienceConfig {
 
 export const papiflixExperience: MediaExperienceConfig = {
   brandBannerSrc: '/icons/papiflixbanner.png',
-  brandBackgroundPosition: '47% center',
-  brandBackgroundSize: '200% auto',
+  // Match PapiAnime's visible logo height despite the assets' different transparent margins.
+  brandBackgroundPosition: '47.7% 51.7%',
+  brandBackgroundSize: '151.6% auto',
   brandName: 'PapiFlix',
   detailsApiBasePath: '/api/media',
   emptySearchText: 'Type to search across movies and TV series',
