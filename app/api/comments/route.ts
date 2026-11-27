@@ -4,6 +4,11 @@ import { auth } from '@/lib/auth';
 import { randomUUID } from 'node:crypto';
 import { findRecords, readRecord, saveRecord, type AppRecord } from '@/lib/db/records';
 import { validateCommentBody } from '@/lib/media/user-actions';
+import { rateLimit } from '@/lib/rate-limit';
+import { isMediaExperience, validateMediaIdentity, validateTitle } from '@/lib/validation/media-identity';
+
+const COMMENT_LIMIT = 10;
+const COMMENT_WINDOW_MS = 60_000;
 
 interface CommentUser extends Record<string, unknown> {
   id: string;
@@ -46,10 +51,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing media identifiers.' }, { status: 400 });
   }
 
+  const identity = validateMediaIdentity({
+    mediaId: searchParams.get('mediaId'),
+    mediaProvider: searchParams.get('mediaProvider'),
+    mediaType: searchParams.get('mediaType'),
+  });
+  if (!identity.ok) {
+    return NextResponse.json({ error: identity.error }, { status: 400 });
+  }
+
   const session = await auth();
-  const mediaId = searchParams.get('mediaId')!;
-  const mediaType = searchParams.get('mediaType')!;
-  const mediaProvider = searchParams.get('mediaProvider')!;
+  const { mediaId, mediaType, mediaProvider } = identity.value;
 
   const comments = await findRecords<AppRecord & Omit<CommentWithUser, 'user'> & { title: string }>('mediaComment', {
     mediaId, mediaType, mediaProvider,
@@ -71,19 +83,26 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const limited = rateLimit('comment', session.user.id, COMMENT_LIMIT, COMMENT_WINDOW_MS);
+  if (limited) return limited;
 
   const body = (await request.json().catch(() => null)) as {
     body?: unknown;
-    experience?: string;
-    mediaId?: string;
-    mediaProvider?: string;
-    mediaType?: string;
-    title?: string;
+    experience?: unknown;
+    mediaId?: unknown;
+    mediaProvider?: unknown;
+    mediaType?: unknown;
+    title?: unknown;
   } | null;
 
   if (!body?.mediaId || !body.mediaType || !body.mediaProvider || !body.experience || !body.title) {
     return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
   }
+  const identity = validateMediaIdentity(body);
+  if (!identity.ok) return NextResponse.json({ error: identity.error }, { status: 400 });
+  if (!isMediaExperience(body.experience)) return NextResponse.json({ error: 'Invalid experience.' }, { status: 400 });
+  const title = validateTitle(body.title);
+  if (!title.ok) return NextResponse.json({ error: title.error }, { status: 400 });
 
   const validation = validateCommentBody(body.body);
   if (!validation.ok) {
@@ -95,11 +114,9 @@ export async function POST(request: Request) {
 
   const comment = await saveRecord('mediaComment', randomUUID(), {
     userId: session.user.id,
-    mediaId: body.mediaId,
-    mediaType: body.mediaType,
-    mediaProvider: body.mediaProvider,
+    ...identity.value,
     experience: body.experience,
-    title: body.title,
+    title: title.value,
     body: validation.value,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -76,7 +76,7 @@ export function collectionForRecord(type: string, document: Record<string, unkno
   if (experience === 'papimanga' || experience === 'mangadex') return 'mangadex';
   const provider = document.mediaProvider;
   if (provider === 'tmdb') return 'papiflix';
-  if (provider === 'anilist') return 'papianime';
+  if (provider === 'anilist' || provider === 'anikoto') return 'papianime';
   if (provider === 'mangadex') return 'mangadex';
   throw new Error(`Cannot determine Couchbase collection for ${type}.`);
 }

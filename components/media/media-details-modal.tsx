@@ -2,10 +2,11 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type WheelEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Play, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 
+import { useDialogFocus } from '@/lib/hooks/use-dialog-focus';
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { buildWatchHref, buildWatchSlug } from '@/lib/media/routes';
@@ -138,11 +139,11 @@ function CastList({ cast, isLoading, personBasePath }: { cast: MediaCastMember[]
   const [failedProfiles, setFailedProfiles] = useState<Set<string>>(new Set());
 
   if (isLoading) {
-    return <p className="text-sm text-zinc-500">Loading cast...</p>;
+    return <p className="text-sm text-zinc-400">Loading cast...</p>;
   }
 
   if (cast.length === 0) {
-    return <p className="text-sm text-zinc-500">Cast details unavailable.</p>;
+    return <p className="text-sm text-zinc-400">Cast details unavailable.</p>;
   }
 
   return (
@@ -174,13 +175,13 @@ function CastList({ cast, isLoading, personBasePath }: { cast: MediaCastMember[]
                 }
               />
             ) : (
-              <div className="flex h-full items-center justify-center px-2 text-center text-xs font-semibold text-zinc-600">
+              <div className="flex h-full items-center justify-center px-2 text-center text-xs font-semibold text-zinc-400">
                 {member.name}
               </div>
             )}
           </div>
           <p className={`line-clamp-1 text-xs font-semibold text-white ${href ? 'group-hover:underline' : ''}`}>{member.name}</p>
-          {member.character ? <p className="line-clamp-1 text-[11px] text-zinc-500">{member.character}</p> : null}
+          {member.character ? <p className="line-clamp-1 text-[11px] text-zinc-400">{member.character}</p> : null}
         </Wrapper>
         );
       })}
@@ -232,11 +233,11 @@ function TrailerList({
   }, [trailerCount, isLoading]);
 
   if (isLoading) {
-    return <p className="text-sm text-zinc-500">Loading trailers...</p>;
+    return <p className="text-sm text-zinc-400">Loading trailers...</p>;
   }
 
   if (trailers.length === 0) {
-    return <p className="text-sm text-zinc-500">Trailers unavailable.</p>;
+    return <p className="text-sm text-zinc-400">Trailers unavailable.</p>;
   }
 
   const collapsible = trailers.length > TRAILERS_COLLAPSED_COUNT;
@@ -347,6 +348,27 @@ function FittedCardTitle({ title, height = 40, maxSize = 12 }: { title: string; 
   );
 }
 
+// React's onWheel listener is passive, so preventDefault() there is ignored and the dialog scrolls with the row.
+// Map mostly-vertical wheel input onto the row only while it can still move that way; otherwise the dialog scrolls.
+function useVerticalWheelScrollsRow(rowRef: RefObject<HTMLDivElement | null>, rowMounted: boolean) {
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!rowMounted || !row) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      const delta = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? event.deltaY * row.clientWidth : event.deltaY;
+      const canScroll = delta < 0 ? row.scrollLeft > 1 : row.scrollLeft < row.scrollWidth - row.clientWidth - 1;
+      if (!canScroll) return;
+      event.preventDefault();
+      row.scrollLeft += delta;
+    };
+    row.addEventListener('wheel', onWheel, { passive: false });
+    return () => row.removeEventListener('wheel', onWheel);
+  }, [rowMounted, rowRef]);
+}
+
 function RecommendationCarousel({
   entries,
   isLoading,
@@ -366,19 +388,14 @@ function RecommendationCarousel({
     el.scrollBy({ left: dir === 'left' ? -el.clientWidth * 0.85 : el.clientWidth * 0.85, behavior: 'smooth' });
   }, []);
 
-  const onWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    const el = rowRef.current;
-    if (!el || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    event.preventDefault();
-    el.scrollLeft += event.deltaY;
-  }, []);
+  useVerticalWheelScrollsRow(rowRef, !isLoading && entries.length > 0);
 
   if (isLoading) {
-    return <p className="text-sm text-zinc-500">Loading recommendations...</p>;
+    return <p className="text-sm text-zinc-400">Loading recommendations...</p>;
   }
 
   if (entries.length === 0) {
-    return <p className="text-sm text-zinc-500">No recommendations available.</p>;
+    return <p className="text-sm text-zinc-400">No recommendations available.</p>;
   }
 
   return (
@@ -392,7 +409,7 @@ function RecommendationCarousel({
         <ChevronLeft className="h-6 w-6 text-white" />
       </button>
 
-      <div ref={rowRef} onWheel={onWheel} className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+      <div ref={rowRef} className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
         {entries.map((item) => (
           <button
             key={`${item.provider}:${item.type}:${item.id}`}
@@ -412,7 +429,7 @@ function RecommendationCarousel({
               ) : null}
             </div>
             <FittedCardTitle title={item.title} />
-            {item.year ? <p className="mt-0.5 text-[11px] text-zinc-500">{item.year}</p> : null}
+            {item.year ? <p className="mt-0.5 text-[11px] text-zinc-400">{item.year}</p> : null}
           </button>
         ))}
       </div>
@@ -475,6 +492,7 @@ function AnimeSeriesPlaylist({
   }, []);
 
   useEffect(() => stopHoverScroll, [stopHoverScroll]);
+  useVerticalWheelScrollsRow(rowRef, entries.length >= 2);
 
   const onPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse') return;
@@ -521,12 +539,7 @@ function AnimeSeriesPlaylist({
             <ChevronLeft className="h-7 w-7" />
           </button>
         ) : null}
-        <div ref={rowRef} className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide" onWheel={(event) => {
-          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-            event.preventDefault();
-            rowRef.current?.scrollBy({ left: event.deltaY });
-          }
-        }}>
+        <div ref={rowRef} className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide">
         {entries.map(({ entry, key, label }) => {
           const isCurrent = entry.id === currentId;
           return (
@@ -580,6 +593,8 @@ export function MediaDetailsModal({
   const [requestedDetailsKey, setRequestedDetailsKey] = useState<string | null>(null);
   const [error, setError] = useState<DetailsErrorState | null>(null);
   const [activeTrailer, setActiveTrailer] = useState<MediaTrailer | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const selectedKey = entry ? `${entry.provider}:${entry.type}:${entry.id}` : null;
   const detailsCacheKey = selectedKey ? getDetailsCacheKey(experience.id, selectedKey) : null;
   const cachedDetails = detailsCacheKey ? getCachedMediaDetails(detailsCacheKey) : null;
@@ -636,6 +651,18 @@ export function MediaDetailsModal({
 
     return () => controller.abort(new DOMException('Details request changed', 'AbortError'));
   }, [entry, experience.detailsApiBasePath, experience.id]);
+
+  // The trailer player runs its own focus trap while it is open.
+  useDialogFocus(dialogRef, { initialFocusRef: closeButtonRef, open: Boolean(entry), paused: Boolean(activeTrailer) });
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!selectedKey || !dialog) return;
+    // Picking a recommendation swaps the title in place: start it from the top, and recover focus if the
+    // clicked card was replaced.
+    dialog.scrollTo({ top: 0 });
+    if (!dialog.contains(document.activeElement)) closeButtonRef.current?.focus({ preventScroll: true });
+  }, [selectedKey]);
 
   useEffect(() => {
     if (!entry) return;
@@ -738,12 +765,14 @@ export function MediaDetailsModal({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.2 }}
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label={`${displayEntry.title} details`}
             className="thin-scrollbar relative h-[100dvh] max-h-[100dvh] w-full overflow-y-auto border-white/10 bg-[#111] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:max-w-5xl sm:rounded-xl sm:border"
           >
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={onClose}
               aria-label="Close details"

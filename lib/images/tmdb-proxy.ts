@@ -1,15 +1,16 @@
 import sharp from 'sharp';
 
-const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL?.trim() || 'https://image.tmdb.org/t/p';
+import { DEFAULT_TMDB_IMAGE_SIZE, isTmdbImageSize, TMDB_IMAGE_PATH_PATTERN, type TmdbImageSize } from './tmdb-image-path';
 
-type SupportedSize = 'w92' | 'w300' | 'w780';
+const TMDB_IMAGE_BASE_URL = process.env.TMDB_IMAGE_BASE_URL?.trim() || 'https://image.tmdb.org/t/p';
+const UPSTREAM_TIMEOUT_MS = 10_000;
 /**
  * One output format for every browser: WebP encodes several times faster than AVIF on a cold serverless
  * instance, and a single variant (no `Vary: Accept`) means one CDN cache entry per image instead of one per browser.
  */
 const WEBP_OPTIONS = { effort: 2, quality: 78 } as const;
 
-const IMAGE_VARIANTS: Record<SupportedSize, { outputWidth: number; upstreamSize: string }> = {
+const IMAGE_VARIANTS: Record<TmdbImageSize, { outputWidth: number; upstreamSize: string }> = {
   w92: {
     outputWidth: 110,
     upstreamSize: 'w185',
@@ -26,11 +27,6 @@ const IMAGE_VARIANTS: Record<SupportedSize, { outputWidth: number; upstreamSize:
 
 const YEAR_IN_SECONDS = 60 * 60 * 24 * 365;
 const DAY_IN_SECONDS = 60 * 60 * 24;
-const TMDB_IMAGE_PATH_PATTERN = /^\/[A-Za-z0-9/_-]+\.(?:avif|gif|jpe?g|png|webp)$/i;
-
-function isSupportedSize(value: string | null): value is SupportedSize {
-  return value === 'w92' || value === 'w300' || value === 'w780';
-}
 
 function transformImage(buffer: Buffer, width: number) {
   return sharp(buffer)
@@ -48,19 +44,25 @@ export async function handleTmdbImageRequest(
     return new Response('Invalid TMDB image path.', { status: 400 });
   }
 
-  const size = isSupportedSize(requestedSize) ? requestedSize : 'w780';
+  const size = isTmdbImageSize(requestedSize) ? requestedSize : DEFAULT_TMDB_IMAGE_SIZE;
   const variant = IMAGE_VARIANTS[size];
 
   const upstreamUrl = `${TMDB_IMAGE_BASE_URL}/${variant.upstreamSize}${imagePath}`;
 
-  // The CDN caches our small WebP output; also caching the multi-MB original in the data cache only slows misses.
-  const upstreamResponse = await fetch(upstreamUrl, { cache: 'no-store' });
+  let upstreamResponse: Response;
+  let sourceBuffer: Buffer;
+  try {
+    // The CDN caches our small WebP output; also caching the multi-MB original in the data cache only slows misses.
+    upstreamResponse = await fetch(upstreamUrl, { cache: 'no-store', signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
 
-  if (!upstreamResponse.ok) {
-    return new Response('TMDB image unavailable.', { status: upstreamResponse.status });
+    if (!upstreamResponse.ok) {
+      return new Response('TMDB image unavailable.', { status: upstreamResponse.status });
+    }
+
+    sourceBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
+  } catch {
+    return new Response('TMDB image unavailable.', { headers: { 'Cache-Control': 'no-store' }, status: 502 });
   }
-
-  const sourceBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
 
   try {
     const optimizedBuffer = await transformImage(sourceBuffer, variant.outputWidth).toBuffer();

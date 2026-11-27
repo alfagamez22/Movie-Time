@@ -61,6 +61,6 @@ export function LibraryBottomNavigation({ experience }: { experience: MediaExper
       { href: experience.homeHref, label: 'Home', Icon: Home, active: path === experience.homeHref },
       { href: '/categories', label: 'Categories', Icon: LayoutGrid, active: path.startsWith('/categories') },
       { href: '/my-papiflix', label: 'My PapiFlix', Icon: UserRound, active: path === '/my-papiflix' || path === '/bookmarks' },
-    ].map(({ href, label, Icon, active }) => <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`flex min-h-16 min-w-20 flex-col items-center justify-center gap-1 text-[11px] ${active ? 'font-bold text-white' : 'text-zinc-500'}`}><Icon className={`h-5 w-5 ${active ? 'text-netflix-red' : ''}`} />{label}</Link>)}
+    ].map(({ href, label, Icon, active }) => <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`flex min-h-16 min-w-20 flex-col items-center justify-center gap-1 text-[11px] ${active ? 'font-bold text-white' : 'text-zinc-400'}`}><Icon className={`h-5 w-5 ${active ? 'text-netflix-red' : ''}`} />{label}</Link>)}
   </nav>;
 }

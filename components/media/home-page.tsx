@@ -7,10 +7,11 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Info, Search, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 
 import type { MediaExperienceConfig } from '@/lib/media/experience';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
+import { useDialogFocus } from '@/lib/hooks/use-dialog-focus';
 import { removeRecentlyWatched, restoreHomeScrollIfRequested, saveHomeScrollPosition, useRecentlyWatched, useWatchHistorySync } from '@/lib/hooks/use-recently-watched';
 import { getMediaKindLabel, type LibraryMediaEntry, type LibrarySection } from '@/lib/media/types';
 import { getAuthPromptCopy, type AuthPromptReason } from '@/lib/media/user-actions';
@@ -64,7 +65,7 @@ function SearchResultCard({
             className="object-cover transition-transform duration-300 group-hover:scale-[1.05]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-zinc-900 px-2 text-center text-xs font-semibold text-zinc-500">
+          <div className="flex h-full w-full items-center justify-center bg-zinc-900 px-2 text-center text-xs font-semibold text-zinc-400">
             {entry.title}
           </div>
         )}
@@ -97,7 +98,7 @@ function SearchResultCard({
 function SearchPeopleStrip({ basePath, label, people }: { basePath: string; label: string; people: PersonSummary[] }) {
   return (
     <section className="mb-6">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">{label}</h2>
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">{label}</h2>
       <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2 [scrollbar-width:none]">
         {people.map((person) => (
           <Link
@@ -111,7 +112,7 @@ function SearchPeopleStrip({ basePath, label, people }: { basePath: string; labe
               ) : null}
             </span>
             <span className="mt-2 line-clamp-2 text-sm font-semibold leading-tight text-white group-hover:underline">{person.name}</span>
-            {person.knownFor ? <span className="mt-0.5 line-clamp-1 text-[11px] text-zinc-500">{person.knownFor}</span> : null}
+            {person.knownFor ? <span className="mt-0.5 line-clamp-1 text-[11px] text-zinc-400">{person.knownFor}</span> : null}
           </Link>
         ))}
       </div>
@@ -161,6 +162,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   // Public browsing can paint immediately; account progress waits for fresh validation.
   const recentlyWatched = sessionStatus === 'loading' || historySync.loading || historySync.error ? [] : localHistory;
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchDialogRef = useRef<HTMLDivElement>(null);
   const debouncedQuery = useDebouncedValue(query.trim(), 200);
   const [completedSearch, setCompletedSearch] = useState('');
   const [searchError, setSearchError] = useState(false);
@@ -243,11 +245,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
     };
   }, [experience.id]);
 
-  useEffect(() => {
-    if (!searchOpen) return;
-    const timeoutId = setTimeout(() => inputRef.current?.focus(), 50);
-    return () => clearTimeout(timeoutId);
-  }, [searchOpen]);
+  useDialogFocus(searchDialogRef, { initialFocusRef: inputRef, open: searchOpen });
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -304,7 +302,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
   );
 
   return (
-    <>
+    <MotionConfig reducedMotion="user">
     <main className="min-h-screen bg-[#050505] pb-20 text-white lg:pb-0" data-browse-theme={experience.id === 'papimanga' ? undefined : 'cinema'}>
       <LibraryBottomNavigation experience={experience} />
       <AnnouncementPopup />
@@ -360,6 +358,10 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
+            ref={searchDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search"
             className="fixed inset-0 z-[80] flex flex-col bg-black/95 backdrop-blur-lg"
           >
             <div className="safe-page-x border-b border-white/8 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)]">
@@ -367,11 +369,13 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                 <input
                   ref={inputRef}
-                  type="text"
+                  type="search"
+                  enterKeyHint="search"
+                  aria-label={experience.searchPlaceholder}
                   value={query}
                   onChange={(event) => { setQuery(event.target.value); setCompletedSearch(''); }}
                   placeholder={experience.searchPlaceholder}
-                  className="flex-1 bg-transparent text-base text-white placeholder:text-zinc-600 focus:outline-none sm:text-lg"
+                  className="min-w-0 flex-1 appearance-none bg-transparent text-base text-white placeholder:text-zinc-400 focus:outline-none sm:text-lg [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
                 />
                 <button
                   type="button"
@@ -392,7 +396,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                 ) : searchError && searchResults.length === 0 && searchPeople.length === 0 ? (
                   <p role="alert" className="text-center text-sm text-zinc-400">Search is temporarily unavailable. Please try again.</p>
                 ) : searchResults.length === 0 && searchPeople.length === 0 ? (
-                  <p className="text-center text-sm text-zinc-500">
+                  <p className="text-center text-sm text-zinc-400">
                     No results for &ldquo;{debouncedQuery}&rdquo;
                   </p>
                 ) : (
@@ -407,7 +411,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
                     {searchResults.length > 0 ? (
                       <div className="flex flex-col gap-3">
                         {searchPeople.length > 0 ? (
-                          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Titles</h2>
+                          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Titles</h2>
                         ) : null}
                         {searchResults.map((entry) => (
                           <SearchResultCard key={`${entry.provider}:${entry.type}:${entry.id}`} entry={entry} onSelect={openDetails} />
@@ -426,6 +430,7 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         <HeroBanner
           items={featuredItems}
           onInfoSelect={openDetails}
+          paused={Boolean(selectedEntry) || searchOpen || authOpen}
           recentlyWatched={recentlyWatched}
           watchBasePath={experience.watchBasePath}
         />
@@ -501,6 +506,6 @@ export function HomePage({ discoveryError, experience, sections }: HomePageProps
         ) : null}
       </AnimatePresence>
     </main>
-    </>
+    </MotionConfig>
   );
 }

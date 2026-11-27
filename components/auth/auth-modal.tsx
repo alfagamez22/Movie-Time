@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { getProviders, signIn } from 'next-auth/react';
 import { X } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useIsPresent } from 'motion/react';
+import { isFocusInOtherModal, useDialogFocus } from '@/lib/hooks/use-dialog-focus';
 
 interface AuthModalProps {
   description?: string;
@@ -20,12 +21,36 @@ export function AuthModal({
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [providersResolved, setProvidersResolved] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const googleButtonRef = useRef<HTMLButtonElement>(null);
+  // False while AnimatePresence plays the exit animation, so focus returns and Escape is released right away.
+  const isPresent = useIsPresent();
+  const close = useEffectEvent(onClose);
+
+  useDialogFocus(dialogRef, { open: isPresent });
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    if (!isPresent) return;
+    // Capture phase + stopPropagation: this dialog can sit over the details dialog, whose document-level
+    // Escape handler must not also close it on the same key press.
+    const onKey = (e: KeyboardEvent) => {
+      // A dialog stacked above this one (e.g. an announcement) owns Escape.
+      if (e.key !== 'Escape' || isFocusInOtherModal(dialogRef.current)) return;
+      e.stopPropagation();
+      close();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [isPresent]);
+
+  useEffect(() => {
+    // The Google button stays disabled until providers resolve, so it can't take focus on mount.
+    if (!isPresent || !providersResolved || !googleAvailable) return;
+    const active = document.activeElement;
+    if (isFocusInOtherModal(dialogRef.current)) return;
+    if (active === closeButtonRef.current || !dialogRef.current?.contains(active)) googleButtonRef.current?.focus();
+  }, [googleAvailable, isPresent, providersResolved]);
 
   useEffect(() => {
     let mounted = true;
@@ -63,12 +88,14 @@ export function AuthModal({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 10 }}
         transition={{ duration: 0.18 }}
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-modal-title"
         className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-900 p-8 shadow-2xl"
       >
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={onClose}
           aria-label="Close"
@@ -84,8 +111,8 @@ export function AuthModal({
 
         {googleAvailable || !providersResolved ? (
           <button
+            ref={googleButtonRef}
             type="button"
-            autoFocus
             onClick={() => void handleGoogleSignIn()}
             disabled={googleLoading || !providersResolved}
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-white px-3 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50"

@@ -32,10 +32,16 @@ export interface WatchSession {
   watchSeconds: number;
 }
 
-type CouchbaseState = typeof globalThis & { papiflixAnalyticsReady?: Promise<void> };
+type CouchbaseState = typeof globalThis & { papiflixAnalyticsReady?: Promise<void>; papiflixAnalyticsRetryAt?: number };
 const globalState = globalThis as CouchbaseState;
+const COLLECTION_RETRY_MS = 60_000;
 
 async function ensureCollection() {
+  const retryAt = globalState.papiflixAnalyticsRetryAt;
+  if (retryAt !== undefined && Date.now() >= retryAt) {
+    globalState.papiflixAnalyticsReady = undefined;
+    globalState.papiflixAnalyticsRetryAt = undefined;
+  }
   if (!globalState.papiflixAnalyticsReady) {
     globalState.papiflixAnalyticsReady = (async () => {
       const { bucket, scope } = await getCouchbase();
@@ -44,9 +50,16 @@ async function ensureCollection() {
       } catch (error) {
         if (!(error instanceof Error && error.name === 'CollectionExistsError')) {
           console.error('Analytics collection setup failed', { error: error instanceof Error ? error.name : 'UnknownError' });
+          // Don't fail this request: the collection may already exist with only creation denied (or the
+          // failure was transient). Schedule another attempt instead of caching this outcome forever.
+          globalState.papiflixAnalyticsRetryAt = Date.now() + COLLECTION_RETRY_MS;
         }
       }
-    })();
+    })().catch((error: unknown) => {
+      // Reset so the next request retries instead of reusing a rejected promise forever.
+      globalState.papiflixAnalyticsReady = undefined;
+      throw error;
+    });
   }
   return globalState.papiflixAnalyticsReady;
 }

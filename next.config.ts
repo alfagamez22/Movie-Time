@@ -102,6 +102,8 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     const securityHeaders = [
+      // Deliberately no script-src/style-src: third-party players and inline Next scripts would need a nonce rollout.
+      { key: 'Content-Security-Policy', value: "base-uri 'self'; object-src 'none'; frame-ancestors 'self'" },
       { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
       {
         key: 'Permissions-Policy',
@@ -113,6 +115,7 @@ const nextConfig: NextConfig = {
         ].join(', '),
       },
       { key: 'Referrer-Policy', value: 'no-referrer' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
     ];
 

@@ -139,3 +139,52 @@ for (const provider of ['media', 'anime']) {
     assert.equal(response.headers.get('Cache-Control'), 'no-store');
   });
 }
+
+test('public media details responses are CDN-cacheable and failures are not', async () => {
+  const entry = { id: '42', slug: 'fixture', type: 'movie' };
+  let details = { ok: true, data: { entry } };
+  const route = load('app/api/media/[slug]/details/route.ts', {
+    'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
+    '@/lib/media/resolve': { resolveLiveMediaEntry: async (identifier) => identifier === 'missing' ? null : { entry, matchedBy: 'slug' } },
+    '@/lib/media/routes': { parseMediaType: () => 'movie' },
+    '@/lib/tmdb/client': { lookupTmdbMediaDetails: async () => details },
+  });
+  const call = (slug) => route.GET(new Request(`http://localhost/api/media/${slug}/details`), { params: Promise.resolve({ slug }) });
+
+  const ok = await call('fixture');
+  assert.equal(ok.status, 200);
+  assert.match(ok.headers.get('Cache-Control'), /^public, s-maxage=\d+, stale-while-revalidate=\d+$/);
+  assert.equal((await call('missing')).headers.get('Cache-Control'), 'no-store');
+  details = { ok: false, message: 'Unavailable', status: 503 };
+  const failed = await call('fixture');
+  assert.equal(failed.status, 503);
+  assert.equal(failed.headers.get('Cache-Control'), 'no-store');
+});
+
+test('season episode lists are CDN-cacheable and invalid seasons are not', async () => {
+  const entry = { id: '7', slug: 'show', type: 'tv', maxSeasons: 2 };
+  const route = load('app/api/media/[slug]/seasons/[season]/route.ts', {
+    'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
+    '@/lib/media/resolve': { resolveLiveMediaEntry: async () => ({ entry, matchedBy: 'slug' }) },
+    '@/lib/media/routes': { parseMediaType: () => 'tv' },
+    '@/lib/tmdb/client': { lookupTmdbSeasonDetails: async () => ({ ok: true, data: { episodes: [] } }) },
+    '@/lib/media/types': { isTvEntry: (value) => value.type === 'tv' },
+    '@/lib/media/season-layout': { toPapiflixSeasonDetails: (_entry, seasonNumber) => ({ seasonNumber }), toTmdbSeasonNumber: (_entry, value) => value },
+  });
+  const call = (season) => route.GET(new Request(`http://localhost/api/media/show/seasons/${season}`), { params: Promise.resolve({ season, slug: 'show' }) });
+
+  const ok = await call('1');
+  assert.equal(ok.status, 200);
+  assert.match(ok.headers.get('Cache-Control'), /^public, s-maxage=/);
+  for (const season of ['0', '3']) {
+    const rejected = await call(season);
+    assert.ok(rejected.status >= 400);
+    assert.equal(rejected.headers.get('Cache-Control'), 'no-store');
+  }
+});
+
+test('episode stills and cast photos request right-sized TMDB artwork', () => {
+  const source = readFileSync(new URL('../lib/tmdb/client.ts', import.meta.url), 'utf8');
+  assert.match(source, /stillUrl: buildTmdbImageUrl\(episode\.still_path, 'w300'\)/);
+  assert.match(source, /profileUrl: buildTmdbImageUrl\(member\.profile_path, 'w300'\)/);
+});

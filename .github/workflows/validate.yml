@@ -14,22 +14,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
 
+      # Matches the pnpm major recorded in node_modules/.modules.yaml (pnpm@12.8.1).
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
       - name: Set up Node.js
         uses: actions/setup-node@v7.0.0
         with:
           node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
-        run: npm test
+        run: pnpm test
 
       - name: Type check
-        run: npm run typecheck
+        run: pnpm run typecheck
 
-      - name: Lint
-        run: npm run lint
-
+      # validate = lint + production build.
       - name: Validate project
-        run: npm run validate
+        run: pnpm run validate

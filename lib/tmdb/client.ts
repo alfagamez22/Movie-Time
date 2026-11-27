@@ -688,7 +688,7 @@ function createSeasonDetails(response: TmdbSeasonDetailsResponse): SeasonDetails
     overview: episode.overview?.trim() || '',
     runtime: episode.runtime,
     seasonNumber: episode.season_number,
-    stillUrl: buildTmdbImageUrl(episode.still_path),
+    stillUrl: buildTmdbImageUrl(episode.still_path, 'w300'),
   }));
 
   return {
@@ -764,7 +764,7 @@ function mapCastMembers(cast: TmdbCastResult[] | undefined, limit = 10): MediaCa
       character: member.character?.trim() || undefined,
       id: member.id,
       name: member.name?.trim() as string,
-      profileUrl: buildTmdbImageUrl(member.profile_path, 'w92'),
+      profileUrl: buildTmdbImageUrl(member.profile_path, 'w300'),
     }));
 }
 
