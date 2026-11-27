@@ -13,7 +13,7 @@
     "db:split:couchbase": "node scripts/split-couchbase-collections.mjs",
     "db:verify:couchbase": "node scripts/verify-couchbase-migration.mjs",
     "lint": "eslint .",
-    "test": "node --test tests/session-loading.test.mjs tests/browser-cache.test.mjs tests/manga-image-proxy.test.mjs tests/announcements.test.mjs tests/feedback.test.mjs tests/config.test.mjs tests/embed-url.test.mjs tests/anime-episodes.test.mjs tests/tmdb-release-filter.test.mjs tests/tmdb-sections.test.mjs tests/watch-history.test.mjs tests/image-disk-cache.test.mjs tests/recently-watched-tombstone.test.mjs tests/manga-routes.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs tests/party-sync.test.mjs tests/rate-limit.test.mjs tests/loading-performance.test.mjs tests/personal-library.test.mjs",
+    "test": "node --test tests/session-loading.test.mjs tests/browser-cache.test.mjs tests/manga-image-proxy.test.mjs tests/announcements.test.mjs tests/feedback.test.mjs tests/config.test.mjs tests/embed-url.test.mjs tests/anime-episodes.test.mjs tests/tmdb-release-filter.test.mjs tests/tmdb-sections.test.mjs tests/watch-history.test.mjs tests/recently-watched-tombstone.test.mjs tests/manga-routes.test.mjs tests/auth-oauth.test.mjs tests/user-actions.test.mjs tests/party-sync.test.mjs tests/rate-limit.test.mjs tests/loading-performance.test.mjs tests/personal-library.test.mjs tests/tmdb-image-save-data.test.mjs tests/api-input-validation.test.mjs",
     "typecheck": "tsc --noEmit",
     "validate": "npm run lint && npm run build",
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\""
@@ -22,13 +22,10 @@
     "@ably/chat": "^1.4.0",
     "ably": "^2.29.0",
     "autoprefixer": "^10.4.21",
-    "bcryptjs": "^3.0.3",
     "browser-image-compression": "^2.0.2",
     "couchbase": "^4.7.1",
-    "crypto-js": "^4.2.0",
     "dotenv": "^17.4.2",
-    "hashids": "^2.3.0",
-    "hls.js": "^1.6.16",
+    "lucide-react": "^1.27.0",
     "motion": "^12.40.0",
     "next": "^16.2.6",
     "next-auth": "^5.0.0-beta.31",
@@ -40,14 +37,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/crypto-js": "^4.2.2",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
-    "lucide-react": "^1.16.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3"
   }

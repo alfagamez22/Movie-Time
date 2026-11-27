@@ -1,116 +1,96 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function loadProxy(transformCalls) {
-  const filename = resolve(__dirname, '..', 'lib/images/tmdb-proxy.ts');
-  const source = readFileSync(filename, 'utf8');
+function load(path, stubs = {}) {
+  const source = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-
-  const sharp = () => {
-    const pipeline = {
-      rotate() {
-        return pipeline;
-      },
-      resize() {
-        return pipeline;
-      },
-      avif(options) {
-        transformCalls.push({ format: 'avif', options });
-        return pipeline;
-      },
-      webp(options) {
-        transformCalls.push({ format: 'webp', options });
-        return pipeline;
-      },
-      jpeg(options) {
-        transformCalls.push({ format: 'jpeg', options });
-        return pipeline;
-      },
-      async toBuffer() {
-        return Buffer.from('optimized');
-      },
-    };
-    return pipeline;
-  };
-
   const runtimeModule = { exports: {} };
-  const require = (specifier) => {
-    if (specifier === 'sharp') return sharp;
-    throw new Error(`Unexpected import while loading TMDB image proxy: ${specifier}`);
-  };
-
-  const fn = new Function('exports', 'require', 'module', '__filename', '__dirname', compiled);
-  fn(runtimeModule.exports, require, runtimeModule, filename, dirname(filename));
+  new Function('exports', 'require', 'module', compiled)(runtimeModule.exports, (specifier) => {
+    if (!(specifier in stubs)) throw new Error(`Unexpected import while loading ${path}: ${specifier}`);
+    return stubs[specifier];
+  }, runtimeModule);
   return runtimeModule.exports;
 }
 
-test('Save-Data on forces the lower-bandwidth JPEG transform', async () => {
-  const originalFetch = globalThis.fetch;
+const imagePath = load('lib/images/tmdb-image-path.ts');
+
+function loadProxy(transformCalls) {
+  const sharp = () => {
+    const pipeline = {
+      rotate: () => pipeline,
+      resize: (options) => { transformCalls.push({ resize: options }); return pipeline; },
+      webp: (options) => { transformCalls.push({ format: 'webp', options }); return pipeline; },
+      toBuffer: async () => Buffer.from('optimized'),
+    };
+    return pipeline;
+  };
+  return load('lib/images/tmdb-proxy.ts', { sharp, './tmdb-image-path': imagePath });
+}
+
+function mockFetch(t, implementation) {
+  const original = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async () =>
-    new Response(Buffer.from('source'), {
-      status: 200,
-      headers: { 'content-type': 'image/png' },
-    });
+  globalThis.fetch = async (...args) => { calls.push(args); return implementation(...args); };
+  t.after(() => { globalThis.fetch = original; });
+  return calls;
+}
 
-  try {
-    const { handleTmdbImageRequest } = loadProxy(calls);
-    const response = await handleTmdbImageRequest(
-      '/poster.jpg',
-      'w300',
-      'image/avif,image/webp,image/*',
-      'on',
-      true,
-    );
+const pngResponse = () => new Response(Buffer.from('source'), { status: 200, headers: { 'content-type': 'image/png' } });
 
-    assert.equal(response.headers.get('content-type'), 'image/jpeg');
-    assert.deepEqual(calls.at(-1), {
-      format: 'jpeg',
-      options: { mozjpeg: true, quality: 70 },
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('every browser gets one long-cached WebP variant at the requested width', async (t) => {
+  const fetchCalls = mockFetch(t, pngResponse);
+  const transforms = [];
+  const { handleTmdbImageRequest } = loadProxy(transforms);
+
+  const response = await handleTmdbImageRequest('/poster.jpg', 'w300', true);
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'image/webp');
+  assert.match(response.headers.get('cache-control'), /max-age=31536000/);
+  assert.deepEqual(transforms.find((call) => call.format), { format: 'webp', options: { effort: 2, quality: 78 } });
+  assert.equal(transforms.find((call) => call.resize).resize.width, 320);
+  assert.equal(fetchCalls[0][0], 'https://image.tmdb.org/t/p/w500/poster.jpg');
+  assert.ok(fetchCalls[0][1].signal instanceof AbortSignal, 'upstream fetch must carry a timeout signal');
 });
 
-test('normal image requests still prefer AVIF when supported', async () => {
-  const originalFetch = globalThis.fetch;
-  const calls = [];
-  globalThis.fetch = async () =>
-    new Response(Buffer.from('source'), {
-      status: 200,
-      headers: { 'content-type': 'image/png' },
-    });
+test('upstream timeouts and network failures become an uncached 502', async (t) => {
+  mockFetch(t, () => { throw new DOMException('The operation timed out.', 'TimeoutError'); });
+  const { handleTmdbImageRequest } = loadProxy([]);
 
-  try {
-    const { handleTmdbImageRequest } = loadProxy(calls);
-    const response = await handleTmdbImageRequest(
-      '/poster.jpg',
-      'w300',
-      'image/avif,image/webp,image/*',
-      null,
-      true,
-    );
+  const response = await handleTmdbImageRequest('/poster.jpg', 'w780', true);
 
-    assert.equal(response.headers.get('content-type'), 'image/avif');
-    assert.deepEqual(calls.at(-1), {
-      format: 'avif',
-      options: { effort: 4, quality: 62 },
-    });
-  } finally {
-    globalThis.fetch = originalFetch;
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+});
+
+test('invalid image paths are rejected before any upstream request', async (t) => {
+  const fetchCalls = mockFetch(t, pngResponse);
+  const { handleTmdbImageRequest } = loadProxy([]);
+
+  for (const path of ['../etc/passwd', '/poster.svg', '//evil.test/a.jpg?x', '']) {
+    assert.equal((await handleTmdbImageRequest(path, 'w300', true)).status, 400, path);
   }
+  assert.equal(fetchCalls.length, 0);
+});
+
+test('legacy query-string URLs permanently redirect to the cacheable path form', async () => {
+  const route = load('app/api/images/tmdb/route.ts', { '@/lib/images/tmdb-image-path': imagePath });
+  const get = (query) => route.GET(new Request(`https://papiflix.test/api/images/tmdb?${query}`));
+
+  const redirect = await get('path=%2Fposter.jpg&size=w300');
+  assert.equal(redirect.status, 308);
+  assert.equal(redirect.headers.get('location'), 'https://papiflix.test/api/images/tmdb/w300/poster.jpg');
+  assert.match(redirect.headers.get('cache-control'), /max-age=31536000/);
+
+  const defaultSize = await get('path=%2Fnested%2Fbackdrop.webp');
+  assert.equal(defaultSize.headers.get('location'), 'https://papiflix.test/api/images/tmdb/w780/nested/backdrop.webp');
+
+  assert.equal((await get('path=%2Fposter.jpg&size=original')).status, 400);
+  assert.equal((await get('path=https%3A%2F%2Fevil.test%2Fa.jpg&size=w300')).status, 400);
+  assert.equal((await get('size=w300')).status, 400);
 });

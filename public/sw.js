@@ -10,7 +10,7 @@ const POLICIES = {
 };
 const inFlight = new Map();
 const writes = new Map();
-const STATIC_ASSETS = ['/manifest.webmanifest', '/icons/papiflixbanner.png', '/icons/favicon/android-chrome-192x192.png', '/icons/favicon/android-chrome-512x512.png'];
+const STATIC_ASSETS = ['/manifest.webmanifest', '/icons/papiflixbanner.webp', '/icons/favicon/android-chrome-192x192.png', '/icons/favicon/android-chrome-512x512.png'];
 
 // Keep this allowlist aligned with lib/cache/public-pages.ts. Never cache account or player HTML.
 function isPublicPage(url) {

@@ -11,7 +11,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ use
   const { userId } = await params;
 
   const [sessions, history, bookmarks] = await Promise.all([
-    querySessions({ includeAdmin: true, limit: 100, userId }),
+    querySessions({ includeAdmin: true, limit: 100, userId }).catch(() => []),
     findRecords('watchHistory', { userId }, { direction: 'desc', limit: 100, orderBy: 'watchedAt' }).catch(() => []),
     findRecords('bookmark', { userId }, { direction: 'desc', limit: 100, orderBy: 'createdAt' }).catch(() => []),
   ]);

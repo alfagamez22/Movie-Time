@@ -37,9 +37,25 @@ export function MangaReaderClient({
   const { data: session } = useSession();
   const [scaleMode, setScaleMode] = useState<'fit' | 'full'>('fit');
   const [showSidebar, setShowSidebar] = useState(false);
+  // Pages whose image finished loading (or failed), keyed by chapter so a new chapter starts empty.
+  const [settledPages, setSettledPages] = useState<{ chapterId: string; indices: ReadonlySet<number> }>(() => ({
+    chapterId: payload.chapter.id,
+    indices: new Set(),
+  }));
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const chapterLabel = getChapterLabel(payload.chapter);
   const readerLanguage = payload.chapter.language === 'en' ? 'en' : 'raw';
+  const chapterId = payload.chapter.id;
+  const settledIndices = settledPages.chapterId === chapterId ? settledPages.indices : null;
+
+  const markPageSettled = (pageIndex: number) => {
+    setSettledPages((prev) => {
+      if (prev.chapterId === chapterId && prev.indices.has(pageIndex)) return prev;
+      const indices = new Set(prev.chapterId === chapterId ? prev.indices : []);
+      indices.add(pageIndex);
+      return { chapterId, indices };
+    });
+  };
 
   useEffect(() => {
     const el = pageContainerRef.current;
@@ -86,9 +102,11 @@ export function MangaReaderClient({
             <button
               type="button"
               onClick={() => setShowSidebar((value) => !value)}
+              aria-label="Show chapter list"
+              aria-expanded={showSidebar}
               className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
             >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
@@ -140,14 +158,19 @@ export function MangaReaderClient({
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={page.index}
+                // Cached pages can finish before hydration attaches onLoad; `complete` catches those.
+                ref={settledIndices?.has(page.index) ? undefined : (img) => { if (img?.complete) markPageSettled(page.index); }}
                 alt={`${mangaTitle} ${chapterLabel} p.${page.index + 1}`}
-                className={`w-full ${scaleMode === 'fit' ? 'object-contain' : ''}`}
+                // Reserve space until the page loads so the layout doesn't jump and lazy pages below stay lazy.
+                className={`w-full ${scaleMode === 'fit' ? 'object-contain' : ''} ${settledIndices?.has(page.index) ? '' : 'min-h-[70vh] bg-zinc-900'}`}
                 decoding="async"
                 fetchPriority={index === 0 ? 'high' : 'auto'}
                 loading={index === 0 ? 'eager' : 'lazy'}
                 sizes={scaleMode === 'fit' ? '(max-width: 896px) 100vw, 896px' : undefined}
                 srcSet={scaleMode === 'fit' ? [640, 960, 1440].map((width) => `${page.src}&width=${width} ${width}w`).join(', ') : undefined}
                 src={page.src}
+                onError={() => markPageSettled(page.index)}
+                onLoad={() => markPageSettled(page.index)}
               />
             ))}
           </div>
@@ -200,9 +223,10 @@ function MangaChapterSidebar({
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close chapter list"
           className="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>

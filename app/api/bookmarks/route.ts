@@ -3,6 +3,14 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { findRecord, findRecords, saveRecord, stableRecordId } from '@/lib/db/records';
 import { isBookmarkStatus } from '@/lib/media/user-actions';
+import {
+  isMediaExperience,
+  normalizeSynopsis,
+  validateImageUrl,
+  validateMediaIdentity,
+  validateOptionalExperience,
+  validateTitle,
+} from '@/lib/validation/media-identity';
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -11,11 +19,14 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const experience = searchParams.get('experience');
+  const experience = validateOptionalExperience(searchParams.get('experience'));
+  if (!experience.ok) {
+    return NextResponse.json({ error: experience.error }, { status: 400 });
+  }
 
   const bookmarks = await findRecords('bookmark', {
     userId: session.user.id,
-    ...(experience ? { experience } : {}),
+    ...(experience.value ? { experience: experience.value } : {}),
   }, { orderBy: 'updatedAt' });
 
   return NextResponse.json({ bookmarks }, { headers: { 'Cache-Control': 'private, no-store' } });
@@ -28,14 +39,14 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as {
-    mediaId?: string;
-    mediaType?: string;
-    mediaProvider?: string;
-    experience?: string;
-    title?: string;
-    posterUrl?: string;
-    backdropUrl?: string;
-    synopsis?: string;
+    mediaId?: unknown;
+    mediaType?: unknown;
+    mediaProvider?: unknown;
+    experience?: unknown;
+    title?: unknown;
+    posterUrl?: unknown;
+    backdropUrl?: unknown;
+    synopsis?: unknown;
     rating?: number;
     year?: number;
     anilistId?: string;
@@ -50,12 +61,20 @@ export async function POST(request: Request) {
   if (body.status != null && !isBookmarkStatus(body.status)) {
     return NextResponse.json({ error: 'Invalid bookmark status.' }, { status: 400 });
   }
+  const identity = validateMediaIdentity(body);
+  if (!identity.ok) return NextResponse.json({ error: identity.error }, { status: 400 });
+  if (!isMediaExperience(body.experience)) return NextResponse.json({ error: 'Invalid experience.' }, { status: 400 });
+  const title = validateTitle(body.title);
+  if (!title.ok) return NextResponse.json({ error: title.error }, { status: 400 });
+  const posterUrl = validateImageUrl(body.posterUrl);
+  const backdropUrl = validateImageUrl(body.backdropUrl);
+  if (!posterUrl.ok || !backdropUrl.ok) return NextResponse.json({ error: 'Invalid image URL.' }, { status: 400 });
 
   const key = {
     userId: session.user.id,
-    mediaId: body.mediaId,
-    mediaProvider: body.mediaProvider,
-    mediaType: body.mediaType,
+    mediaId: identity.value.mediaId,
+    mediaProvider: identity.value.mediaProvider,
+    mediaType: identity.value.mediaType,
   };
   const existing = await findRecord<Record<string, unknown> & { id: string }>('bookmark', key);
   const now = new Date().toISOString();
@@ -63,10 +82,10 @@ export async function POST(request: Request) {
     ...existing,
     ...key,
     experience: body.experience,
-    title: body.title,
-    posterUrl: body.posterUrl ?? null,
-    backdropUrl: body.backdropUrl ?? null,
-    synopsis: body.synopsis ?? '',
+    title: title.value,
+    posterUrl: posterUrl.value,
+    backdropUrl: backdropUrl.value,
+    synopsis: normalizeSynopsis(body.synopsis),
     rating: body.rating ?? null,
     year: body.year ?? null,
     anilistId: body.anilistId ?? null,

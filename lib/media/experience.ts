@@ -25,7 +25,7 @@ export interface MediaExperienceConfig {
 }
 
 export const papiflixExperience: MediaExperienceConfig = {
-  brandBannerSrc: '/icons/papiflixbanner.png',
+  brandBannerSrc: '/icons/papiflixbanner.webp',
   // Match PapiAnime's visible logo height despite the assets' different transparent margins.
   brandBackgroundPosition: '47.7% 51.7%',
   brandBackgroundSize: '151.6% auto',
@@ -56,7 +56,7 @@ export const papiflixExperience: MediaExperienceConfig = {
 };
 
 export const papianimeExperience: MediaExperienceConfig = {
-  brandBannerSrc: '/icons/papianimebanner.png',
+  brandBannerSrc: '/icons/papianimebanner.webp',
   brandBackgroundPosition: '44% center',
   brandBackgroundSize: '160% auto',
   brandName: 'PapiAnime',
@@ -81,7 +81,7 @@ export const papianimeExperience: MediaExperienceConfig = {
 };
 
 export const papimangaExperience: MediaExperienceConfig = {
-  brandBannerSrc: '/icons/papimanga.png',
+  brandBannerSrc: '/icons/papimanga.webp',
   brandBackgroundPosition: '44% center',
   brandBackgroundSize: '160% auto',
   brandName: 'PapiManga',

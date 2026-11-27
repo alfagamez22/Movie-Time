@@ -3,6 +3,22 @@ import 'server-only';
 import { appConfig } from '@/lib/config';
 
 const MANGADEX_RATE_LIMIT_MS = 250;
+const MANGADEX_TIMEOUT_MS = 10_000;
+
+/** Carries the upstream status so routes can map MangaDex 404s to 404 instead of a generic 500. */
+export class MangaDexError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'MangaDexError';
+    this.status = status;
+  }
+}
+
+export function isMangaDexNotFound(error: unknown): boolean {
+  return error instanceof MangaDexError && error.status === 404;
+}
 let nextRequestAt = 0;
 let requestStartQueue: Promise<void> = Promise.resolve();
 
@@ -22,14 +38,20 @@ function reserveRequestStart(): Promise<void> {
 async function rateLimitedFetch(url: string, init?: RequestInit): Promise<Response> {
   await reserveRequestStart();
 
-  return fetch(url, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'PapiManga/1.0',
-      ...init?.headers,
-    },
-  });
+  try {
+    return await fetch(url, {
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'PapiManga/1.0',
+        ...init?.headers,
+      },
+      signal: init?.signal ?? AbortSignal.timeout(MANGADEX_TIMEOUT_MS),
+    });
+  } catch {
+    // Timeouts and network failures surface as an upstream 502 through each caller's `!response.ok` path.
+    return new Response(null, { status: 502, statusText: 'Bad Gateway' });
+  }
 }
 
 interface MangaDexMangaAttributes {
@@ -159,18 +181,18 @@ export async function searchMangaDex(query: string, options: MangaDexSearchOptio
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex search failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex search failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexList>;
 }
 
 export async function getMangaDexMangaById(id: string): Promise<MangaDexManga> {
-  const url = `${appConfig.mangadexApiBaseUrl}/manga/${id}?includes[]=cover_art&includes[]=author`;
+  const url = `${appConfig.mangadexApiBaseUrl}/manga/${encodeURIComponent(id)}?includes[]=cover_art&includes[]=author`;
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex get manga failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex get manga failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   const json = await response.json() as { data: MangaDexManga };
@@ -193,22 +215,22 @@ export async function getMangaDexChapters(
     params.append('translatedLanguage[]', language);
   }
 
-  const url = `${appConfig.mangadexApiBaseUrl}/chapter?manga=${mangaId}&${params.toString()}`;
+  const url = `${appConfig.mangadexApiBaseUrl}/chapter?manga=${encodeURIComponent(mangaId)}&${params.toString()}`;
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex chapters failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex chapters failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexChapterList>;
 }
 
 export async function getMangaDexChapterPages(chapterId: string): Promise<MangaDexAtHomeResponse> {
-  const url = `${appConfig.mangadexApiBaseUrl}/at-home/server/${chapterId}`;
+  const url = `${appConfig.mangadexApiBaseUrl}/at-home/server/${encodeURIComponent(chapterId)}`;
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex chapter pages failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex chapter pages failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexAtHomeResponse>;
@@ -229,7 +251,7 @@ export async function getMangaDexPopular(limit: number = 24): Promise<MangaDexLi
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex popular failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex popular failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexList>;
@@ -249,7 +271,7 @@ export async function getMangaDexLatest(limit: number = 24): Promise<MangaDexLis
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex latest failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex latest failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexList>;
@@ -269,7 +291,7 @@ export async function getMangaDexRecentlyAdded(limit: number = 24): Promise<Mang
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex recently added failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex recently added failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexList>;
@@ -293,7 +315,7 @@ export async function getMangaDexByTag(
   const response = await rateLimitedFetch(url);
 
   if (!response.ok) {
-    throw new Error(`MangaDex tag browse failed: ${response.status} ${response.statusText}`);
+    throw new MangaDexError(`MangaDex tag browse failed: ${response.status} ${response.statusText}`, response.status);
   }
 
   return response.json() as Promise<MangaDexList>;

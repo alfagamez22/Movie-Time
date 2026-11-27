@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +25,6 @@ import {
   type MediaEntry,
   type SeasonDetails,
 } from '@/lib/media/types';
-import { AnimeWatchPlayer } from './anime-watch-player';
 import { PlayerViewControls } from './player-view-controls';
 import type { WatchPlayerProps } from './watch-player.types';
 import { useWatchBeacon } from '@/lib/hooks/use-watch-beacon';
@@ -36,36 +36,6 @@ interface NormalizedPlayerProgress {
   progressPercent?: number;
   progressSeconds: number;
 }
-
-/* Previous P1–P7 choice and VidFast origin logic, disabled for Videasy-only PapiFlix.
-const PLAYER_CHOICES: PlayerChoice[] = ['1', '2', '3', '4', '5', '6', '7'];
-
-function getAvailablePlayerChoices(imdbId: string | null): PlayerChoice[] {
-  return imdbId ? PLAYER_CHOICES : PLAYER_CHOICES.filter((choice) => choice !== '7');
-}
-
-function getNextPlayerChoice(player: PlayerChoice, availableChoices: PlayerChoice[]): PlayerChoice {
-  if (availableChoices.length === 0) {
-    return '1';
-  }
-
-  const currentIndex = availableChoices.indexOf(player);
-  return availableChoices[(currentIndex + 1 + availableChoices.length) % availableChoices.length] ?? availableChoices[0] ?? '1';
-}
-
-const VIDFAST_ALLOWED_ORIGINS = new Set([
-  'https://vidfast.pro',
-  'https://vidfast.in',
-  'https://vidfast.io',
-  'https://vidfast.me',
-  'https://vidfast.net',
-  'https://vidfast.pm',
-  'https://vidfast.xyz',
-  'https://vidninja.pro',
-  'https://www.vidninja.pro',
-  'https://watch.vidninja.pro',
-]);
-*/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -177,21 +147,6 @@ function extractPlayerEpisode(data: unknown, tmdbId: string): { season: string; 
 }
 
 
-/* Previous VidFast message origin allowance, disabled.
-function isAllowedVidFastOrigin(origin: string, expectedOrigin: string): boolean {
-  if (origin === expectedOrigin || VIDFAST_ALLOWED_ORIGINS.has(origin)) {
-    return true;
-  }
-
-  try {
-    const hostname = new URL(origin).hostname.toLowerCase();
-    return hostname === 'watch.vidninja.pro' || hostname === 'vidninja.pro' || hostname.endsWith('.vidninja.pro');
-  } catch {
-    return false;
-  }
-}
-*/
-
 function buildEpisodeHistoryKey(season: string, episodeNumber: string): string {
   return `${season}:${episodeNumber}`;
 }
@@ -238,104 +193,9 @@ function LoadingOverlay({
   );
 }
 
-/* Previous player picker retained as commented reference.
-function PlayerSelect({
-  player,
-  availableChoices = PLAYER_CHOICES,
-  onSwitchPlayer,
-  compact = false,
-}: {
-  player: PlayerChoice;
-  availableChoices?: PlayerChoice[];
-  onSwitchPlayer: (choice: PlayerChoice) => void;
-  compact?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    if (open) {
-      document.addEventListener('pointerdown', handleClickOutside);
-      return () => document.removeEventListener('pointerdown', handleClickOutside);
-    }
-  }, [open]);
-
-  const selectedLabel = `P${player} · ${PLAYER_LABELS[player]}`;
-
-  return (
-    <div
-      ref={containerRef}
-      className={compact ? 'relative inline-block text-left' : 'relative inline-block w-full max-w-[16rem] text-left'}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={compact ? `Select player, currently ${selectedLabel}` : undefined}
-        title={compact ? selectedLabel : undefined}
-        className={
-          compact
-            ? 'flex h-12 min-w-12 touch-manipulation items-center justify-center gap-1.5 rounded-full bg-black/45 px-3 text-sm font-bold text-white backdrop-blur-md transition hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-white/20'
-            : 'flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white'
-        }
-      >
-        <span>{compact ? `P${player}` : selectedLabel}</span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      {open ? (
-        <ul
-          role="listbox"
-          aria-label="Select player"
-          className={`absolute z-50 mt-1.5 overflow-hidden rounded-lg border border-white/10 bg-[#1a1a1a] py-1 shadow-2xl ${
-            compact ? 'right-0 w-[min(16rem,calc(100vw-1.5rem))]' : 'w-full min-w-[16rem]'
-          }`}
-        >
-          {PLAYER_CHOICES.map((choice) => {
-            const isSelected = player === choice;
-            const isAvailable = availableChoices.includes(choice);
-            return (
-              <li key={choice} role="option" aria-selected={isSelected} aria-disabled={!isAvailable}>
-                <button
-                  type="button"
-                  disabled={!isAvailable}
-                  onClick={() => {
-                    if (!isAvailable) return;
-                    onSwitchPlayer(choice);
-                    setOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition ${
-                    !isAvailable
-                      ? 'cursor-not-allowed text-zinc-600'
-                      : isSelected
-                        ? 'bg-netflix-red text-white'
-                        : 'text-zinc-200 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span className="font-medium">P{choice} · {PLAYER_LABELS[choice]}</span>
-                  {!isAvailable && choice === '7' ? (
-                    <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-600">
-                      No IMDb ID
-                    </span>
-                  ) : isSelected ? (
-                    <Check className="h-4 w-4 shrink-0" />
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-*/
+// Only anime titles need the AniEmbed player, so TMDB watch pages don't ship it.
+// It is still server-rendered; the client chunk loads alongside hydration.
+const AnimeWatchPlayer = dynamic(() => import('./anime-watch-player').then((module) => module.AnimeWatchPlayer));
 
 export function WatchPlayer(props: WatchPlayerProps) {
   if (isAnimeProvider(props.entry.provider)) {
@@ -375,6 +235,33 @@ function StandardWatchPlayer({
   const playerShellRef = useRef<HTMLDivElement>(null);
   const hasIframeLoadedRef = useRef(false);
   const lastProgressWriteRef = useRef(0);
+  const seasonRequestRef = useRef<AbortController | null>(null);
+
+  // Only the most recently requested season may update the episode list, so a
+  // slow response for an earlier season can never overwrite a newer choice.
+  const loadSeasonDetails = useCallback((nextSeason: string) => {
+    seasonRequestRef.current?.abort();
+    const controller = new AbortController();
+    seasonRequestRef.current = controller;
+    setActiveSeasonDetails(null);
+    setSeasonDetailsError(null);
+    void fetch(
+      `/api/media/${encodeURIComponent(entry.slug)}/seasons/${nextSeason}?type=${entry.type}&id=${entry.id}`,
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error('Season fetch failed');
+        return response.json() as Promise<{ data: SeasonDetails }>;
+      })
+      .then((json) => {
+        if (!controller.signal.aborted) setActiveSeasonDetails(json.data);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSeasonDetailsError('Could not load episode list for this season.');
+      });
+  }, [entry.id, entry.slug, entry.type]);
+
+  useEffect(() => () => seasonRequestRef.current?.abort(), []);
 
   const safeSeason = isSeries
     ? String(Math.min(Math.max(1, Number.parseInt(season, 10)), entry.maxSeasons))
@@ -412,11 +299,6 @@ function StandardWatchPlayer({
     });
   }, [activeSeasonDetails, entry.backdropUrl, entry.posterUrl, safeEpisodeLimit, safeSeason]);
 
-  // Previous player preference and P1–P7 fallback are disabled.
-  /*
-  const availablePlayerChoices = useMemo(() => getAvailablePlayerChoices(imdbId), [imdbId]);
-  const effectivePlayer = availablePlayerChoices.includes(player) ? player : availablePlayerChoices[0];
-  */
   const playbackOptions = {
     ...initialPlayback,
     episode: embedPlayback.episode,
@@ -502,11 +384,7 @@ function StandardWatchPlayer({
           Number(currentEpisode.season) <= entry.maxSeasons) {
         setSeason(currentEpisode.season);
         setEpisode(currentEpisode.episode);
-        setActiveSeasonDetails(null);
-        void fetch(`/api/media/${encodeURIComponent(entry.slug)}/seasons/${currentEpisode.season}?type=${entry.type}&id=${entry.id}`)
-          .then((response) => response.ok ? response.json() : null)
-          .then((json: { data: SeasonDetails } | null) => { if (json) setActiveSeasonDetails(json.data); })
-          .catch(() => setSeasonDetailsError('Could not load episode list for this season.'));
+        loadSeasonDetails(currentEpisode.season);
       } else if (currentEpisode && currentEpisode.season === safeSeason && currentEpisode.episode !== safeEpisode) {
         setEpisode(currentEpisode.episode);
       }
@@ -540,32 +418,7 @@ function StandardWatchPlayer({
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [canSyncWatchHistory, embedUrl, entry, experience.id, isSeries, safeEpisode, safeSeason]);
-
-  /* VidSrc elapsed-time fallback disabled with the old P1–P7 players.
-  // VidSrc (P2) doesn't send postMessage progress events, so we track elapsed
-  // wall-clock time as a proxy for playback progress while the player is active.
-  useEffect(() => {
-    if (effectivePlayer !== '2' || isPlayerLoading || showPlayerFallback) return;
-
-    vidsrcElapsedRef.current = 0;
-    const intervalId = setInterval(() => {
-      vidsrcElapsedRef.current += 10;
-      trackRecentlyWatched(
-        entry,
-        {
-          episode: isSeries ? safeEpisode : undefined,
-          progressSeconds: vidsrcElapsedRef.current,
-          season: isSeries ? safeSeason : undefined,
-        },
-        experience.id,
-        canSyncWatchHistory,
-      );
-    }, 10_000);
-
-    return () => clearInterval(intervalId);
-  }, [canSyncWatchHistory, effectivePlayer, isPlayerLoading, showPlayerFallback, entry, experience.id, isSeries, safeEpisode, safeSeason]);
-  */
+  }, [canSyncWatchHistory, embedUrl, entry, experience.id, isSeries, loadSeasonDetails, safeEpisode, safeSeason]);
 
   useEffect(() => {
     const href = buildWatchHref(entry, {
@@ -639,24 +492,10 @@ function StandardWatchPlayer({
 
 
 
-  /* Previous player switching is disabled.
-  const handleSwitchPlayer = useCallback(
-    (choice: PlayerChoice) => {
-      if (player === choice) {
-        return;
-      }
-      setIsPlayerLoading(true);
-      setShowPlayerFallback(false);
-      setPlayer(choice);
-    },
-    [player, setPlayer],
-  );
-  */
-
   const handlePartyFollow = useCallback((target: FollowTarget) => {
     const nextSeason = isSeries && target.season ? target.season : safeSeason;
     const nextEpisode = isSeries && target.episode ? target.episode : safeEpisode;
-    if (nextSeason !== safeSeason) setActiveSeasonDetails(null);
+    if (nextSeason !== safeSeason) loadSeasonDetails(nextSeason);
     setIsPlayerLoading(true);
     setSeason(nextSeason);
     setEpisode(nextEpisode);
@@ -664,7 +503,7 @@ function StandardWatchPlayer({
     setPartyStartAt(Math.max(0, Math.floor(target.time)));
     setPartyPaused(target.paused);
     if (!target.paused) setIframeReloadKey((value) => value + 1);
-  }, [isSeries, safeEpisode, safeSeason]);
+  }, [isSeries, loadSeasonDetails, safeEpisode, safeSeason]);
 
   const handleReloadPlayer = useCallback(() => {
     setIsPlayerLoading(true);
@@ -676,28 +515,16 @@ function StandardWatchPlayer({
   }, [safeSeason, safeEpisode]);
 
   const handleSeasonChange = useCallback(
-    async (newSeason: string) => {
+    (newSeason: string) => {
       setIsPlayerLoading(true);
       setShowPlayerFallback(false);
       setPartyStartAt(null);
       setSeason(newSeason);
       setEpisode('1');
       setEmbedPlayback({ season: newSeason, episode: '1' });
-      setActiveSeasonDetails(null);
-      setSeasonDetailsError(null);
-
-      try {
-        const response = await fetch(
-          `/api/media/${encodeURIComponent(entry.slug)}/seasons/${newSeason}?type=${entry.type}&id=${entry.id}`,
-        );
-        if (!response.ok) throw new Error('Season fetch failed');
-        const json: { data: SeasonDetails } = await response.json();
-        setActiveSeasonDetails(json.data);
-      } catch {
-        setSeasonDetailsError('Could not load episode list for this season.');
-      }
+      loadSeasonDetails(newSeason);
     },
-    [entry.id, entry.slug, entry.type],
+    [loadSeasonDetails],
   );
 
   const episodeSidebar = isSeries ? (
@@ -709,7 +536,7 @@ function StandardWatchPlayer({
       seasonEpisodeCards={seasonEpisodeCards}
       seasonDetailsError={seasonDetailsError}
       watchedEpisodeKeys={watchedEpisodeKeys}
-      onSeasonChange={(nextSeason) => void handleSeasonChange(nextSeason)}
+      onSeasonChange={handleSeasonChange}
       onEpisodeChange={handleEpisodeChange}
       onNextEpisode={() => {
         handleEpisodeChange(String(Number.parseInt(safeEpisode, 10) + 1));

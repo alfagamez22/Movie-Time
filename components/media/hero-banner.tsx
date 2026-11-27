@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { BookOpen, ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
 import { buildWatchHref } from '@/lib/media/routes';
@@ -14,6 +14,8 @@ import { getMediaKindLabel, isMangaProvider, type LibraryMediaEntry, type Playba
 interface HeroBannerProps {
   items: LibraryMediaEntry[];
   onInfoSelect?: (entry: LibraryMediaEntry) => void;
+  /** Stop auto-advancing, e.g. while a modal or overlay covers the hero. */
+  paused?: boolean;
   preferredAnimeLanguage?: PlaybackLanguage;
   recentlyWatched?: RecentlyWatchedEntry[];
   watchBasePath?: string;
@@ -30,22 +32,48 @@ function findResumeEntry(entry: LibraryMediaEntry, recentlyWatched: RecentlyWatc
 export function HeroBanner({
   items,
   onInfoSelect,
+  paused = false,
   preferredAnimeLanguage,
   recentlyWatched,
   watchBasePath,
 }: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hasFocusWithin, setHasFocusWithin] = useState(false);
+  const [isPageVisible, setIsPageVisible] = useState(true);
+  const prefersReducedMotion = useReducedMotion();
   const touchStartX = useRef<number | null>(null);
   const count = items.length;
+  const shouldAutoAdvance =
+    count > 1 && !paused && !isHovered && !hasFocusWithin && isPageVisible && !prefersReducedMotion;
 
-  // Auto-advance every 6 seconds; resets whenever activeIndex changes (user nav or auto)
   useEffect(() => {
-    if (count <= 1) return;
+    const syncVisibility = () => setIsPageVisible(document.visibilityState === 'visible');
+    syncVisibility();
+    document.addEventListener('visibilitychange', syncVisibility);
+    return () => document.removeEventListener('visibilitychange', syncVisibility);
+  }, []);
+
+  // Auto-advance every 6 seconds; resets whenever activeIndex changes (user nav or auto).
+  // Pauses while the user is reading or interacting (WCAG 2.2.2) and for reduced motion.
+  useEffect(() => {
+    if (!shouldAutoAdvance) return;
     const timer = setTimeout(() => {
       setActiveIndex((prev) => (prev + 1) % count);
     }, 6000);
     return () => clearTimeout(timer);
-  }, [activeIndex, count]);
+  }, [activeIndex, count, shouldAutoAdvance]);
+
+  // Warm the next backdrop so the crossfade never fades through black while it downloads.
+  useEffect(() => {
+    if (count <= 1) return;
+    const next = items[(activeIndex + 1) % count];
+    const nextUrl = next?.backdropUrl ?? next?.posterUrl;
+    if (!nextUrl) return;
+    const image = new window.Image();
+    image.decoding = 'async';
+    image.src = nextUrl;
+  }, [activeIndex, count, items]);
 
   if (count === 0) return null;
 
@@ -82,6 +110,12 @@ export function HeroBanner({
   return (
     <div
       className="browse-hero relative w-full touch-pan-y overflow-hidden bg-black"
+      onPointerEnter={(event) => { if (event.pointerType === 'mouse') setIsHovered(true); }}
+      onPointerLeave={() => setIsHovered(false)}
+      onFocus={() => setHasFocusWithin(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHasFocusWithin(false);
+      }}
       onTouchStart={(event) => {
         touchStartX.current = event.touches[0]?.clientX ?? null;
       }}

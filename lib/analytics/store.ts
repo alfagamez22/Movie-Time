@@ -46,7 +46,11 @@ async function ensureCollection() {
           console.error('Analytics collection setup failed', { error: error instanceof Error ? error.name : 'UnknownError' });
         }
       }
-    })();
+    })().catch((error: unknown) => {
+      // Reset so the next request retries instead of reusing a rejected promise forever.
+      globalState.papiflixAnalyticsReady = undefined;
+      throw error;
+    });
   }
   return globalState.papiflixAnalyticsReady;
 }

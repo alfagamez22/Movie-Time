@@ -6,3 +6,8 @@ coverage
 .env*
 README.md
 npm-debug.log*
+credentials.txt
+*.log
+.pnpm-store
+android
+.playwright-mcp

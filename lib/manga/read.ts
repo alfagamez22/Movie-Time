@@ -1,6 +1,12 @@
 import 'server-only';
 
-import { getMangaDexChapterPages, getMangaDexChapters, getMangaDexMangaById, type MangaDexChapter } from '@/lib/manga/client';
+import {
+  getMangaDexChapterPages,
+  getMangaDexChapters,
+  getMangaDexMangaById,
+  MangaDexError,
+  type MangaDexChapter,
+} from '@/lib/manga/client';
 import { mangaDexToLibraryEntry } from '@/lib/manga/mapping';
 import type { LibraryMediaEntry, MangaChapter, MangaChapterData, MangaLanguage, MangaReadPayload } from '@/lib/media/types';
 
@@ -97,7 +103,7 @@ export async function loadMangaReadPageData(
 
   const selectedChapter = chapterResult.selectedChapter;
   if (!selectedChapter) {
-    throw new Error(chapterRef ? 'Chapter not found.' : 'No readable chapters found.');
+    throw new MangaDexError(chapterRef ? 'Chapter not found.' : 'No readable chapters found.', 404);
   }
 
   const pagesData = await getMangaDexChapterPages(selectedChapter.id);
