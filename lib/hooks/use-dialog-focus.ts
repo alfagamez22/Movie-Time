@@ -14,6 +14,16 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
   );
 }
 
+/**
+ * True when focus currently sits inside a different modal dialog (e.g. an announcement opened on top),
+ * so this dialog must not react to Escape or pull focus back behind it.
+ */
+export function isFocusInOtherModal(root: HTMLElement | null): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || (root && root.contains(active))) return false;
+  return Boolean(active.closest('[aria-modal="true"]'));
+}
+
 interface DialogFocusOptions {
   /** Control to focus when the dialog opens. Defaults to the first focusable control. */
   initialFocusRef?: RefObject<HTMLElement | null>;

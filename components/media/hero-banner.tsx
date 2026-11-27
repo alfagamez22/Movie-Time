@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, Info, Play } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Info, Pause, Play } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 import type { RecentlyWatchedEntry } from '@/lib/hooks/use-recently-watched';
@@ -39,13 +39,15 @@ export function HeroBanner({
 }: HeroBannerProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  // Explicit, persistent pause (WCAG 2.2.2) — unlike hover/focus, it survives leaving the hero.
+  const [isUserPaused, setIsUserPaused] = useState(false);
   const [hasFocusWithin, setHasFocusWithin] = useState(false);
   const [isPageVisible, setIsPageVisible] = useState(true);
   const prefersReducedMotion = useReducedMotion();
   const touchStartX = useRef<number | null>(null);
   const count = items.length;
   const shouldAutoAdvance =
-    count > 1 && !paused && !isHovered && !hasFocusWithin && isPageVisible && !prefersReducedMotion;
+    count > 1 && !paused && !isUserPaused && !isHovered && !hasFocusWithin && isPageVisible && !prefersReducedMotion;
 
   useEffect(() => {
     const syncVisibility = () => setIsPageVisible(document.visibilityState === 'visible');
@@ -250,7 +252,17 @@ export function HeroBanner({
 
       {/* Dot indicators */}
       {count > 1 ? (
-        <div className="browse-hero-dots absolute right-6 flex gap-0.5 md:right-12">
+        <div className="browse-hero-dots absolute right-6 flex items-center gap-0.5 md:right-12">
+          {!prefersReducedMotion ? (
+            <button
+              type="button"
+              onClick={() => setIsUserPaused((value) => !value)}
+              aria-label={isUserPaused ? 'Play slideshow' : 'Pause slideshow'}
+              className="mr-1 flex h-6 w-6 items-center justify-center rounded-full text-white/70 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            >
+              {isUserPaused ? <Play className="h-3.5 w-3.5 fill-current" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5 fill-current" aria-hidden="true" />}
+            </button>
+          ) : null}
           {items.map((item, i) => (
             <button
               key={`${item.provider}:${item.type}:${item.id}`}

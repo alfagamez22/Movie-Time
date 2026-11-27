@@ -245,3 +245,39 @@ test('analytics setup retries after a failed Couchbase bootstrap instead of cach
     delete globalThis.papiflixAnalyticsReady;
   }
 });
+
+test('analytics retries a failed collection creation later without failing requests', async () => {
+  delete globalThis.papiflixAnalyticsReady;
+  delete globalThis.papiflixAnalyticsRetryAt;
+  let creates = 0;
+  const store = load('lib/analytics/store.ts', {
+    '@/lib/db/couchbase': {
+      getCouchbase: async () => ({
+        bucket: { name: 'fixture', collections: () => ({ createCollection: async () => {
+          creates++;
+          if (creates === 1) { const error = new Error('temporary'); error.name = 'TimeoutError'; throw error; }
+          const exists = new Error('exists'); exists.name = 'CollectionExistsError'; throw exists;
+        } }) },
+        cluster: { query: async () => ({ rows: [] }) },
+        scope: { name: 'app', collection: () => ({}) },
+      }),
+    },
+  });
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    assert.deepEqual(await store.querySessions(), []);
+    assert.equal(creates, 1);
+    assert.ok(globalThis.papiflixAnalyticsRetryAt > Date.now());
+    await store.querySessions();
+    assert.equal(creates, 1, 'no retry before the back-off elapses');
+    globalThis.papiflixAnalyticsRetryAt = Date.now() - 1;
+    await store.querySessions();
+    assert.equal(creates, 2, 'retries once the back-off elapses');
+    assert.equal(globalThis.papiflixAnalyticsRetryAt, undefined);
+  } finally {
+    console.error = originalError;
+    delete globalThis.papiflixAnalyticsReady;
+    delete globalThis.papiflixAnalyticsRetryAt;
+  }
+});

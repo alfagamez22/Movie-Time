@@ -14,11 +14,8 @@ export async function GET(request: Request) {
   if (!TMDB_IMAGE_PATH_PATTERN.test(imagePath)) {
     return new Response('Invalid TMDB image path.', { status: 400 });
   }
-  if (requestedSize !== null && !isTmdbImageSize(requestedSize)) {
-    return new Response('Invalid TMDB image size.', { status: 400 });
-  }
-
-  const size = requestedSize ?? DEFAULT_TMDB_IMAGE_SIZE;
+  // Same fallback the legacy route always had: a missing, empty or unknown size serves the default variant.
+  const size = isTmdbImageSize(requestedSize) ? requestedSize : DEFAULT_TMDB_IMAGE_SIZE;
   const location = new URL(`/api/images/tmdb/${size}${imagePath}`, requestUrl.origin);
   return new Response(null, {
     headers: {

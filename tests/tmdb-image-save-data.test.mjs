@@ -90,7 +90,11 @@ test('legacy query-string URLs permanently redirect to the cacheable path form',
   const defaultSize = await get('path=%2Fnested%2Fbackdrop.webp');
   assert.equal(defaultSize.headers.get('location'), 'https://papiflix.test/api/images/tmdb/w780/nested/backdrop.webp');
 
-  assert.equal((await get('path=%2Fposter.jpg&size=original')).status, 400);
+  for (const size of ['original', '']) {
+    const fallback = await get(`path=%2Fposter.jpg&size=${size}`);
+    assert.equal(fallback.status, 308);
+    assert.equal(fallback.headers.get('location'), 'https://papiflix.test/api/images/tmdb/w780/poster.jpg');
+  }
   assert.equal((await get('path=https%3A%2F%2Fevil.test%2Fa.jpg&size=w300')).status, 400);
   assert.equal((await get('size=w300')).status, 400);
 });

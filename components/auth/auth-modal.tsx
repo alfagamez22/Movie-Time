@@ -4,7 +4,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { getProviders, signIn } from 'next-auth/react';
 import { X } from 'lucide-react';
 import { motion, useIsPresent } from 'motion/react';
-import { useDialogFocus } from '@/lib/hooks/use-dialog-focus';
+import { isFocusInOtherModal, useDialogFocus } from '@/lib/hooks/use-dialog-focus';
 
 interface AuthModalProps {
   description?: string;
@@ -35,7 +35,8 @@ export function AuthModal({
     // Capture phase + stopPropagation: this dialog can sit over the details dialog, whose document-level
     // Escape handler must not also close it on the same key press.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      // A dialog stacked above this one (e.g. an announcement) owns Escape.
+      if (e.key !== 'Escape' || isFocusInOtherModal(dialogRef.current)) return;
       e.stopPropagation();
       close();
     };
@@ -47,6 +48,7 @@ export function AuthModal({
     // The Google button stays disabled until providers resolve, so it can't take focus on mount.
     if (!isPresent || !providersResolved || !googleAvailable) return;
     const active = document.activeElement;
+    if (isFocusInOtherModal(dialogRef.current)) return;
     if (active === closeButtonRef.current || !dialogRef.current?.contains(active)) googleButtonRef.current?.focus();
   }, [googleAvailable, isPresent, providersResolved]);
 
